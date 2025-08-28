@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chronicle Weaver - 年代記を織る者</title>
+    <meta name="description" content="毎日のニュースが物語になる。AIが紡ぐ継続的な小説体験。">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #2c1810;
+            --secondary-color: #8b4513;
+            --accent-color: #d4af37;
+            --text-light: #f5f5dc;
+            --text-dark: #2c1810;
+            --parchment: #f4f1e8;
+            --shadow-color: rgba(44, 24, 16, 0.3);
+            --gradient-primary: linear-gradient(135deg, #2c1810 0%, #5d4037 100%);
+            --gradient-accent: linear-gradient(135deg, #d4af37 0%, #ffd700 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Serif JP', serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            background: var(--parchment);
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: var(--gradient-primary);
+            color: var(--text-light);
+            padding: 1rem 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px var(--shadow-color);
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo::before {
+            content: "📜";
+            font-size: 1.5rem;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-color);
+        }
+
+        /* Hero Section */
+        .hero {
+            background: var(--gradient-primary);
+            color: var(--text-light);
+            padding: 120px 0 80px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="%23ffffff" opacity="0.05"/><circle cx="75" cy="75" r="1" fill="%23ffffff" opacity="0.05"/><circle cx="50" cy="10" r="0.5" fill="%23ffffff" opacity="0.03"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: var(--gradient-accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .subtitle {
+            font-size: 1.3rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            font-style: italic;
+        }
+
+        .hero .description {
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            opacity: 0.8;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: var(--gradient-accent);
+            color: var(--text-dark);
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(212, 175, 55, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(212, 175, 55, 0.4);
+        }
+
+        .cta-button::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .cta-button:hover::before {
+            left: 100%;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 80px 0;
+            background: var(--parchment);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            color: var(--primary-color);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 3rem;
+            margin-top: 4rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-accent);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+            border-color: var(--accent-color);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1.5rem;
+            display: block;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.7;
+        }
+
+        /* Target Audience Section */
+        .target-audience {
+            padding: 80px 0;
+            background: linear-gradient(135deg, #f8f6f0 0%, #ede7d9 100%);
+        }
+
+        .audience-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .audience-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+            border-left: 5px solid var(--accent-color);
+        }
+
+        .audience-card h4 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+        }
+
+        .audience-card ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .audience-card li {
+            padding: 0.5rem 0;
+            color: #555;
+            position: relative;
+            padding-left: 1.5rem;
+        }
+
+        .audience-card li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        /* Use Cases Section */
+        .use-cases {
+            padding: 80px 0;
+            background: var(--parchment);
+        }
+
+        .use-case {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+            margin-bottom: 4rem;
+        }
+
+        .use-case:nth-child(even) .use-case-content {
+            order: 2;
+        }
+
+        .use-case:nth-child(even) .use-case-image {
+            order: 1;
+        }
+
+        .use-case-content h3 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .use-case-content p {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: #555;
+            margin-bottom: 1.5rem;
+        }
+
+        .use-case-image {
+            background: var(--gradient-primary);
+            border-radius: 15px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: var(--text-light);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Coming Soon Section */
+        .coming-soon {
+            padding: 80px 0;
+            background: var(--gradient-primary);
+            color: var(--text-light);
+            text-align: center;
+        }
+
+        .coming-soon h2 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            background: var(--gradient-accent);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .coming-soon p {
+            font-size: 1.2rem;
+            margin-bottom: 3rem;
+            opacity: 0.9;
+        }
+
+        .notify-form {
+            display: flex;
+            max-width: 400px;
+            margin: 0 auto;
+            gap: 1rem;
+        }
+
+        .notify-input {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .notify-button {
+            background: var(--gradient-accent);
+            color: var(--text-dark);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .notify-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.3);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--primary-color);
+            color: var(--text-light);
+            padding: 3rem 0;
+            text-align: center;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-section h4 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+
+        .footer-section p,
+        .footer-section a {
+            color: var(--text-light);
+            text-decoration: none;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+
+        .footer-section a:hover {
+            opacity: 1;
+            color: var(--accent-color);
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 2rem;
+            opacity: 0.6;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero .subtitle {
+                font-size: 1.1rem;
+            }
+
+            .use-case {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+
+            .use-case:nth-child(even) .use-case-content,
+            .use-case:nth-child(even) .use-case-image {
+                order: unset;
+            }
+
+            .notify-form {
+                flex-direction: column;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+        }
+
+        /* Scroll animations */
+        .scroll-reveal {
+            opacity: 0;
+            transform: translateY(50px);
+            transition: all 0.8s ease;
+        }
+
+        .scroll-reveal.revealed {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <a href="#" class="logo">Chronicle Weaver</a>
+            <ul class="nav-links">
+                <li><a href="#features">機能</a></li>
+                <li><a href="#target">対象者</a></li>
+                <li><a href="#use-cases">活用例</a></li>
+                <li><a href="#coming-soon">リリース</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="container">
+                <div class="hero-content fade-in-up">
+                    <h1>Chronicle Weaver</h1>
+                    <p class="subtitle">年代記を織る者</p>
+                    <p class="description">
+                        毎日のニュースが、あなただけの物語になる。<br>
+                        AIが紡ぐ継続的な小説体験で、世界の出来事を新しい視点で楽しもう。
+                    </p>
+                    <a href="#coming-soon" class="cta-button">Coming Soon - 通知を受け取る</a>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="container">
+                <h2 class="section-title scroll-reveal">革新的な機能</h2>
+                <div class="features-grid">
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">🤖</span>
+                        <h3>AI小説生成</h3>
+                        <p>OpenAI GPTが毎日のニュースを基に、継続性のある高品質な物語を自動生成。あなたの好みに合わせたジャンル（ライトノベル、恋愛、ミステリーなど）で楽しめます。</p>
+                    </div>
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">🚩</span>
+                        <h3>フラグ管理システム</h3>
+                        <p>物語に埋め込まれた「フラグ」が1週間以内に回収される仕組み。継続的な読書体験と、次回への期待感を演出します。</p>
+                    </div>
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">📰</span>
+                        <h3>自動ニュース収集</h3>
+                        <p>RSSフィードから最新ニュースを自動収集。重複チェック機能により、質の高いニュースのみを物語の素材として活用します。</p>
+                    </div>
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">👥</span>
+                        <h3>キャラクター管理</h3>
+                        <p>物語に登場するキャラクターの成長や変化を追跡。一貫した人物設定で、より深い物語体験を提供します。</p>
+                    </div>
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">🌍</span>
+                        <h3>世界観設定</h3>
+                        <p>舞台設定、ルール、雰囲気を管理し、一貫した世界で物語を展開。サイバーパンクから日常系まで、自由にカスタマイズ可能。</p>
+                    </div>
+                    <div class="feature-card scroll-reveal">
+                        <span class="feature-icon">⏰</span>
+                        <h3>自動生成スケジュール</h3>
+                        <p>毎日決まった時間に自動で物語を生成。忙しい日常でも、継続的に新しい物語を楽しめます。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="target" class="target-audience">
+            <div class="container">
+                <h2 class="section-title scroll-reveal">こんな方におすすめ</h2>
+                <div class="audience-grid">
+                    <div class="audience-card scroll-reveal">
+                        <h4>📚 小説愛好者</h4>
+                        <ul>
+                            <li>毎日新しい物語を読みたい</li>
+                            <li>継続的なストーリーを楽しみたい</li>
+                            <li>キャラクターの成長を見守りたい</li>
+                            <li>オリジナル作品に触れたい</li>
+                        </ul>
+                    </div>
+                    <div class="audience-card scroll-reveal">
+                        <h4>📱 忙しいビジネスパーソン</h4>
+                        <ul>
+                            <li>ニュースを読む時間がない</li>
+                            <li>通勤時間を有効活用したい</li>
+                            <li>エンタメ要素でニュースを楽しみたい</li>
+                            <li>短時間で情報収集したい</li>
+                        </ul>
+                    </div>
+                    <div class="audience-card scroll-reveal">
+                        <h4>🎓 学習意欲の高い方</h4>
+                        <ul>
+                            <li>世界の出来事に関心がある</li>
+                            <li>新しい視点で情報を得たい</li>
+                            <li>創作活動のインスピレーションが欲しい</li>
+                            <li>AI技術に興味がある</li>
+                        </ul>
+                    </div>
+                    <div class="audience-card scroll-reveal">
+                        <h4>🎮 ゲーム・アニメファン</h4>
+                        <ul>
+                            <li>ライトノベル風の物語が好き</li>
+                            <li>キャラクター設定を楽しみたい</li>
+                            <li>世界観の構築に興味がある</li>
+                            <li>フラグ回収の仕組みを楽しみたい</li>
+                        </ul>
+                    </div>
+                    <div class="audience-card scroll-reveal">
+                        <h4>✍️ クリエイター・作家志望</h4>
+                        <ul>
+                            <li>創作のインスピレーションが欲しい</li>
+                            <li>物語構成の参考にしたい</li>
+                            <li>キャラクター開発のヒントを得たい</li>
+                            <li>AIとの協働創作を体験したい</li>
+                        </ul>
+                    </div>
+                    <div class="audience-card scroll-reveal">
+                        <h4>🧠 知的好奇心旺盛な方</h4>
+                        <ul>
+                            <li>複雑な情報を分かりやすく理解したい</li>
+                            <li>多角的な視点で物事を見たい</li>
+                            <li>日常に新しい発見を求めている</li>
+                            <li>テクノロジーの可能性を探求したい</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="use-cases" class="use-cases">
+            <div class="container">
+                <h2 class="section-title scroll-reveal">活用シーン</h2>
+                
+                <div class="use-case scroll-reveal">
+                    <div class="use-case-content">
+                        <h3>朝の通勤時間</h3>
+                        <p>
+                            毎朝9時に自動生成された物語を通勤電車で読む。昨日のニュースが今日の物語にどう織り込まれているかを楽しみながら、
+                            自然と世界の出来事をキャッチアップ。フラグの回収状況をチェックして、今後の展開に期待を膨らませる。
+                        </p>
+                        <p>
+                            <strong>例：</strong> 「昨日の経済ニュースが、物語の中では商人ギルドの陰謀として描かれている。
+                            先週立てられた『新しい貿易ルート』のフラグが、ついに回収されそうな予感...」
+                        </p>
+                    </div>
+                    <div class="use-case-image">🚊</div>
+                </div>
+
+                <div class="use-case scroll-reveal">
+                    <div class="use-case-content">
+                        <h3>昼休みのリフレッシュ</h3>
+                        <p>
+                            仕事の合間に、追加の物語生成ボタンを押して新しいエピソードを楽しむ。
+                            同じニュースでも異なる視点で描かれる物語に、新たな発見や気づきを得る。
+                            キャラクターの成長や世界観の変化を追いながら、創造性を刺激される。
+                        </p>
+                        <p>
+                            <strong>例：</strong> 「午前中に読んだ政治ニュースが、ファンタジー世界の王国会議として再話されている。
+                            お気に入りのキャラクターが新しい役職に就いて、物語に深みが増している」
+                        </p>
+                    </div>
+                    <div class="use-case-image">☕</div>
+                </div>
+
+                <div class="use-case scroll-reveal">
+                    <div class="use-case-content">
+                        <h3>夜のリラックスタイム</h3>
+                        <p>
+                            一日の終わりに物語アーカイブを振り返り、過去の物語とフラグの回収状況を確認。
+                            サマリー機能で物語の流れを把握しながら、明日の展開を予想する楽しみ。
+                            RSSフィード設定を調整して、より興味深いニュースソースを追加。
+                        </p>
+                        <p>
+                            <strong>例：</strong> 「今週のフラグ回収率は80%。未回収のフラグから明日の物語展開を予想しながら、
+                            新しいキャラクターの設定を追加して、より豊かな物語世界を構築」
+                        </p>
+                    </div>
+                    <div class="use-case-image">🌙</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="coming-soon" class="coming-soon">
+            <div class="container">
+                <h2 class="scroll-reveal">Coming Soon</h2>
+                <p class="scroll-reveal">
+                    Chronicle Weaverは現在開発中です。<br>
+                    リリース情報をいち早くお届けします。
+                </p>
+                <form class="notify-form scroll-reveal" onsubmit="handleNotifySubmit(event)">
+                    <input 
+                        type="email" 
+                        class="notify-input" 
+                        placeholder="メールアドレスを入力"
+                        required
+                    >
+                    <button type="submit" class="notify-button">通知を受け取る</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Chronicle Weaver</h4>
+                    <p>年代記を織る者として、毎日の出来事を物語に変える革新的なアプリケーション</p>
+                </div>
+                <div class="footer-section">
+                    <h4>技術スタック</h4>
+                    <p>Vue.js 3, TypeScript, Express.js, OpenAI GPT, SQLite</p>
+                </div>
+                <div class="footer-section">
+                    <h4>お問い合わせ</h4>
+                    <p>開発に関するご質問やフィードバックをお待ちしています</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Chronicle Weaver. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll reveal animation
+        function revealOnScroll() {
+            const reveals = document.querySelectorAll('.scroll-reveal');
+            
+            reveals.forEach(element => {
+                const windowHeight = window.innerHeight;
+                const elementTop = element.getBoundingClientRect().top;
+                const elementVisible = 150;
+                
+                if (elementTop < windowHeight - elementVisible) {
+                    element.classList.add('revealed');
+                }
+            });
+        }
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Handle notify form submission
+        function handleNotifySubmit(event) {
+            event.preventDefault();
+            const email = event.target.querySelector('input[type="email"]').value;
+            
+            // Simple validation and feedback
+            if (email) {
+                alert('ありがとうございます！リリース情報をお送りします。');
+                event.target.reset();
+            }
+        }
+
+        // Initialize scroll reveal
+        window.addEventListener('scroll', revealOnScroll);
+        window.addEventListener('load', revealOnScroll);
+
+        // Add some interactive effects
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add hover effect to feature cards
+            const featureCards = document.querySelectorAll('.feature-card');
+            featureCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-10px) scale(1.02)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+
+            // Add typing effect to hero subtitle
+            const subtitle = document.querySelector('.hero .subtitle');
+            const text = subtitle.textContent;
+            subtitle.textContent = '';
+            
+            let i = 0;
+            function typeWriter() {
+                if (i < text.length) {
+                    subtitle.textContent += text.charAt(i);
+                    i++;
+                    setTimeout(typeWriter, 100);
+                }
+            }
+            
+            setTimeout(typeWriter, 1000);
+        });
+    </script>
+</body>
+</html>
