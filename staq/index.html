@@ -113,7 +113,6 @@ section{padding:100px 0}
 
 /* ===== Tech Stack ===== */
 .tech{position:relative}
-.tech-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
 .tech-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:12px;
   padding:28px;text-align:center}
 .tech-card .tech-label{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
@@ -160,7 +159,6 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
   .problem-grid{grid-template-columns:1fr}
   .solution-grid{grid-template-columns:1fr}
   .feat-grid{grid-template-columns:repeat(2,1fr)}
-  .tech-grid{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:32px}
 }
 @media(max-width:600px){
@@ -194,7 +192,7 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
       <li><a href="#solution">Solution</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#report">Report</a></li>
-      <li><a href="#tech">Tech</a></li>
+      <li><a href="#ai">AI</a></li>
       <li><a href="#vision">Vision</a></li>
     </ul>
   </div>
@@ -354,27 +352,17 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
     </div>
   </div>
 </section>
-<!-- Tech Stack -->
-<section class="tech" id="tech">
+<!-- AI Engine -->
+<section class="tech" id="ai">
   <div class="container">
-    <div class="section-label fade-in">Tech Stack</div>
-    <div class="section-title fade-in">モダンな技術基盤</div>
-    <div class="section-desc fade-in">高速・型安全・非同期。妥協のないアーキテクチャ。</div>
-    <div class="tech-grid">
+    <div class="section-label fade-in">AI Engine</div>
+    <div class="section-title fade-in">AI が、あなたの投資判断を支える</div>
+    <div class="section-desc fade-in">データの収集から分析・レポート生成まで、AI が一貫してサポートします。</div>
+    <div style="max-width:480px;margin:48px auto 0">
       <div class="tech-card fade-in">
-        <div class="tech-label">Frontend</div>
-        <div class="tech-name">Vue 3 + TypeScript</div>
-        <div class="tech-desc">Composition API / Tailwind CSS / Chart.js</div>
-      </div>
-      <div class="tech-card fade-in">
-        <div class="tech-label">Backend</div>
-        <div class="tech-name">FastAPI + Python 3.12</div>
-        <div class="tech-desc">async/await / aiosqlite / APScheduler</div>
-      </div>
-      <div class="tech-card fade-in">
-        <div class="tech-label">AI Engine</div>
+        <div class="tech-label">Powered by</div>
         <div class="tech-name">OpenAI o3 / gpt-4.1-nano</div>
-        <div class="tech-desc">レポート生成 / ブログ解析 / 理念調査</div>
+        <div class="tech-desc">対談レポート生成 / ブログ自動解析 / 投資理念調査</div>
       </div>
     </div>
   </div>
