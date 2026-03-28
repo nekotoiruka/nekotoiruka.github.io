@@ -4,196 +4,177 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>STAQ — Stack your investment intelligence.</title>
-<meta name="description" content="投資ブロガーの推奨実績を蓄積し、客観的指標で機械的に検証。AI対談レポートであなたの投資判断を研ぎ澄ます。">
+<meta name="description" content="投資ブロガーの推奨銘柄を自動で蓄積し、騰落率・インデックス比較で継続検証。AI対談レポートで投資判断を研ぎ澄ます。">
 <style>
-/* ===== Reset & Base ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a28;
-  --text:#e8e8f0;--text-dim:#8888a0;--text-bright:#ffffff;
+  --text:#e8e8f0;--text-dim:#8888a0;--text-bright:#fff;
   --accent:#6c5ce7;--accent2:#a29bfe;--accent-glow:rgba(108,92,231,.25);
   --red:#ff6b6b;--green:#51cf66;--gold:#ffd43b;
   --font:'Helvetica Neue',Arial,'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;
 }
 html{scroll-behavior:smooth;font-size:16px}
 body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.7;overflow-x:hidden}
-a{color:var(--accent2);text-decoration:none;transition:color .2s}
-a:hover{color:var(--gold)}
-img{max-width:100%;display:block}
+a{color:var(--accent2);text-decoration:none;transition:color .2s}a:hover{color:var(--gold)}
 .container{max-width:1100px;margin:0 auto;padding:0 24px}
-
-/* ===== Utility ===== */
 .fade-in{opacity:0;transform:translateY(30px);transition:opacity .7s ease,transform .7s ease}
 .fade-in.visible{opacity:1;transform:translateY(0)}
-</style>
-<style>
-/* ===== Navigation ===== */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;
-  background:rgba(10,10,15,.85);backdrop-filter:blur(12px);
-  border-bottom:1px solid rgba(108,92,231,.15);padding:16px 0}
+.grid-bg{position:fixed;inset:0;z-index:-1;opacity:.03;
+  background-image:linear-gradient(rgba(108,92,231,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(108,92,231,.5) 1px,transparent 1px);background-size:60px 60px}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0}
+.orb-1{width:400px;height:400px;background:rgba(108,92,231,.08);top:-100px;right:-100px}
+.orb-2{width:300px;height:300px;background:rgba(255,107,107,.06);bottom:-80px;left:-80px}
+
+/* Nav */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,15,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(108,92,231,.15);padding:16px 0}
 nav .container{display:flex;align-items:center;justify-content:space-between}
-.nav-logo{font-size:1.1rem;font-weight:700;letter-spacing:.04em;color:var(--text-bright)}
-.nav-logo span{color:var(--accent)}
+.nav-logo{font-size:1.1rem;font-weight:700;letter-spacing:.04em;color:var(--text-bright)}.nav-logo span{color:var(--accent)}
 .nav-links{display:flex;gap:28px;list-style:none}
-.nav-links a{font-size:.85rem;color:var(--text-dim);font-weight:500;letter-spacing:.02em;transition:color .2s}
+.nav-links a{font-size:.85rem;color:var(--text-dim);font-weight:500;letter-spacing:.02em}
 .nav-links a:hover{color:var(--accent2)}
 
-/* ===== Hero ===== */
-.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;
-  position:relative;padding:120px 24px 80px}
-.hero::before{content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 60% 50% at 50% 40%,rgba(108,92,231,.12),transparent 70%),
-             radial-gradient(ellipse 40% 30% at 70% 60%,rgba(255,107,107,.06),transparent 60%)}
+/* Hero */
+.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;position:relative;padding:120px 24px 80px}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 40%,rgba(108,92,231,.12),transparent 70%),radial-gradient(ellipse 40% 30% at 70% 60%,rgba(255,107,107,.06),transparent 60%)}
 .hero-inner{position:relative;z-index:1;max-width:800px}
-.hero-badge{display:inline-block;padding:6px 18px;border-radius:100px;
-  background:rgba(108,92,231,.15);border:1px solid rgba(108,92,231,.3);
-  font-size:.75rem;color:var(--accent2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:28px}
-.hero h1{font-size:clamp(2rem,5.5vw,3.6rem);font-weight:800;line-height:1.25;
-  color:var(--text-bright);margin-bottom:20px;letter-spacing:-.02em}
-.hero h1 em{font-style:normal;color:var(--red);position:relative}
-.hero h1 em::after{content:'';position:absolute;bottom:2px;left:0;right:0;height:3px;
-  background:var(--red);opacity:.4;border-radius:2px}
-.hero-sub{font-size:1.1rem;color:var(--text-dim);max-width:600px;margin:0 auto 40px;line-height:1.8}
+.hero-badge{display:inline-block;padding:6px 18px;border-radius:100px;background:rgba(108,92,231,.15);border:1px solid rgba(108,92,231,.3);font-size:.75rem;color:var(--accent2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:28px}
+.hero h1{font-size:clamp(2rem,5.5vw,3.6rem);font-weight:800;line-height:1.25;color:var(--text-bright);margin-bottom:20px;letter-spacing:-.02em}
+.hero h1 em{font-style:normal;color:var(--accent2)}
+.hero-sub{font-size:1.1rem;color:var(--text-dim);max-width:620px;margin:0 auto 40px;line-height:1.8}
 .hero-sub strong{color:var(--text)}
 .hero-cta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:10px;
-  font-size:.9rem;font-weight:600;letter-spacing:.02em;transition:all .3s;cursor:pointer;border:none}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:10px;font-size:.9rem;font-weight:600;letter-spacing:.02em;transition:all .3s;cursor:pointer;border:none}
 .btn-primary{background:var(--accent);color:#fff;box-shadow:0 4px 24px var(--accent-glow)}
 .btn-primary:hover{background:#7c6cf7;transform:translateY(-2px);box-shadow:0 8px 32px var(--accent-glow)}
 .btn-ghost{background:transparent;color:var(--accent2);border:1px solid rgba(108,92,231,.4)}
 .btn-ghost:hover{background:rgba(108,92,231,.1);border-color:var(--accent)}
-</style>
-<style>
-/* ===== Section Common ===== */
-section{padding:100px 0}
-.section-label{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--accent);margin-bottom:12px;font-weight:600}
-.section-title{font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:700;
-  color:var(--text-bright);margin-bottom:16px;line-height:1.3}
-.section-desc{font-size:1rem;color:var(--text-dim);max-width:600px;line-height:1.8}
 
-/* ===== Problem ===== */
-.problem{background:var(--bg2);border-top:1px solid rgba(255,255,255,.04);
-  border-bottom:1px solid rgba(255,255,255,.04)}
+/* Section */
+section{padding:100px 0;overflow-x:hidden}
+.section-label{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;font-weight:600}
+.section-title{font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:700;color:var(--text-bright);margin-bottom:16px;line-height:1.3;word-break:break-word}
+.section-desc{font-size:1rem;color:var(--text-dim);max-width:600px;line-height:1.8}
+/* Problem */
+.problem{background:var(--bg2);border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04)}
 .problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;margin-top:48px}
 .problem-list{list-style:none;display:flex;flex-direction:column;gap:20px}
 .problem-list li{display:flex;gap:14px;align-items:flex-start;font-size:.95rem;color:var(--text)}
-.problem-list .icon{flex-shrink:0;width:36px;height:36px;border-radius:8px;
-  display:flex;align-items:center;justify-content:center;font-size:1.1rem;
-  background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.2)}
-.problem-quote{font-size:1.3rem;font-weight:600;color:var(--gold);
-  border-left:3px solid var(--gold);padding-left:20px;margin-top:32px;line-height:1.6}
+.problem-list .icon{flex-shrink:0;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.2)}
+.problem-quote{font-size:1.3rem;font-weight:600;color:var(--gold);border-left:3px solid var(--gold);padding-left:20px;margin-top:32px;line-height:1.6}
 
-/* ===== Solution ===== */
+/* Solution */
 .solution-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-top:48px}
-.sol-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:16px;
-  padding:32px;transition:all .4s;position:relative;overflow:hidden}
-.sol-card:hover{border-color:rgba(108,92,231,.3);transform:translateY(-4px);
-  box-shadow:0 12px 40px rgba(108,92,231,.1)}
-.sol-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:0;transition:opacity .4s}
+.sol-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:32px;transition:all .4s;position:relative;overflow:hidden}
+.sol-card:hover{border-color:rgba(108,92,231,.3);transform:translateY(-4px);box-shadow:0 12px 40px rgba(108,92,231,.1)}
+.sol-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:0;transition:opacity .4s}
 .sol-card:hover::before{opacity:1}
 .sol-num{font-size:.7rem;font-weight:700;color:var(--accent);letter-spacing:.1em;margin-bottom:12px}
 .sol-card h3{font-size:1.15rem;font-weight:700;color:var(--text-bright);margin-bottom:10px}
 .sol-card p{font-size:.9rem;color:var(--text-dim);line-height:1.7}
-.sol-card .formula{display:inline-block;margin-top:10px;padding:6px 14px;border-radius:6px;
-  background:rgba(108,92,231,.1);border:1px solid rgba(108,92,231,.2);
-  font-family:'Courier New',monospace;font-size:.85rem;color:var(--accent2)}
-</style>
-<style>
-/* ===== Features ===== */
+
+/* Mock Window */
+.app-preview{background:var(--bg2);border-top:1px solid rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.04)}
+.mock-window{background:#111118;border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);margin-top:48px;max-width:960px;width:100%;margin-left:auto;margin-right:auto}
+.mock-titlebar{display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06)}
+.mock-dot{width:10px;height:10px;border-radius:50%}
+.mock-dot-r{background:#ff5f57}.mock-dot-y{background:#febc2e}.mock-dot-g{background:#28c840}
+.mock-titlebar-text{margin-left:12px;font-size:.7rem;color:var(--text-dim);letter-spacing:.04em}
+.mock-body{padding:24px;overflow-x:auto}
+
+/* Mock Table */
+.mock-table{width:100%;border-collapse:collapse;font-size:.75rem}
+.mock-table th{text-align:left;padding:8px 10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:.65rem;border-bottom:1px solid rgba(255,255,255,.08);white-space:nowrap}
+.mock-table th.right,.mock-table td.right{text-align:right}
+.mock-table td{padding:10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text);white-space:nowrap}
+.mock-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.65rem;font-weight:600}
+.mock-badge-green{background:rgba(81,207,102,.12);color:var(--green)}
+.mock-badge-gold{background:rgba(255,212,59,.12);color:var(--gold)}
+.mock-badge-red{background:rgba(255,107,107,.12);color:var(--red)}
+.mock-badge-blue{background:rgba(108,92,231,.12);color:var(--accent2)}
+.mock-perf-up{color:var(--green);font-weight:600;font-family:'Courier New',monospace}
+.mock-perf-down{color:var(--red);font-weight:600;font-family:'Courier New',monospace}
+.mock-ticker{font-family:'Courier New',monospace;color:var(--accent2)}
+.mock-name{color:var(--text-dim);font-size:.65rem;margin-left:4px}
+.mock-chart-area{margin-top:16px;padding:16px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:8px;overflow:hidden}
+.mock-chart-svg{width:100%;height:120px;display:block;max-width:100%}
+.mock-chart-label{font-size:.6rem;color:var(--text-dim);margin-top:8px;display:flex;gap:16px}
+.mock-chart-label span{display:flex;align-items:center;gap:4px}
+.mock-chart-label .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+
+/* Mock Report */
+.mock-report{max-width:960px;width:100%;margin:48px auto 0}
+.mock-report-window{background:#111118;border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.mock-report-body{padding:24px}
+.mock-report-header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.mock-report-badge{padding:4px 12px;border-radius:100px;font-size:.7rem;font-weight:600}
+.mock-report-date{font-size:.8rem;color:var(--text-dim)}
+.mock-conversation{display:flex;flex-direction:column;gap:14px}
+.mock-msg{padding:16px 20px;border-radius:14px;font-size:.85rem;line-height:1.7;max-width:90%}
+.mock-msg .speaker{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;display:block}
+.mock-msg-user{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);align-self:flex-end;border-bottom-right-radius:4px}
+.mock-msg-user .speaker{color:var(--green)}
+.mock-msg-inf{background:rgba(108,92,231,.08);border:1px solid rgba(108,92,231,.15);align-self:flex-start;border-bottom-left-radius:4px}
+.mock-msg-inf .speaker{color:var(--accent2)}
+.mock-msg-inf2{background:rgba(255,212,59,.06);border:1px solid rgba(255,212,59,.12);align-self:flex-start;border-bottom-left-radius:4px}
+.mock-msg-inf2 .speaker{color:var(--gold)}
+.mock-watchlist{margin-top:16px;padding:14px 18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px}
+.mock-watchlist-title{font-size:.75rem;font-weight:600;color:var(--text-dim);margin-bottom:10px}
+.mock-watchlist-item{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.8rem}
+.mock-watchlist-item:last-child{border-bottom:none}
+.mock-checkbox{width:14px;height:14px;border-radius:3px;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0}
+.mock-checkbox.checked{background:var(--gold);border-color:var(--gold);color:#000}
+
+/* Features */
 .features{background:var(--bg2)}
-.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:48px}
-.feat-item{background:var(--bg3);border:1px solid rgba(255,255,255,.04);border-radius:12px;
-  padding:28px 24px;text-align:center;transition:all .3s}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.feat-item{background:var(--bg3);border:1px solid rgba(255,255,255,.04);border-radius:12px;padding:28px 24px;text-align:center;transition:all .3s}
 .feat-item:hover{border-color:rgba(108,92,231,.25);background:rgba(108,92,231,.05)}
 .feat-icon{font-size:2rem;margin-bottom:14px}
 .feat-item h4{font-size:.95rem;font-weight:600;color:var(--text-bright);margin-bottom:8px}
 .feat-item p{font-size:.8rem;color:var(--text-dim);line-height:1.6}
 
-/* ===== Tech Stack ===== */
-.tech{position:relative}
-.tech-card{background:var(--bg2);border:1px solid rgba(255,255,255,.06);border-radius:12px;
-  padding:28px;text-align:center}
-.tech-card .tech-label{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--text-dim);margin-bottom:8px}
-.tech-card .tech-name{font-size:1rem;font-weight:600;color:var(--text-bright)}
-.tech-card .tech-desc{font-size:.8rem;color:var(--text-dim);margin-top:6px}
-
-/* ===== Report Demo ===== */
-.report-demo{background:var(--bg)}
-.demo-chat{max-width:680px;margin:48px auto 0;display:flex;flex-direction:column;gap:16px}
-.chat-bubble{padding:18px 22px;border-radius:16px;font-size:.9rem;line-height:1.75;
-  position:relative;max-width:88%}
-.chat-bubble .speaker{font-size:.7rem;font-weight:700;letter-spacing:.06em;
-  text-transform:uppercase;margin-bottom:6px;display:block}
-.chat-user{background:var(--bg3);border:1px solid rgba(255,255,255,.06);
-  align-self:flex-end;border-bottom-right-radius:4px}
-.chat-user .speaker{color:var(--green)}
-.chat-inf{background:rgba(108,92,231,.08);border:1px solid rgba(108,92,231,.15);
-  align-self:flex-start;border-bottom-left-radius:4px}
-.chat-inf .speaker{color:var(--accent2)}
-.demo-note{text-align:center;margin-top:32px;font-size:.85rem;color:var(--text-dim);
-  font-style:italic}
-
-/* ===== Vision / CTA ===== */
+/* Vision */
 .vision{text-align:center;padding:120px 0;position:relative}
-.vision::before{content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse 50% 40% at 50% 50%,rgba(108,92,231,.1),transparent 70%)}
+.vision::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 50% 40% at 50% 50%,rgba(108,92,231,.1),transparent 70%)}
 .vision-inner{position:relative;z-index:1}
-.vision h2{font-size:clamp(1.4rem,3vw,2rem);font-weight:700;color:var(--text-bright);
-  margin-bottom:16px;line-height:1.4}
-.vision .tagline{font-size:1.3rem;font-weight:700;letter-spacing:.06em;
-  background:linear-gradient(135deg,var(--accent),var(--accent2),var(--gold));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  background-clip:text;margin-top:32px}
+.vision h2{font-size:clamp(1.4rem,3vw,2rem);font-weight:700;color:var(--text-bright);margin-bottom:16px;line-height:1.4}
 .vision p{font-size:1rem;color:var(--text-dim);max-width:560px;margin:0 auto 36px;line-height:1.8}
+.tagline{font-size:1.3rem;font-weight:700;letter-spacing:.06em;background:linear-gradient(135deg,var(--accent),var(--accent2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-top:32px}
 
-/* ===== Footer ===== */
+/* Footer */
 footer{border-top:1px solid rgba(255,255,255,.04);padding:32px 0;text-align:center}
 footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
-</style>
-<style>
-/* ===== Responsive ===== */
+
+/* Responsive */
 @media(max-width:900px){
   .problem-grid{grid-template-columns:1fr}
   .solution-grid{grid-template-columns:1fr}
   .feat-grid{grid-template-columns:repeat(2,1fr)}
-  .stats-grid{grid-template-columns:repeat(2,1fr);gap:32px}
 }
 @media(max-width:600px){
   .feat-grid{grid-template-columns:1fr}
-  .stats-grid{grid-template-columns:1fr;gap:24px}
   .nav-links{display:none}
   .hero h1{font-size:1.8rem}
+  .mock-body{padding:12px}
+  .mock-report-body{padding:12px}
+  .report-rec-grid{grid-template-columns:1fr !important}
 }
-
-/* ===== Animated grid background ===== */
-.grid-bg{position:fixed;inset:0;z-index:-1;opacity:.03;
-  background-image:
-    linear-gradient(rgba(108,92,231,.5) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(108,92,231,.5) 1px,transparent 1px);
-  background-size:60px 60px}
-
-/* ===== Glow orbs ===== */
-.orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0}
-.orb-1{width:400px;height:400px;background:rgba(108,92,231,.08);top:-100px;right:-100px}
-.orb-2{width:300px;height:300px;background:rgba(255,107,107,.06);bottom:-80px;left:-80px}
 </style>
 </head>
 <body>
 <div class="grid-bg" aria-hidden="true"></div>
-<!-- Navigation -->
+
+<!-- Nav -->
 <nav>
   <div class="container">
     <div class="nav-logo">📊 <span>STAQ</span></div>
     <ul class="nav-links">
       <li><a href="#problem">Problem</a></li>
       <li><a href="#solution">Solution</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#report">AI Report</a></li>
       <li><a href="#features">Features</a></li>
-      <li><a href="#report">Report</a></li>
-      <li><a href="#ai">AI</a></li>
-      <li><a href="#vision">Vision</a></li>
     </ul>
   </div>
 </nav>
@@ -204,18 +185,19 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
   <div class="orb orb-2" aria-hidden="true"></div>
   <div class="hero-inner fade-in">
     <div class="hero-badge">Stack Your Investment Intelligence</div>
-    <h1>信頼できる投資家の<br><em>推奨実績</em>を積み上げ、<br>機械的に判断する。</h1>
+    <h1>投資ブロガーの推奨を<br><em>蓄積・検証</em>して、<br>自分の判断を磨く。</h1>
     <p class="hero-sub">
-      投資ブロガーの推奨情報を<strong>蓄積</strong>し、客観的指標で<strong>継続検証</strong>。<br>
-      価値観の合う投資家を見つけ、AI対談レポートで<br>
-      あなたの投資判断を研ぎ澄ます。
+      気になる投資家の推奨銘柄を自動で収集し、<strong>騰落率</strong>や<strong>インデックス比較</strong>で継続的に検証。<br>
+      複数のインフルエンサーの視点を AI が対談形式でぶつけ合い、<br>
+      あなたの次の一手を後押しします。
     </p>
     <div class="hero-cta">
-      <a href="#solution" class="btn btn-primary">📊 データを積み上げる</a>
-      <a href="#vision" class="btn btn-ghost">🤖 AI レポートを見る</a>
+      <a href="#dashboard" class="btn btn-primary">📊 画面を見てみる</a>
+      <a href="#report" class="btn btn-ghost">🤖 AI 対談レポート</a>
     </div>
   </div>
 </section>
+
 <!-- Problem -->
 <section class="problem" id="problem">
   <div class="container fade-in">
@@ -225,20 +207,20 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
       <ul class="problem-list">
         <li>
           <div class="icon">📝</div>
-          <div>気になる投資家の推奨を見つけても、<br>実績を追跡する手段がない。</div>
-        </li>
-        <li>
-          <div class="icon">🔍</div>
-          <div>過去の推奨がどうなったか、<br>振り返るデータが残っていない。</div>
+          <div>気になる投資家の推奨を見つけても、<br>その後の実績を追跡する手段がない。</div>
         </li>
         <li>
           <div class="icon">📉</div>
-          <div>参考にした銘柄がインデックスに<br>勝っているのか、比較できない。</div>
+          <div>推奨された銘柄がインデックスに<br>勝っているのか、比較できない。</div>
+        </li>
+        <li>
+          <div class="icon">🤷</div>
+          <div>複数の投資家をフォローしても、<br>誰の推奨が本当に信頼できるか分からない。</div>
         </li>
       </ul>
       <div>
         <div class="problem-quote">
-          「データを積み上げれば、<br>判断の精度は上がる。」
+          「推奨を聞いて終わり」から、<br>「データで検証し続ける」へ。
         </div>
       </div>
     </div>
@@ -249,120 +231,297 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
 <section id="solution">
   <div class="container">
     <div class="section-label fade-in">The Solution — STAQ の4つの柱</div>
-    <div class="section-title fade-in">蓄積 × 検証 × 比較 × AI</div>
+    <div class="section-title fade-in">蓄積 × 検証 × 可視化 × AI対談</div>
     <div class="solution-grid">
       <div class="sol-card fade-in">
-        <div class="sol-num">PILLAR 01</div>
-        <h3>🔒 推奨実績の自動蓄積</h3>
-        <p>投資ブロガーの推奨情報を AI が自動で収集・構造化。推奨価格・日付・銘柄コードをデータとして積み上げ、実績を継続的にトラッキングします。</p>
+        <div class="sol-num">PILLAR 01 — 蓄積</div>
+        <h3>🔒 推奨実績の自動収集</h3>
+        <p>投資ブロガーの推奨銘柄を AI が自動で収集・構造化。推奨価格・日付・銘柄コード・発言ソースをデータとして積み上げ、実績を継続的にトラッキングします。</p>
       </div>
       <div class="sol-card fade-in">
-        <div class="sol-num">PILLAR 02</div>
-        <h3>📐 グレアムのミックス係数</h3>
-        <p>投資の父ベンジャミン・グレアムが提唱した指数で、推奨銘柄の割安度を機械的に判定。感覚ではなく数字で評価します。</p>
-        <div class="formula">PER × PBR = Mix Coefficient</div>
+        <div class="sol-num">PILLAR 02 — 検証</div>
+        <h3>📊 騰落率 × インデックス比較</h3>
+        <p>推奨銘柄の騰落率を自動算出し、オルカン（VT）との比較で「インデックスに勝っているか」を可視化。推奨の実力を客観的な数字で検証し続けます。</p>
       </div>
       <div class="sol-card fade-in">
-        <div class="sol-num">PILLAR 03</div>
-        <h3>🎁 優待監視 & コストアラート</h3>
-        <p>株主優待の廃止・変更を自動検知し即座に警告。優待獲得に必要な最低投資金額も自動算出。機械的に「買うべきか」を判断できます。</p>
+        <div class="sol-num">PILLAR 03 — 可視化</div>
+        <h3>📈 チャート・優待・ポートフォリオ</h3>
+        <p>過去5年分の月次データ・1年分の日次データで株価推移を把握。優待情報・配当利回り・保有銘柄の損益まで、投資判断に必要な情報を一画面に集約します。</p>
       </div>
       <div class="sol-card fade-in">
-        <div class="sol-num">PILLAR 04</div>
-        <h3>🤖 AI 投資レポート</h3>
-        <p>OpenAI (o3) が、あなたのポートフォリオと投資理念を分析。インフルエンサーとの対談形式レポートで、冷静な振り返りをサポートします。</p>
+        <div class="sol-num">PILLAR 04 — AI対談</div>
+        <h3>🤖 複数視点の対談レポート</h3>
+        <p>登録したインフルエンサーそれぞれの投資理念を AI が学習し、あなたの価値観も交えて対談形式のレポートを自動生成。複数の視点から銘柄を議論し、新たな気づきを得られます。</p>
       </div>
     </div>
   </div>
 </section>
-<!-- Features -->
-<section class="features" id="features">
+
+<!-- App Preview: Dashboard -->
+<section class="app-preview" id="dashboard">
   <div class="container">
-    <div class="section-label fade-in">Key Features</div>
-    <div class="section-title fade-in">機能ハイライト</div>
-    <div class="feat-grid">
-      <div class="feat-item fade-in">
-        <div class="feat-icon">🎁</div>
-        <h4>優待コスト・アラート</h4>
-        <p>優待獲得に必要な最低金額を自動算出。廃止情報は即座に警告。</p>
+    <div class="section-label fade-in">App Preview</div>
+    <div class="section-title fade-in">ダッシュボード — 推奨実績を一覧で把握</div>
+    <div class="section-desc fade-in">インフルエンサーの推奨銘柄を一覧表示。騰落率・割安判定・優待情報がひと目で分かり、行をクリックすると株価チャートが展開します。</div>
+    <div class="mock-window fade-in">
+      <div class="mock-titlebar">
+        <div class="mock-dot mock-dot-r"></div>
+        <div class="mock-dot mock-dot-y"></div>
+        <div class="mock-dot mock-dot-g"></div>
+        <span class="mock-titlebar-text">STAQ — ダッシュボード</span>
       </div>
-      <div class="feat-item fade-in">
-        <div class="feat-icon">🕷️</div>
-        <h4>ブログ自動解析</h4>
-        <p>AIが投資ブログから推奨銘柄を自動で抽出・登録。毎朝08:00 JSTに自動クロール。</p>
-      </div>
-      <div class="feat-item fade-in">
-        <div class="feat-icon">📈</div>
-        <h4>インテリジェント・チャート</h4>
-        <p>推奨日以降の動きに特化した専用の株価推移グラフ。移動平均線・日次/月次切り替え対応。</p>
-      </div>
-      <div class="feat-item fade-in">
-        <div class="feat-icon">📦</div>
-        <h4>ポートフォリオ同期</h4>
-        <p>自分の保有銘柄と推奨情報をリンク。📦マークで関連銘柄を一目で把握。</p>
-      </div>
-      <div class="feat-item fade-in">
-        <div class="feat-icon">👀</div>
-        <h4>購入候補リスト</h4>
-        <p>AIレポートで気になった銘柄をワンタップで購入候補に。追加時価格からの騰落率・優待情報付きで追跡。</p>
-      </div>
-      <div class="feat-item fade-in">
-        <div class="feat-icon">📊</div>
-        <h4>機会損失アラート</h4>
-        <p>推奨銘柄をオルカン（VT）と自動比較。インデックスに負けている銘柄を可視化し、資金配分の見直しを促します。</p>
+      <div class="mock-body">
+        <table class="mock-table">
+          <thead>
+            <tr>
+              <th>インフルエンサー</th>
+              <th>銘柄</th>
+              <th>推奨日</th>
+              <th class="right">推奨時価格</th>
+              <th class="right">現在価格</th>
+              <th class="right">騰落率</th>
+              <th class="right">ミックス係数</th>
+              <th>判定</th>
+              <th>優待</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>株旅カモメ</td>
+              <td><span class="mock-ticker">8928.T</span><span class="mock-name">穴吹興産</span></td>
+              <td>2025-06-15</td>
+              <td class="right">¥2,180<br><span style="font-size:.6rem;color:var(--text-dim)">Mix 4.1</span></td>
+              <td class="right">¥2,540</td>
+              <td class="right"><span class="mock-perf-up">+16.51%</span></td>
+              <td class="right">4.8</td>
+              <td><span class="mock-badge mock-badge-green">激安</span></td>
+              <td>🎁 クオカード<br><span style="font-size:.6rem;color:var(--text-dim)">¥254,000〜</span></td>
+            </tr>
+            <!-- 展開パネル（穴吹興産の行直下） -->
+            <tr>
+              <td colspan="9" style="padding:0;border-bottom:1px solid rgba(255,255,255,.04)">
+                <div class="mock-chart-area" style="margin:0;border:none;border-radius:0;background:rgba(255,255,255,.02)">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                    <span style="font-size:.75rem;color:var(--text-bright);font-weight:600">📈 8928.T 穴吹興産 — 株価推移</span>
+                    <div style="display:flex;gap:8px">
+                      <span class="mock-badge mock-badge-blue" style="font-size:.6rem">日次</span>
+                      <span style="font-size:.6rem;color:var(--text-dim);padding:2px 8px">月次</span>
+                    </div>
+                  </div>
+                  <svg class="mock-chart-svg" viewBox="0 0 800 120" preserveAspectRatio="none">
+                    <line x1="0" y1="62" x2="800" y2="62" stroke="rgba(255,212,59,.3)" stroke-width="1" stroke-dasharray="6,4"/>
+                    <text x="720" y="58" fill="rgba(255,212,59,.5)" font-size="9">¥2,180</text>
+                    <polyline fill="none" stroke="#6c5ce7" stroke-width="2" points="0,58 8,55 16,52 24,56 32,60 40,57 48,54 56,58 64,62 72,65 80,60 88,63 96,68 104,72 112,76 120,80 128,85 136,90 144,95 152,98 160,102 168,96 176,90 184,85 192,80 200,76 208,72 216,68 224,65 232,70 240,74 248,78 256,82 264,76 272,70 280,65 288,60 296,56 304,52 312,48 320,44 328,40 336,38 344,42 352,48 360,55 368,60 376,65 384,70 392,75 400,80 408,84 416,88 424,92 432,95 440,90 448,85 456,80 464,76 472,72 480,68 488,64 496,60 504,55 512,50 520,46 528,42 536,38 544,35 552,32 560,30 568,34 576,38 584,42 592,38 600,35 608,32 616,28 624,25 632,22 640,20 648,24 656,28 664,32 672,28 680,25 688,22 696,18 704,15 712,18 720,22 728,20 736,16 744,14 752,18 760,22 768,20 776,16 784,18 792,15 800,12"/>
+                    <polyline fill="none" stroke="rgba(81,207,102,.6)" stroke-width="1.5" stroke-dasharray="4,3" points="0,58 32,57 64,59 96,64 128,72 160,82 192,88 224,78 256,72 288,68 320,60 352,50 384,48 416,55 448,65 480,75 512,80 544,72 576,60 608,48 640,38 672,30 704,24 736,20 768,18 800,16"/>
+                    <polyline fill="none" stroke="rgba(255,107,107,.5)" stroke-width="1.5" stroke-dasharray="8,5" points="0,58 80,60 160,68 240,72 320,65 400,62 480,65 560,55 640,42 720,30 800,22"/>
+                    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(108,92,231,.25)"/><stop offset="100%" stop-color="rgba(108,92,231,0)"/></linearGradient>
+                    <polygon fill="url(#cg)" points="0,58 8,55 16,52 24,56 32,60 40,57 48,54 56,58 64,62 72,65 80,60 88,63 96,68 104,72 112,76 120,80 128,85 136,90 144,95 152,98 160,102 168,96 176,90 184,85 192,80 200,76 208,72 216,68 224,65 232,70 240,74 248,78 256,82 264,76 272,70 280,65 288,60 296,56 304,52 312,48 320,44 328,40 336,38 344,42 352,48 360,55 368,60 376,65 384,70 392,75 400,80 408,84 416,88 424,92 432,95 440,90 448,85 456,80 464,76 472,72 480,68 488,64 496,60 504,55 512,50 520,46 528,42 536,38 544,35 552,32 560,30 568,34 576,38 584,42 592,38 600,35 608,32 616,28 624,25 632,22 640,20 648,24 656,28 664,32 672,28 680,25 688,22 696,18 704,15 712,18 720,22 728,20 736,16 744,14 752,18 760,22 768,20 776,16 784,18 792,15 800,12 800,120 0,120"/>
+                  </svg>
+                  <div class="mock-chart-label">
+                    <span><span class="dot" style="background:#6c5ce7"></span> 終値</span>
+                    <span><span class="dot" style="background:rgba(81,207,102,.5)"></span> 25日移動平均</span>
+                    <span><span class="dot" style="background:rgba(255,107,107,.45)"></span> 75日移動平均</span>
+                    <span><span class="dot" style="background:rgba(255,212,59,.5)"></span> 推奨時価格</span>
+                  </div>
+                  <div style="margin-top:12px;display:flex;gap:16px;align-items:center;font-size:.75rem">
+                    <span style="color:var(--text-dim)">vs VT</span>
+                    <span class="mock-perf-up">+12.3%</span>
+                    <span style="color:var(--text-dim)">— インデックスを上回っています</span>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>株旅カモメ</td>
+              <td><span class="mock-ticker">7203.T</span><span class="mock-name">トヨタ自動車</span> 📦</td>
+              <td>2025-03-10</td>
+              <td class="right">¥2,850<br><span style="font-size:.6rem;color:var(--text-dim)">Mix 12.3</span></td>
+              <td class="right">¥2,720</td>
+              <td class="right"><span class="mock-perf-down">-4.56%</span></td>
+              <td class="right">11.8</td>
+              <td><span class="mock-badge mock-badge-gold">様子見</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>配当キツネ</td>
+              <td><span class="mock-ticker">9984.T</span><span class="mock-name">ソフトバンクG</span> 👀</td>
+              <td>2025-01-22</td>
+              <td class="right">¥8,450<br><span style="font-size:.6rem;color:var(--text-dim)">Mix 18.7</span></td>
+              <td class="right">¥7,980</td>
+              <td class="right"><span class="mock-perf-down">-5.56%</span></td>
+              <td class="right">17.2</td>
+              <td><span class="mock-badge mock-badge-red">割高</span></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>割安イーグル</td>
+              <td><span class="mock-ticker">AAPL</span><span class="mock-name">Apple Inc.</span></td>
+              <td>2025-04-05</td>
+              <td class="right">$178.20<br><span style="font-size:.6rem;color:var(--text-dim)">Mix 38.5</span></td>
+              <td class="right">$195.40</td>
+              <td class="right"><span class="mock-perf-up">+9.65%</span></td>
+              <td class="right">42.1</td>
+              <td><span class="mock-badge mock-badge-red">割高</span></td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 </section>
 
 <!-- AI Report Demo -->
-<section class="report-demo" id="report">
+<section id="report" style="background:var(--bg)">
   <div class="container">
     <div class="section-label fade-in">AI Investment Report</div>
-    <div class="section-title fade-in">仮想インフルエンサーが、<br>あなたと「対談」する。</div>
-    <div class="section-desc fade-in">登録したインフルエンサーの投資理念を AI が学習。あなたの投資理念と掛け合わせて、対談形式のレポートを自動生成します。日次・週次・月次の3種類。</div>
-    <div class="demo-chat">
-      <div class="chat-bubble chat-user fade-in">
-        <span class="speaker">👤 あなた</span>
-        今週のレポート見ました。IKKホールディングス（2198.T）が含み損 -18% なんですが、ミックス係数は「割安」判定なんですよね。これ、ナンピンすべきですか？
+    <div class="section-title fade-in">AI が買い・売りを提示し、<br>複数の視点で「対談」する。</div>
+    <div class="section-desc fade-in" style="margin-bottom:0">ダッシュボードのデータを AI が分析し、買い推奨・売り推奨を一覧で提示。さらにインフルエンサーのペルソナとあなたの価値観で対談を展開。気になった銘柄はそのまま購入候補に追加できます。</div>
+    <div class="mock-report fade-in">
+      <div class="mock-report-window">
+        <div class="mock-titlebar">
+          <div class="mock-dot mock-dot-r"></div>
+          <div class="mock-dot mock-dot-y"></div>
+          <div class="mock-dot mock-dot-g"></div>
+          <span class="mock-titlebar-text">STAQ — 週次レポート</span>
+        </div>
+        <div class="mock-report-body">
+          <div class="mock-report-header">
+            <span class="mock-report-badge" style="background:rgba(81,207,102,.12);color:var(--green)">週次レポート</span>
+            <span class="mock-report-date">2026年3月28日 08:00</span>
+          </div>
+
+          <!-- サマリー -->
+          <div style="margin-bottom:20px;padding:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;font-size:.85rem;line-height:1.7;color:var(--text-dim)">
+            <div style="font-size:.7rem;font-weight:600;color:var(--accent);letter-spacing:.08em;margin-bottom:8px">� SUMMARY</div>
+            今週は日経平均が +2.1% と堅調。不動産セクターが好調で穴吹興産（8928.T）が +8.3% と大幅上昇。一方、ソフトバンクG（9984.T）は決算を受けて -5.6% と軟調。ポートフォリオ全体では VT 比 +3.2% のアウトパフォーム。
+          </div>
+
+          <!-- 買い推奨・売り推奨テーブル -->
+          <div class="report-rec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+            <div style="padding:14px;background:rgba(81,207,102,.05);border:1px solid rgba(81,207,102,.15);border-radius:10px">
+              <div style="font-size:.7rem;font-weight:600;color:var(--green);letter-spacing:.08em;margin-bottom:10px">📈 買い推奨</div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:.8rem">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div><span class="mock-ticker">8928.T</span><span class="mock-name">穴吹興産</span></div>
+                  <div><span class="mock-badge mock-badge-green">激安</span></div>
+                </div>
+                <div style="font-size:.7rem;color:var(--text-dim)">Mix 4.1 / 配当 3.9% / クオカード優待</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid rgba(255,255,255,.04)">
+                  <div><span class="mock-ticker">5020.T</span><span class="mock-name">ENEOS</span></div>
+                  <div><span class="mock-badge mock-badge-green">割安</span></div>
+                </div>
+                <div style="font-size:.7rem;color:var(--text-dim)">Mix 7.8 / 配当 4.2% / 高配当＋資源セクター</div>
+              </div>
+            </div>
+            <div style="padding:14px;background:rgba(255,107,107,.05);border:1px solid rgba(255,107,107,.15);border-radius:10px">
+              <div style="font-size:.7rem;font-weight:600;color:var(--red);letter-spacing:.08em;margin-bottom:10px">📉 売り推奨</div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:.8rem">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div><span class="mock-ticker">9984.T</span><span class="mock-name">ソフトバンクG</span></div>
+                  <div><span class="mock-badge mock-badge-red">割高</span></div>
+                </div>
+                <div style="font-size:.7rem;color:var(--text-dim)">Mix 17.2 / vs VT -8.3% / 機会損失 ¥42,000</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid rgba(255,255,255,.04)">
+                  <div><span class="mock-ticker">2198.T</span><span class="mock-name">IKKホールディングス</span></div>
+                  <div><span class="mock-badge mock-badge-red">割高</span></div>
+                </div>
+                <div style="font-size:.7rem;color:var(--text-dim)">Mix 15.6 / 含み損 -18% / 優待なし・低配当</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 対談セクション -->
+          <div style="font-size:.7rem;font-weight:600;color:var(--accent);letter-spacing:.08em;margin-bottom:12px">💬 対談: 株旅カモメ × 配当キツネ × あなた</div>
+          <div class="mock-conversation">
+            <div class="mock-msg mock-msg-user">
+              <span class="speaker">👤 あなた（優待＋配当のダブルインカム派）</span>
+              売り推奨に IKKホールディングス（2198.T）が入ってますね。含み損 -18% ですが、ミックス係数は「割安」寄りなんですよね。ナンピンか損切りか迷ってます。
+            </div>
+            <div class="mock-msg mock-msg-inf">
+              <span class="speaker">🎩 株旅カモメ（AI ペルソナ — 総合戦闘力重視）</span>
+              ミックス係数 8.2 で確かに「割安」圏内ですな。ただ、わたくしが重視するのは"総合戦闘力"でして。配当利回り 1.8% は物足りない。優待も無い。割安だけでナンピンするのは危険ですぞ。
+            </div>
+            <div class="mock-msg mock-msg-inf2">
+              <span class="speaker">📊 配当キツネ（AI ペルソナ — ネットネット株ハンター）</span>
+              PBR 0.6 倍で資産面の裏付けはある。ただ営業利益率が低下傾向なのが気になります。「安いから買う」ではなく「なぜ安いか」を掘り下げるべきですね。
+            </div>
+            <div class="mock-msg mock-msg-user">
+              <span class="speaker">👤 あなた</span>
+              なるほど、2人とも慎重ですね。買い推奨の穴吹興産に振り替えるのはどうですか？
+            </div>
+            <div class="mock-msg mock-msg-inf">
+              <span class="speaker">🎩 株旅カモメ（AI ペルソナ）</span>
+              あなたの理念「優待＋配当のダブルインカム」にドンピシャですぞ。ミックス係数 4.1 で「激安」、配当利回り 3.9%、クオカード優待付き。IKK の資金をリロケーションするのが、わたくし流の"戦略的撤退"です。
+            </div>
+          </div>
+
+          <!-- 購入候補チェック -->
+          <div class="mock-watchlist">
+            <div class="mock-watchlist-title">📋 気になる銘柄をチェック → 購入候補に追加</div>
+            <div class="mock-watchlist-item">
+              <div class="mock-checkbox checked">✓</div>
+              <span>🇯🇵</span>
+              <span class="mock-ticker">8928.T</span>
+              <span style="color:var(--text-dim)">穴吹興産</span>
+              <span class="mock-perf-up" style="margin-left:auto;font-size:.75rem">+16.51%</span>
+            </div>
+            <div class="mock-watchlist-item">
+              <div class="mock-checkbox checked">✓</div>
+              <span>🇯🇵</span>
+              <span class="mock-ticker">5020.T</span>
+              <span style="color:var(--text-dim)">ENEOS</span>
+              <span class="mock-perf-up" style="margin-left:auto;font-size:.75rem">+4.82%</span>
+            </div>
+            <div class="mock-watchlist-item">
+              <div class="mock-checkbox"></div>
+              <span>🇯🇵</span>
+              <span class="mock-ticker">2198.T</span>
+              <span style="color:var(--text-dim)">IKKホールディングス</span>
+              <span class="mock-perf-down" style="margin-left:auto;font-size:.75rem">-18.20%</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="chat-bubble chat-inf fade-in">
-        <span class="speaker">🎩 みきまる（AI ペルソナ）</span>
-        いい質問ですな。ミックス係数 8.2 で確かに「割安」圏内。ただ、わたくしが重視するのは"総合戦闘力"でして。配当利回り 1.8% は物足りない。優待も無い。割安だけでナンピンするのは、ちと危険ですぞ。
-      </div>
-      <div class="chat-bubble chat-user fade-in">
-        <span class="speaker">👤 あなた</span>
-        じゃあ、同じ資金で別の銘柄に振り替えるとしたら？ 私の理念は「優待＋配当のダブルインカム」なんですが。
-      </div>
-      <div class="chat-bubble chat-inf fade-in">
-        <span class="speaker">🎩 みきまる（AI ペルソナ）</span>
-        それなら穴吹興産（8928.T）を推しますね。ミックス係数 4.1 で「激安」、配当利回り 3.9%、しかもクオカード優待付き。あなたの理念にドンピシャですぞ。IKK の資金をここにリロケーションするのが、わたくし流の"戦略的撤退"です。
-      </div>
-      <div class="chat-bubble chat-user fade-in">
-        <span class="speaker">👤 あなた</span>
-        なるほど、データで見ると納得感ありますね。感情で握り続けるところでした。
-      </div>
-      <div class="chat-bubble chat-inf fade-in">
-        <span class="speaker">🎩 みきまる（AI ペルソナ）</span>
-        それが STAQ の真骨頂ですぞ。「なんとなく」を「数字で」に変える。含み損の銘柄を眺めて悩む時間を、次の一手を考える時間に使いましょう。
-      </div>
-    </div>
-    <div class="demo-note fade-in">
-      ※ 実際の AI レポートからの抜粋です。インフルエンサーの投資理念を登録すると、その口調・価値観で対談が生成されます。
     </div>
   </div>
 </section>
-<!-- AI Engine -->
-<section class="tech" id="ai">
+
+<!-- Features -->
+<section class="features" id="features">
   <div class="container">
-    <div class="section-label fade-in">AI Engine</div>
-    <div class="section-title fade-in">AI が、あなたの投資判断を支える</div>
-    <div class="section-desc fade-in">データの収集から分析・レポート生成まで、AI が一貫してサポートします。</div>
-    <div style="max-width:480px;margin:48px auto 0">
-      <div class="tech-card fade-in">
-        <div class="tech-label">Powered by</div>
-        <div class="tech-name">OpenAI o3 / gpt-4.1-nano</div>
-        <div class="tech-desc">対談レポート生成 / ブログ自動解析 / 投資理念調査</div>
+    <div class="section-label fade-in">Key Features</div>
+    <div class="section-title fade-in">そのほかの機能</div>
+    <div class="feat-grid">
+      <div class="feat-item fade-in">
+        <div class="feat-icon">🕷️</div>
+        <h4>ブログ自動収集</h4>
+        <p>投資ブログから推奨銘柄を AI が自動で抽出・登録。手入力なしでデータが蓄積されます。</p>
+      </div>
+      <div class="feat-item fade-in">
+        <div class="feat-icon">🎁</div>
+        <h4>優待監視</h4>
+        <p>株主優待の廃止・変更を自動検知。優待獲得に必要な最低投資金額も自動算出します。</p>
+      </div>
+      <div class="feat-item fade-in">
+        <div class="feat-icon">📦</div>
+        <h4>ポートフォリオ連携</h4>
+        <p>保有銘柄を登録すると、推奨情報とリンク。ナンピン対応・損益表示・銘柄ごとのサマリーを一画面で。</p>
+      </div>
+      <div class="feat-item fade-in">
+        <div class="feat-icon">👀</div>
+        <h4>購入候補リスト</h4>
+        <p>AI レポートで気になった銘柄をワンタップで購入候補に。追加時価格からの騰落率付きで追跡できます。</p>
+      </div>
+      <div class="feat-item fade-in">
+        <div class="feat-icon">📊</div>
+        <h4>機会損失の可視化</h4>
+        <p>推奨銘柄をオルカン（VT）と自動比較。インデックスに負けている銘柄を可視化し、資金配分の見直しを促します。</p>
+      </div>
+      <div class="feat-item fade-in">
+        <div class="feat-icon">&#x1F916;</div>
+        <h4>AI モデルの使い分け</h4>
+        <p>対談レポートは OpenAI o3 で深い推論を、ブログ解析・投資理念調査は gpt-4.1-nano で高速・低コストに。用途に応じてモデルを最適配置しています。</p>
       </div>
     </div>
   </div>
@@ -372,34 +531,27 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
 <section class="vision" id="vision">
   <div class="vision-inner fade-in">
     <div class="section-label">Vision</div>
-    <h2>データを積み上げ、<br><em style="color:var(--accent2);font-style:normal">賢明な投資家</em>で<br>あり続けるためのツール。</h2>
-    <p>STAQ は、信頼できる投資家の知見を蓄積し、客観的指標で継続検証することで、あなたの投資判断を研ぎ澄ますプラットフォームです。</p>
+    <h2>「なんとなく」を「数字で」に変える。<br><em style="color:var(--accent2);font-style:normal">賢明な投資家</em>であり続けるために。</h2>
+    <p>STAQ は、信頼できる投資家の推奨を蓄積し、騰落率・インデックス比較で継続検証。複数の視点が交差する AI 対談レポートで、あなたの投資判断を研ぎ澄ますプラットフォームです。</p>
     <div class="hero-cta" style="margin-top:36px">
-      <a href="#" class="btn btn-primary">📊 データを積み上げる</a>
+      <a href="#dashboard" class="btn btn-primary">📊 データを積み上げる</a>
     </div>
     <div class="tagline">Stack your intelligence. &nbsp; Sharpen your decisions.</div>
   </div>
 </section>
 
-<!-- Footer -->
 <footer>
   <div class="container">
     <p>&copy; 2026 STAQ. Data over Hype.</p>
   </div>
 </footer>
-<!-- Scroll animation -->
+
 <script>
 (function(){
-  const observer = new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if(entry.isIntersecting){
-        entry.target.classList.add('visible');
-      }
-    });
-  },{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
-  document.querySelectorAll('.fade-in').forEach(function(el){
-    observer.observe(el);
-  });
+  var o=new IntersectionObserver(function(e){
+    e.forEach(function(i){if(i.isIntersecting)i.target.classList.add('visible')});
+  },{threshold:.1,rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.fade-in').forEach(function(el){o.observe(el)});
 })();
 </script>
 </body>
