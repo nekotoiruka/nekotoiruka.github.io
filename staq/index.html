@@ -271,6 +271,20 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
         <span class="mock-titlebar-text">STAQ — ダッシュボード</span>
       </div>
       <div class="mock-body">
+        <!-- 市場指標テーブル -->
+        <div style="margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="font-size:.8rem;font-weight:600;color:var(--text-bright);margin-bottom:8px">📊 市場指標</div>
+          <table class="mock-table" style="margin-bottom:0">
+            <thead><tr><th>銘柄名</th><th>ティッカー</th><th class="right">最新価格</th><th class="right">前日比</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>日経平均株価</td><td><span class="mock-ticker">^N225</span></td><td class="right">¥38,500</td><td class="right"><span class="mock-perf-up">+1.32%</span></td><td style="font-size:.7rem;color:var(--text-dim)">🔄</td></tr>
+              <tr><td>Vanguard Total World Stock ETF</td><td><span class="mock-ticker">VT</span></td><td class="right">$112.40</td><td class="right"><span class="mock-perf-up">+0.85%</span></td><td style="font-size:.7rem;color:var(--text-dim)">🔄</td></tr>
+              <tr><td>Gold (COMEX)</td><td><span class="mock-ticker">GC=F</span></td><td class="right">$2,050.30</td><td class="right"><span class="mock-perf-down">-0.42%</span></td><td style="font-size:.7rem;color:var(--text-dim)">🔄</td></tr>
+              <tr><td>NYSE FANG+ Index</td><td><span class="mock-ticker">^NYFANG</span></td><td class="right">9,120.50</td><td class="right"><span class="mock-perf-up">+1.15%</span></td><td style="font-size:.7rem;color:var(--text-dim)">🔄</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:.8rem;font-weight:600;color:var(--text-bright);margin-bottom:8px">🔍 インフルエンサー推奨銘柄</div>
         <table class="mock-table">
           <thead>
             <tr>
@@ -403,12 +417,12 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
               <div style="font-size:.7rem;font-weight:600;color:var(--green);letter-spacing:.08em;margin-bottom:10px">📈 買い推奨</div>
               <div style="display:flex;flex-direction:column;gap:8px;font-size:.8rem">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                  <div><span class="mock-ticker">8928.T</span><span class="mock-name">穴吹興産</span></div>
+                  <div>1 ✨ <span class="mock-ticker">8928.T</span><span class="mock-name">穴吹興産</span></div>
                   <div><span class="mock-badge mock-badge-green">激安</span></div>
                 </div>
                 <div style="font-size:.7rem;color:var(--text-dim)">Mix 4.1 / 配当 3.9% / クオカード優待</div>
                 <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid rgba(255,255,255,.04)">
-                  <div><span class="mock-ticker">5020.T</span><span class="mock-name">ENEOS</span></div>
+                  <div>2 📈 <span class="mock-ticker">5020.T</span><span class="mock-name">ENEOS</span></div>
                   <div><span class="mock-badge mock-badge-green">割安</span></div>
                 </div>
                 <div style="font-size:.7rem;color:var(--text-dim)">Mix 7.8 / 配当 4.2% / 高配当＋資源セクター</div>
@@ -418,12 +432,12 @@ footer p{font-size:.75rem;color:var(--text-dim);letter-spacing:.04em}
               <div style="font-size:.7rem;font-weight:600;color:var(--red);letter-spacing:.08em;margin-bottom:10px">📉 売り推奨</div>
               <div style="display:flex;flex-direction:column;gap:8px;font-size:.8rem">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                  <div><span class="mock-ticker">9984.T</span><span class="mock-name">ソフトバンクG</span></div>
+                  <div>1 💤 <span class="mock-ticker">9984.T</span><span class="mock-name">ソフトバンクG</span></div>
                   <div><span class="mock-badge mock-badge-red">割高</span></div>
                 </div>
                 <div style="font-size:.7rem;color:var(--text-dim)">Mix 17.2 / vs VT -8.3% / 機会損失 ¥42,000</div>
                 <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid rgba(255,255,255,.04)">
-                  <div><span class="mock-ticker">2198.T</span><span class="mock-name">IKKホールディングス</span></div>
+                  <div>2 ✨ <span class="mock-ticker">2198.T</span><span class="mock-name">IKKホールディングス</span></div>
                   <div><span class="mock-badge mock-badge-red">割高</span></div>
                 </div>
                 <div style="font-size:.7rem;color:var(--text-dim)">Mix 15.6 / 含み損 -18% / 優待なし・低配当</div>
