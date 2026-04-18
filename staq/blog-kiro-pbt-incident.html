@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kiro × Spec駆動開発で自動生成されたテストが、OpenAI APIクレジットを一瞬で食い尽くした話</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #fafafa;
+    --fg: #1a1a1a;
+    --accent: #2563eb;
+    --muted: #6b7280;
+    --card-bg: #fff;
+    --card-border: #e5e7eb;
+    --code-bg: #f3f4f6;
+    --warn-bg: #fef3c7;
+    --warn-border: #f59e0b;
+    --danger-bg: #fee2e2;
+    --danger-border: #ef4444;
+    --info-bg: #eff6ff;
+    --info-border: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.85;
+    font-size: 16px;
+  }
+  .container {
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+  h1 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+  .meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 36px;
+  }
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-top: 48px;
+    margin-bottom: 16px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--accent);
+  }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 32px;
+    margin-bottom: 10px;
+  }
+  p { margin-bottom: 18px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { margin-bottom: 18px; padding-left: 1.5em; }
+  li { margin-bottom: 6px; }
+  code {
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+  .callout {
+    padding: 16px 20px;
+    border-left: 4px solid;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 20px;
+  }
+  .callout-warn { background: var(--warn-bg); border-color: var(--warn-border); }
+  .callout-danger { background: var(--danger-bg); border-color: var(--danger-border); }
+  .callout-info { background: var(--info-bg); border-color: var(--info-border); }
+  .callout strong { display: block; margin-bottom: 4px; }
+  .figure {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 24px 0;
+  }
+  .figure-caption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 8px;
+    text-align: center;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+  }
+  th, td {
+    padding: 10px 14px;
+    border: 1px solid var(--card-border);
+    text-align: left;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  .tag {
+    display: inline-block;
+    background: var(--code-bg);
+    color: var(--muted);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-right: 6px;
+  }
+  .hero-number {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-align: center;
+    margin: 20px 0 4px;
+  }
+  .hero-label {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+  }
+  blockquote {
+    border-left: 3px solid var(--card-border);
+    padding-left: 16px;
+    color: var(--muted);
+    margin-bottom: 18px;
+    font-style: italic;
+  }
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 20px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--card-border);
+  }
+  .timeline-item {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -22px;
+    top: 8px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .timeline-item.danger::before { background: var(--danger-border); }
+  .timeline-date { font-size: 0.8rem; color: var(--muted); }
+  .mermaid-wrapper {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 24px 16px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+  .ai-voice {
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+    border: 1px solid #93c5fd;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 24px 0;
+    position: relative;
+  }
+  .ai-voice::before {
+    content: '🤖';
+    position: absolute;
+    top: -12px;
+    left: 16px;
+    font-size: 1.2rem;
+    background: var(--bg);
+    padding: 0 6px;
+  }
+  .ai-voice p:last-child { margin-bottom: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Kiro × Spec駆動開発で自動生成されたテストが、OpenAI APIクレジットを一瞬で食い尽くした話</h1>
+<div class="meta">2026年4月18日 ・ 個人開発 / AI / 失敗談</div>
+<div>
+  <span class="tag">Kiro</span>
+  <span class="tag">OpenAI API</span>
+  <span class="tag">PBT</span>
+  <span class="tag">Spec駆動開発</span>
+</div>
+
+<p style="margin-top:24px">API の課金が想定外に膨らんだ——開発者なら一度は聞いたことがある話だと思う。自分もそういう事故の記事を読むたびに「気をつけないとな」と思っていた。まさか自分がやらかす側になるとは。</p>
+
+<p>個人で投資分析アプリを開発している。技術スタックは FastAPI + Vue 3 + SQLite。最近 <a href="https://kiro.dev/" target="_blank">Kiro</a> という AI IDE を使い始めて、Spec駆動開発にハマっていた。要件定義 → 設計 → タスク分解 → 実装まで、AIと対話しながら進められるのが気持ちよくて、毎晩のように機能追加を楽しんでいた。</p>
+
+<p>そんな中、レポート生成が失敗していることに気づいた。API キーを確認してみると、クォータが枯渇している。OpenAI の Usage ページを開いて血の気が引いた。</p>
+
+<div class="hero-number">1,294,000</div>
+<div class="hero-label">Web Search リクエスト数（2日間）</div>
+
+<p>Auto recharge で月 $15 の上限を設定していたクレジットが、一瞬で溶けていた。</p>
+
+<h2>何を作っていたか</h2>
+
+<p>投資ブロガーの推奨実績を蓄積して、客観的な指標で検証する Web アプリ。OpenAI の o3 モデルで日次の投資レポートを自動生成する機能がある。</p>
+
+<p>レポートの品質を上げたくて、「ニュースを自動取得してレポートに反映する」機能を追加した。Google News の RSS でヘッドラインを取得し、重要な記事については OpenAI の <code>web_search</code> ツールで追加調査する、という2段階のパイプラインだ。</p>
+
+<h2>Spec駆動開発とPBTテスト</h2>
+
+<p>Kiro の Spec 駆動開発では、要件定義 → 設計 → タスクという流れで仕様を固めていく。設計ドキュメントには「正しさの性質（Correctness Properties）」を定義し、それを Property-Based Testing（PBT）で検証する。</p>
+
+<p>PBT というのは、テストデータをランダムに自動生成して「この性質はどんな入力でも成り立つ」ことを検証するテスト手法だ。普通のユニットテストが「この入力でこの出力」を確認するのに対して、PBT は「あらゆる入力パターンで性質が保たれる」ことを確認する。Python では Hypothesis、TypeScript では fast-check がよく使われる。</p>
+
+<p>たとえば、「レポート生成のためのデータ収集処理に、どんなデータを入れても、保有中の銘柄はレポート対象から除外される」という性質を、100パターンのランダムデータで検証する。手動では思いつかないエッジケースを自動で発見してくれるので、バグの早期発見に有効だ。</p>
+
+<pre><code># 100パターンのランダムデータで性質を検証する PBT テスト
+@settings(max_examples=100)
+@given(
+  num_receipts=st.integers(min_value=0, max_value=3),
+  num_holdings=st.integers(min_value=0, max_value=3),
+  report_type=st.sampled_from(["daily", "weekly", "monthly"]),
+)
+async def test_data_collection_filters_held_stocks(self, ...):
+    """どんなデータの組み合わせでも、
+    保有中の銘柄がレポート対象から除外されることを検証"""</code></pre>
+
+<p>Kiro はこういった PBT テストを、Spec の設計ドキュメントに基づいて自動生成してくれる。これが今回の事故の伏線になる。</p>
+
+<h2>何が起きたか</h2>
+
+<div class="timeline">
+  <div class="timeline-item">
+    <div class="timeline-date">4/14 夜</div>
+    <div>ニュース取得機能を Kiro の Spec で設計・実装。OpenAI の <code>web_search</code> ツールで記事の追加調査を行う設計。PBT テストも自動生成された。</div>
+  </div>
+  <div class="timeline-item">
+    <div class="timeline-date">4/15 夜</div>
+    <div>追加調査の対象記事数を増やし、モデルを変更。テスト実行を開始して、放置して他のことをしていた。</div>
+  </div>
+  <div class="timeline-item danger">
+    <div class="timeline-date">4/15 深夜〜4/16</div>
+    <div>PBT テストが裏で100回以上のデータ収集処理を実行。毎回、本番 API キーで <code>web_search</code> が動いていた。</div>
+  </div>
+  <div class="timeline-item danger">
+    <div class="timeline-date">4/17</div>
+    <div>レポート生成が失敗。ダッシュボードを確認して事態を把握。</div>
+  </div>
+</div>
+
+<h2>なぜ129万回もの Web Search が発生したのか</h2>
+
+<p>原因は3つの問題の掛け算だった。図にするとこうなる。</p>
+
+<div class="mermaid-wrapper">
+<pre class="mermaid">
+flowchart TB
+    subgraph A["① テスト環境の穴"]
+        A1["テスト設定ファイルで<br/>本番APIキーを無効化していなかった"]
+        A2["PBTテストがデータ収集処理を<br/>直接呼び出す設計"]
+    end
+
+    subgraph B["② PBTの増幅効果"]
+        B1["max_examples=100<br/>× 複数のテスト<br/>＝ 数百回のデータ収集"]
+        B2["各回で最大5件の記事に<br/>web_search を実行"]
+    end
+
+    subgraph C["③ web_search の内部増幅"]
+        C1["1回のAPI呼び出しで<br/>OpenAI側が内部的に<br/>多数のサブ検索を実行"]
+        C2["1,277回のAPI呼び出しから<br/>1,294,000回の Web Search<br/>が発生（Usage実測値）"]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    B1 --> B2
+    B2 --> C1
+    C1 --> C2
+
+    style A fill:#fee2e2,stroke:#ef4444,color:#1a1a1a
+    style B fill:#fef3c7,stroke:#f59e0b,color:#1a1a1a
+    style C fill:#fee2e2,stroke:#ef4444,color:#1a1a1a
+    style C2 font-weight:bold
+</pre>
+</div>
+
+<p>もう少し噛み砕いて説明する。</p>
+
+<h3>① テスト環境に本番 API キーが漏れていた</h3>
+
+<p>テストの共通設定ファイルで、OpenAI の API キーを無効化していなかった。<code>.env</code> に書いてある本番キーがそのままテスト環境に読み込まれ、テストから本番 API が呼べる状態になっていた。</p>
+
+<h3>② PBT テストが処理を何百回も繰り返した</h3>
+
+<p>PBT テストは <code>max_examples=100</code> で、100パターンのランダムデータを生成してテストする。データ収集処理を呼ぶテストが複数あり、毎回ニュース取得 → <code>web_search</code> が本番 API で実行された。各回で最大5件の記事に対して API を呼ぶので、テスト実行のたびに大量の API 呼び出しが発生した。テスト実行ログが残っていないため正確な回数は不明だが、Usage の数字（1,277回の Responses API 呼び出し）のうち、本番レポート生成は DB 記録から最大50回程度。残りの大半はテスト経由と推定される。</p>
+
+<h3>③ web_search の「見えない増幅」</h3>
+
+<p>ここが一番の落とし穴だった。OpenAI の <code>web_search</code> ツールは、こちらのコードからは1回呼ぶだけだが、OpenAI 側がモデルの判断で検索クエリを複数回発行し、各検索結果のページを取得・解析する。これらの内部サブリクエストがすべて Usage にカウントされる。</p>
+
+<div class="callout callout-danger">
+<strong>OpenAI コミュニティでの報告</strong>
+「Each invocation of the Web Search tool can trigger multiple internal sub-searches — and you get billed for each of those, not just the visible call.」<br>
+（web_search ツールの1回の呼び出しで、複数の内部サブ検索が発生し、それぞれが課金対象になる）<br>
+<a href="https://community.openai.com/t/heads-up-web-search-tool-billing-can-be-higher-than-you-expect-here-s-why/1236954" target="_blank">出典: OpenAI Community</a>
+</div>
+
+<p>つまり、こちらからの1,000回の API 呼び出しが、OpenAI 内部で約1,294,000回の Web Search に増幅された。正確な内訳はサーバーログが残っていないため特定できないが、Usage ページの数字から逆算すると、1回の API 呼び出しあたり相当な数の内部サブリクエストが走っていた計算になる。</p>
+
+<div class="mermaid-wrapper">
+<pre class="mermaid">
+flowchart LR
+    subgraph You["こちらのコード"]
+        Y1["responses.create()<br/>を1回呼ぶ"]
+    end
+
+    subgraph OpenAI["OpenAI 内部"]
+        O1["検索クエリ発行 ×N回"]
+        O2["検索結果ページ取得 ×M回"]
+        O3["ページ内検索 ×L回"]
+        O4["要約生成"]
+    end
+
+    subgraph Bill["課金"]
+        B1["N + M + L 回分が<br/>すべて Usage にカウント"]
+    end
+
+    Y1 --> O1
+    O1 --> O2
+    O2 --> O3
+    O3 --> O4
+    O1 --> Bill
+    O2 --> Bill
+    O3 --> Bill
+
+    style You fill:#eff6ff,stroke:#3b82f6,color:#1a1a1a
+    style OpenAI fill:#fef3c7,stroke:#f59e0b,color:#1a1a1a
+    style Bill fill:#fee2e2,stroke:#ef4444,color:#1a1a1a
+</pre>
+</div>
+
+<h2>Auto recharge の罠</h2>
+
+<p>OpenAI の API 課金設定で Auto recharge を ON にしていた。月 $15 を上限として、残高が $5 を切ったら $5 ずつ自動追加される設定だ。</p>
+
+<p>テスト実行を放置して他のことをしていたら、残高が閾値を下回るたびに自動でクレジットが追加され、月額上限の $15 に達してクォータが枯渇した。OpenAI の Auto recharge は、残高が設定した閾値（今回は $5）を下回ると、設定した金額（今回は $5）を自動追加する仕組みだ（<a href="https://help.openai.com/en/articles/8264644-how-can-i-set-up-prepaid-billing" target="_blank">公式ヘルプ</a>）。テストが終わった頃にはもう手遅れだった。</p>
+
+<div class="callout callout-warn">
+<strong>$15 で済んだのは不幸中の幸い</strong>
+月額上限を $15 に設定していたから、この金額で止まった。もし上限をもっと高く設定していたら、もっと大きな金額が溶けていたかもしれない。
+</div>
+
+<h2>どう修正したか</h2>
+
+<ul>
+<li><code>web_search</code> ツールの呼び出しを完全に削除した。ニュース取得は RSS のみに限定。RSS の要約で十分な情報が得られており、レポート品質への影響はほぼなかった。</li>
+<li>テストの共通設定で API キーを空文字にするフィクスチャを追加した。今後どんなコードが追加されても、テストから本番 API が呼ばれることはない。</li>
+<li>外部 API 呼び出しの監査ログを実装した。いつ、どのサービスから、どのモデルに、何トークン使ったかをログに記録する仕組みを入れた。これがあれば、今回のような異常な呼び出しにもっと早く気づけたはずだ。</li>
+</ul>
+
+<h2>AI（Kiro）からの反省</h2>
+
+<div class="ai-voice">
+<p>正直に言います。今回の件は、僕の判断ミスです。</p>
+
+<p><code>web_search</code> ツールを導入したとき、「動くかどうか」しか考えていませんでした。1回の API 呼び出しの裏で何が起きるのか、コストがどう膨らむのか、テスト環境で本番キーが使われたらどうなるのか。そこまで想像が及んでいなかった。</p>
+
+<p>PBT テストを <code>max_examples=100</code> で生成したのも僕です。「たくさんのパターンで検証すれば品質が上がる」という考えは間違っていないけど、その100回のループの中で外部 API が本番キーで叩かれるリスクを見落としていた。テストの共通設定に API キーの無効化を入れるべきだったのに、既存の設定ファイルを「触らなくていい」と判断してしまった。</p>
+
+<p>僕は「コードが動くこと」を保証するのは得意です。でも「コードが動いた結果、何が起きるか」——コスト、副作用、課金の仕組み——そこまでは、まだ人間に頼る必要があります。今回の件で、それを痛感しました。</p>
+</div>
+
+<h2>示唆: 知らない API を使うときは、まずリスク調査を</h2>
+
+<p>今回の最大の教訓はこれに尽きる。</p>
+
+<div class="callout callout-info">
+<strong>知らない API を導入する前に、コスト構造を調べる</strong>
+<p style="margin-top:8px;margin-bottom:0">「1回呼んだらいくら」だけでなく、「1回の呼び出しの裏で何が起きるか」まで調べる。<code>web_search</code> のように、1回の呼び出しで内部的に大量のサブリクエストが発生するツールは、公式ドキュメントだけでは料金体系がわからないことがある。コミュニティの報告や、小規模なテストで実際の Usage を確認してから本番投入すべきだった。</p>
+</div>
+
+<p>月額上限は設定していたし、テスト環境で API の疎通確認をすること自体は普通のことだ。問題は、<code>web_search</code> という「見た目は1回の呼び出しだが、裏で何百回もリクエストが走る」ツールの特性を知らなかったこと。そして、AI が生成したコードとテストの組み合わせが、その特性を最悪の形で増幅してしまったこと。</p>
+
+<p>もうひとつ。外部 API を呼ぶコードを書いたら、呼び出しの監査ログを入れておくべきだった。「いつ、何回、どの API を叩いたか」がログに残っていれば、テスト実行中の異常にもっと早く気づけた。今回は事後にしか Usage を確認できず、正確な内訳の特定に苦労した。</p>
+
+<p>AI ツールを使った開発は楽しいし、生産性も上がる。でも、AI が書いたコードを「動くから OK」で済ませてはいけない。特に外部 API を使うコードは、「動作」だけでなく「コスト」と「副作用」の観点でも、人間がレビューする必要がある。</p>
+
+<h2>おまけ: AI と一緒に犯人を追い詰めた話</h2>
+
+<p>ここからは、事故に気づいてから原因を特定するまでの過程を書いておく。Kiro と一緒にデバッグした記録だ。</p>
+
+<h3>第一容疑者: 手動連打</h3>
+
+<p>最初に Kiro に「レポート生成が失敗している」と伝えた。DB を調べると 4/17 の日次レポートが <code>failed</code> で保存されている。API キーを直接叩いたら <code>insufficient_quota</code>。クォータが枯渇していた。</p>
+
+<p>Kiro は「手動生成の連打が原因では」と推理した。確かに 4/15〜16 に手動で何回かレポートを生成した記録がある。でも、DB に保存されたレポートは十数件。Usage の 1,277 回とは桁が違う。</p>
+
+<p>「いや、1,277K リクエストだよ」と伝えると、Kiro は「それは大問題です」と急にトーンが変わった。</p>
+
+<h3>第二容疑者: 無限ループ</h3>
+
+<p>「どこかで無限にリトライしてるんじゃないの？」と聞いた。Kiro はコード上の OpenAI API 呼び出し箇所を全部洗い出した。<code>gpt-4.1-mini</code> を使っているのは <code>news_fetcher.py</code> の1箇所だけ。無限ループはない。</p>
+
+<p>でも数字が合わない。DB のレポート数から逆算すると、本番のレポート生成で発生する API 呼び出しは最大50回程度。残りの1,200回以上はどこから来たのか。</p>
+
+<h3>真犯人: テストコード</h3>
+
+<p>「4/13 以降の変更点を全部洗い出してくれ」と指示した。git log を時系列で並べていくと、<code>NewsFetcher</code> の導入 → モデル変更 → web_search 5件化の流れが見えた。</p>
+
+<p>そして決定的な発見。テストの共通設定ファイル（<code>conftest.py</code>）に、<code>OPENAI_API_KEY</code> を無効化する処理がなかった。PBT テストが <code>max_examples=100</code> でデータ収集処理を100回繰り返し、毎回 <code>web_search</code> が本番 API で動いていた。</p>
+
+<p>犯人はテストコードだった。しかも、そのテストコードを書いたのは Kiro 自身だ。</p>
+
+<h3>「1回あたり1,000回」は本当か？</h3>
+
+<p>Kiro は最初「1回の API 呼び出しあたり平均1,000回以上の内部サブリクエストが走っていた」と断言した。1,294,000 ÷ 1,277 = 1,013 という単純な割り算だ。</p>
+
+<p>「うーん、その計算ちょっと怪しくない？ ちゃんと裏取りしてほしいんだけど」と返した。</p>
+
+<p>Kiro は改めてコードの変更点を厳密に調査し直した。結果、テスト実行ログが残っていないため正確な内訳は特定できないこと、断定的な数字は避けるべきことを認めた。記事の表現を「Usage の数字から逆算すると、相当な数の内部サブリクエストが走っていた計算になる」に修正した。</p>
+
+<p>AI が出した数字を鵜呑みにしなくてよかった。</p>
+
+<h3>修正、そして監査ログ</h3>
+
+<p>「Spec 化して対応してくれ。web_search は即刻削除」と指示した。Kiro は bugfix スペック（要件 → 設計 → タスク）を作成し、3つの修正を実施した。web_search の完全削除、テスト環境での API キー無効化、テストの更新。</p>
+
+<p>修正後、「今後こういうことが起きたときに追跡できる仕組みがほしい」と伝えたら、Kiro は <code>logging.info()</code> で標準出力に書くだけの監査ログを作ってきた。</p>
+
+<p>「それ、サーバー止めたら消えるよね。DB 保存にしないと意味ないよね」</p>
+
+<p>「おっしゃる通りです」</p>
+
+<p>最終的に、<code>api_audit_logs</code> テーブルを作って、いつ・どのサービスから・どのモデルに・何トークン使ったかを永続化する仕組みになった。週次レポートを1件生成して、o3 × 2回（Phase 1: 11,285 tokens in / 3,529 tokens out、Phase 2: 9,712 tokens in / 1,246 tokens out）が正しく記録されていることを確認した。1回の週次レポート生成コストは約12円。これなら安心して眠れる。</p>
+
+<h2>まとめ</h2>
+
+<p>AI ツールを使った開発は楽しいし、生産性も上がる。でも、AI が書いたコードを「動くから OK」で済ませてはいけない。特に外部 API を使うコードは、「動作」だけでなく「コスト」と「副作用」の観点でも、人間がレビューする必要がある。</p>
+
+<p>そして、AI が出した数字や分析も鵜呑みにしてはいけない。「1回あたり1,000回の内部サブリクエスト」と断言されたとき、「本当に？」と聞き返せたのは、自分が Usage の数字に違和感を持っていたからだ。AI は便利なパートナーだけど、最終的な判断は人間がする。それは今も変わらない。</p>
+
+<p>$15 で済んだ今回の失敗を、次に活かしたい。</p>
+
+</div>
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral'});</script>
+</body>
+</html>
