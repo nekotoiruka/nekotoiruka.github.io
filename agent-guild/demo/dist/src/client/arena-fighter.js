@@ -1,10 +1,11 @@
-import { GAG, GUARD_HIT, IMPACT, KO_TIME, NO_GEAR, SCENE_EVADE, bump, clamp01, ease, lerp } from './arena-common.js';
+import { GAG, GUARD_HIT, IMPACT, KO_TIME, NO_GEAR, bump, clamp01, ease, lerp } from './arena-common.js';
 import { CHAIN_T } from '../shared/simulate.js';
 import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
 import { drawHero, familiarHome, weaponSprite } from './hero.js';
 import { ultPose, verseAt } from './scenes.js';
+import { isBaseScene } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 import { reducedMotion } from './motion.js';
 // --- キャラ1体: 回答 → 構え → 回避 or 被弾 → 反撃 ---
@@ -20,7 +21,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         set(st.success ? 'cast' : 'hurt', (phase - (st.t - 0.03)) / 0.07);
     // 構え: 攻撃が来る前に腰を落としていく（だんだん深くなる）
     const brace = win(0.28, 0.38);
-    if (isTarget && atk !== 'treasure' && brace > 0 && phase < 0.38) {
+    if (isTarget && atk !== 'treasure' && this.sceneOf(w) !== 'opening' && brace > 0 && phase < 0.38) {
         set('guard', brace);
         oy += ease(brace) * 1.5;
     }
@@ -73,7 +74,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
         if (u > 0 && u < 1) {
             const arc = Math.sin(u * Math.PI); // 0→1→0 のなめらかな山
-            switch ((this.sceneOf(w) && SCENE_EVADE[this.sceneOf(w)]) || this.evades[v.f]) {
+            switch (this.evadeOf(w, v.f)) {
                 case 'jump': { // 高く跳んで宙返り
                     this.dust(ctx, v.x, v.y, u < 0.15 ? u / 0.15 : (u - 0.85) / 0.15);
                     oy += -Math.sin(u * Math.PI) * 34;
@@ -122,10 +123,18 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                     this.dust(ctx, v.x + 2, v.y, (u - 0.3) / 0.5); // 押されて足元が滑る
                     break;
                 }
+                case 'turn': { // 背後から来る技を、振り向いて受け止める（受けた光は counterfx.ts の backGuard）
+                    flip = u < 0.08 || u > 0.92;
+                    set('guard', Math.min(1, u * 5));
+                    ox -= Math.sin(clamp01((u - 0.3) / 0.7) * Math.PI) * 3; // 背中から押される
+                    this.dust(ctx, v.x - 2, v.y, (u - 0.3) / 0.5);
+                    break;
+                }
                 case 'barrier': {
                     set('cast', 0.2 + u * 0.6);
                     oy -= arc * 2;
-                    this.barrierFx(ctx, v.x, v.y - 12, arc);
+                    if (!isBaseScene(this.sceneOf(w)))
+                        this.barrierFx(ctx, v.x, v.y - 12, arc); // 基本の4場面は、ボスごとの対応技の光（counterfx.ts）
                     break;
                 }
                 case 'shoot': {
@@ -245,7 +254,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         ctx.ellipse(v.x, v.y + 1, 11, 4, 0, 0, Math.PI * 2);
         ctx.stroke();
     }
-    if (isTarget && atk !== 'treasure' && phase > 0.28 && phase < IMPACT && v.alive && this.frame % 10 < 6) {
+    if (isTarget && atk !== 'treasure' && this.sceneOf(w) !== 'opening' && phase > 0.28 && phase < IMPACT && v.alive && this.frame % 10 < 6) {
         const p = this.proj(v.x, v.y - 46);
         this.uiTop.push(() => this.labelAt(tl('！'), p.x, p.y, '#ff5a6e', 10));
     }

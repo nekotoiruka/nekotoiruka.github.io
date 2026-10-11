@@ -135,8 +135,8 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
     ctx.restore();
 }
 // 攻撃エフェクト（キャラの後ろ）: 地を這う衝撃波・爆発の輪・隕石の影
-export function attackFxBack(ctx, atk, phase, views, targeted) {
-    if (atk === 'tail') {
+export function attackFxBack(ctx, atk, phase, views, targeted, scene) {
+    if (atk === 'tail' && !(scene === 'tail' && (this.script.theme?.kind ?? 'dragon') === 'dragon')) { // 竜の尾の場面は、尾そのもの（scenes.ts の dragonTail）が床を払う
         const k = clamp01((phase - 0.4) / 0.1);
         if (k > 0 && k < 1) {
             const x = lerp(this.bossFoot.x + 30, 384, k);

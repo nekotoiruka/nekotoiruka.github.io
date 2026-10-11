@@ -1,4 +1,5 @@
-import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND, SCENE_EVADE, clamp01 } from './arena-common.js';
+import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND, clamp01 } from './arena-common.js';
+import { bossCue, counterFor } from './bossmoves.js';
 import { MELEE_WEAPONS } from '../shared/catalog.js';
 import { shoutEndT, SPELL_T, ultBeats, ultHitT, verseAt } from './scenes.js';
 import { play } from './sfx.js';
@@ -120,6 +121,10 @@ export function lagOf(w, f) {
     const sc = this.sceneOf(w);
     return sc === 'tail' ? clamp01((x - 150) / 234) * 0.12 : sc === 'breath' ? clamp01((x - 150) / 234) * 0.05 : 0;
 }
+// 正しく動けたときの身のこなし: 基本の4場面は、ボスごとの対応技の動き。それ以外は、キャラごとの得意な動き
+export function evadeOf(w, f) {
+    return counterFor(this.script.theme?.kind, this.sceneOf(w))?.evade ?? this.evades[f];
+}
 export function cues(w) {
     let c = this.cueCache.get(w);
     if (c)
@@ -140,8 +145,8 @@ export function cues(w) {
         else
             c.push({ t: verseAt(v, v.upto) + 0.004, s: 'chant', v: 0.4 }, { t: v.breakT, s: 'shatter' }, { t: v.breakT + 0.03, s: 'poof' }, { t: v.breakT + 0.06, s: 'fail' });
     }
-    else if (wv.attack !== 'treasure')
-        c.push(sc === 'breath' ? { t: 0.36, s: 'breath' } : { t: 0.3, s: 'roar', v: 0.7 });
+    else if (wv.attack !== 'treasure' && sc !== 'opening')
+        c.push(bossCue(this.script.theme?.kind, sc)); // 隙あり（よろめいている）ときは、ほえない
     if (sp?.st.used.skills.length && this.skillWave(w) && !ch && this.sceneOf(w) !== 'spell')
         c.push({ t: this.ultWindow(sp.st, w)[0], s: 'skill' });
     const ult = this.ultOf(w);
@@ -153,8 +158,8 @@ export function cues(w) {
         if (e.type === 'strike' && focus.has(e.f) && e.used.tools.length && !ch)
             c.push({ t: e.t, s: 'tool' });
         if (e.type === 'evade' && focus.has(e.f)) {
-            const ev = (sc && SCENE_EVADE[sc]) || this.evades[e.f];
-            c.push({ t: IMPACT + this.lagOf(w, e.f), s: ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
+            const ev = this.evadeOf(w, e.f), co = counterFor(this.script.theme?.kind, sc);
+            c.push({ t: IMPACT + this.lagOf(w, e.f), s: co ? co.sfx : ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
         }
         if (e.type === 'hit' && focus.has(e.f))
             c.push({ t: IMPACT + this.lagOf(w, e.f), s: 'hurt' });

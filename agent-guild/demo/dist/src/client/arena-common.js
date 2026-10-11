@@ -24,10 +24,7 @@ export const TOOL_SHORT = {
     kb_search: tl('ナレッジ検索'), customer_lookup: tl('顧客台帳'), history_lookup: tl('履歴照会'),
     regex_matcher: tl('正規表現'), calculator: tl('計算機'), clock: tl('時計'), json_validator: tl('形式チェック'), scan: tl('看破'), memory: tl('冒険日誌'), bell: tl('気配の鈴'), guardrail: tl('結界'),
 };
-export const EVADE_LABEL = { dodge: tl('よけた！'), block: tl('ガード！'), barrier: tl('はじいた！'), shoot: tl('撃ち落とした！'), slash: tl('斬った！'), jump: tl('跳んだ！'), crawl: tl('伏せた！'), step: tl('すり抜けた！') };
-// 場面ごとの、正解したときの身のこなし（ブレスは鏡で受ける＝ガード）
-export const SCENE_EVADE = { tail: 'jump', dive: 'crawl', claw: 'step', breath: 'block' };
-export const ATTACK_NAME_BY_SCENE = { dive: tl('急降下'), illusion: tl('幻術の声'), spell: tl('呪文'), fog: tl('霧の中からの一撃'), ougi: tl('竜の悪あがき'), rush: tl('突進'), summon: tl('大技'), opening: tl('竜の反撃'), memory: tl('見覚えのある一撃'), ally: tl('竜の一撃') };
+export const EVADE_LABEL = { dodge: tl('よけた！'), block: tl('ガード！'), barrier: tl('はじいた！'), shoot: tl('撃ち落とした！'), slash: tl('斬った！'), jump: tl('跳んだ！'), crawl: tl('伏せた！'), step: tl('すり抜けた！'), turn: tl('受け止めた！') };
 export const AGILE = new Set(['ninja', 'rogue', 'cat', 'bunny', 'frog', 'ghostie']);
 export const NO_GEAR = { back: [], fams: [], charms: [] };
 //# sourceMappingURL=arena-common.js.map

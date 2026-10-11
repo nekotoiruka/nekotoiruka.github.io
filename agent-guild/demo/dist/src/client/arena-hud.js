@@ -1,5 +1,6 @@
-import { ATTACK_NAME_BY_SCENE, MINE_BAND, bump, clamp01, ease, lerp } from './arena-common.js';
+import { MINE_BAND, bump, clamp01, ease, lerp } from './arena-common.js';
 import { ATTACKS } from '../shared/simulate.js';
+import { attackName } from './bossmoves.js';
 import { Rng } from '../shared/rng.js';
 import { POSITION_LABELS, skillLook } from '../shared/build.js';
 import { TOOL_BY_ID } from '../shared/catalog.js';
@@ -174,12 +175,12 @@ export function bossBar(time, rage) {
 }
 // ボスの攻撃名と狙う列（構えの間だけ）
 export function attackBanner(atk, phase, scene, big = false) {
-    if (phase < 0.26 || phase > 0.5)
-        return;
+    if (phase < 0.26 || phase > 0.5 || scene === 'opening')
+        return; // 隙あり: ボスはよろめいていて、攻撃してこない
     const ctx = this.ctx;
     const a = ATTACKS[atk];
     const rows = Object.keys(a.rows).map((r) => POSITION_LABELS[r]).join(tl('・'));
-    const name = big ? tl('大技') : (scene && ATTACK_NAME_BY_SCENE[scene]) || a.name;
+    const name = big ? tl('大技') : attackName(this.script.theme?.kind, scene, atk) || a.name;
     const text = atk === 'treasure' ? tl('宝箱を落とした！ 正解した人がもらえる')
         : this.script.mode === 'royale' ? tl(`{0}！ 正しく動ければかわせる`, name) : tl(`{0}！ {1}を狙っている`, name, Object.keys(a.rows).length === 3 ? tl('全員') : rows);
     const k = clamp01((phase - 0.26) / 0.03) * clamp01((0.5 - phase) / 0.03);

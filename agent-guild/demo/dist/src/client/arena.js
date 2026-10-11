@@ -16,7 +16,8 @@ import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
 import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
-import { bandWave, cues, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
+import { bandWave, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
+import { sceneHead } from './bossmoves.js';
 import { applyLighting, foreground, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
@@ -279,6 +280,7 @@ export class ArenaRenderer {
     stopCache = new Map();
     hitStop = hitStop; // arena-timing.ts
     lagOf = lagOf; // arena-timing.ts
+    evadeOf = evadeOf; // arena-timing.ts
     // 効果音のきっかけ（ウェーブごとに1度だけ作る）。自分・注目キャラ・ボス・会心だけ鳴らす
     cueCache = new Map();
     cues = cues; // arena-timing.ts
@@ -347,7 +349,8 @@ export class ArenaRenderer {
                 this.lights.push({ x: v.x, y: v.y - 14, r: 46, a: 0.85, col: '#ffd166' });
         }
         // --- 隊列の帯と、狙われた列の警告 ---
-        const tele = atk === 'treasure' || chain ? 0 : clamp01((phase - 0.26) / 0.06) * (phase < IMPACT + 0.04 ? 1 : 0);
+        const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
+        const tele = atk === 'treasure' || chain || dazed ? 0 : clamp01((phase - 0.26) / 0.06) * (phase < IMPACT + 0.04 ? 1 : 0);
         for (const r of ['front', 'mid', 'back']) {
             const xs = s.fighters.filter((fi) => fi.row === r && !fi.off).map((fi) => fi.slot.x);
             if (!xs.length)
@@ -383,7 +386,7 @@ export class ArenaRenderer {
             foot: this.bossFoot, body: this.bossBody, W: AW, H: AH, seed: `${s.seed}:${w}`, theme: s.theme,
             fighters: vis.map((v) => {
                 const st = strikeOf.get(v.f), at = attackOf.get(v.f);
-                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
+                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
             }),
             ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,
@@ -419,8 +422,8 @@ export class ArenaRenderer {
             }
             ctx.restore();
         }
-        if (!chain && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
-            this.attackFxBack(ctx, atk, phase, vis, targeted);
+        if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
+            this.attackFxBack(ctx, atk, phase, vis, targeted, scene);
         // --- 注目シーンの暗転（注目キャラとボスのあいだだけ明るく） ---
         if (spot && !ult) {
             const g = bump(phase, spot.at.t - 0.14, spot.at.t + 0.06);
@@ -464,7 +467,7 @@ export class ArenaRenderer {
         // 決め手: あなたが正しく動けたときだけ、効いた道具（または巻物・結界）を頭上に一瞬掲げ、武器へ吸いこませてから動く
         if (!chain && outro === 0)
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
-        if (!chain && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
+        if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
             this.attackFxFront(ctx, atk, phase, vis, targeted, evaded, items);
         if (sa)
             sceneFront(sa);
@@ -509,7 +512,7 @@ export class ArenaRenderer {
             else if (e.type === 'hit' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
             else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f))
-                this.floatText(ctx, EVADE_LABEL[this.evades[e.f]], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
+                this.floatText(ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
             else if (e.type === 'storm' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'storm');
             else if (e.type === 'attack' && ult?.f !== e.f) {
@@ -577,7 +580,7 @@ export class ArenaRenderer {
         const gagNow = [...this.mine].some((f) => this.gagOf(f)?.w === w) && phase > GAG[0] - 0.02 && phase < GAG[1] + 0.02;
         // 連携詠唱の見出しは、並び終えるまでの短いあいだだけ
         if (sa && cm && !gagNow)
-            sceneBanner(ctx, scene, this.caseTitle(cm), chain ? phase * 1.8 : phase, AW, ult ? tl('ボスが大技の構え！') : chain ? tl('最後の大技の構え！ みんなで連携詠唱！') : s.theme?.labels?.[scene], ult ? '#ff5a6e' : undefined);
+            sceneBanner(ctx, scene, this.caseTitle(cm), chain ? phase * 1.8 : phase, AW, ult ? tl('ボスが大技の構え！') : chain ? tl('最後の大技の構え！ みんなで連携詠唱！') : s.theme?.labels?.[scene] ?? sceneHead(s.theme?.kind, scene), ult ? '#ff5a6e' : undefined);
         // あなたの動き（青い帯）: ボスの赤い帯が消えたあと、動き出す前に、答えた技の名前を見せる
         if (!gagNow && !ult && !chain && !wv.sudden && scene !== 'spell')
             this.mineBand(ctx, w, phase, strikeOf, scene);

@@ -1004,9 +1004,10 @@ export function attackHitFx(kind, atk, o) {
             ctx.moveTo(mouth.x, mouth.y);
             ctx.lineTo(fx(k), fy(k));
             ctx.stroke();
-            webNet(ctx, stopX, ty, 18, win(k, 0.7, 1));
+            if (!blocked)
+                webNet(ctx, stopX, ty, 18, win(k, 0.7, 1));
             ctx.restore();
-        }
+        } // 正しく動けた人の前では、糸は斬られて巣にならない
         else if (kind === 'goblin') {
             const t = k, sx = stopX + 20, sy = -10;
             arrow(ctx, lerp(sx, stopX, t), lerp(sy, ty, t), 2.0, 14);

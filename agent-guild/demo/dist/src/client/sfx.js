@@ -332,6 +332,7 @@ export function play(name, strength = 1) {
 const TRIM = {
     slash: 1.8, whoosh: 2.5, shoot: 2.2, tool: 2, jump: 2, dive: 2, hit: 1.6, hurt: 1.8, guard: 1.6, barrier: 1.5, shatter: 1.5, charm: 1.3, skill: 1.8, poof: 1.8, chant: 1.5,
     rumble: 1.8, thunder: 1.5, charge: 1.6, roar: 1.8, breath: 1.8, awakenFlare: 1.8, summonHorn: 1.8, chantDone: 1.8, fanfare: 2, fail: 1.5, crit: 1.4, ko: 1.3, sealBind: 1.2, boom: 1.2, win: 2.4, shout: 1.2, spellImpact: 1.3,
+    bats: 1.8, hiss: 1.8, volley: 1.8, splash: 1.6, frost: 1.8, fireWall: 1.6,
 };
 function trimmed(a, c, name) {
     const k = TRIM[name] ?? 1;
@@ -544,6 +545,37 @@ function synth(a, t, name, strength) {
             noise(a, t, { dur: 0.7, f0: 500, f1: 8000, q: 1, vol: 0.2, attack: 0.3, wet: 0.3 });
             [[60, 0.65], [64, 0.65], [67, 0.65], [72, 0.65]].forEach(([m, d]) => voice(a, t + d, { f0: midi(m + 12), dur: 0.9, vol: 0.06, attack: 0.04, voices: 4, wet: 0.6 }));
             fm(a, t + 0.65, { f: midi(96), ratio: 3.5, index: 2, dur: 1.0, vol: 0.08, wet: 0.6 });
+            break;
+        case 'bats': // 蝙蝠の群れ: ぱたぱたと羽ばたく音が重なり、甲高い鳴き声
+            for (let i = 0; i < 14; i++)
+                noise(a, t + i * 0.045 + Math.random() * 0.02, { dur: 0.05, f0: 900 + Math.random() * 700, q: 2, vol: 0.18 * (1 - i / 18), type: 'bandpass' });
+            [0.05, 0.2, 0.32].forEach((d, i) => tone(a, t + d, { type: 'sine', f0: 4200 + i * 500, f1: 3000, dur: 0.06, vol: 0.04, wet: 0.3 }));
+            break;
+        case 'hiss': // 蜘蛛の威嚇: しゅーっという息と、かちかち鳴る牙
+            noise(a, t, { dur: 0.6, f0: 6000, f1: 4000, q: 1.2, vol: 0.3 * s, type: 'bandpass', attack: 0.08 });
+            [0, 0.08, 0.16].forEach((d) => noise(a, t + 0.1 + d, { dur: 0.02, f0: 3000, q: 4, vol: 0.25 }));
+            break;
+        case 'volley': // 矢の雨: 弓弦の音が何本も鳴り、風切りが降ってくる
+            for (let i = 0; i < 6; i++)
+                tone(a, t + i * 0.03, { type: 'triangle', f0: 180 + i * 12, f1: 120, dur: 0.08, vol: 0.08 });
+            for (let i = 0; i < 10; i++)
+                noise(a, t + 0.12 + i * 0.035, { dur: 0.12, f0: 5000, f1: 1500, q: 3, vol: 0.12 });
+            break;
+        case 'splash': // 水しぶき: ざばっと立ちのぼる水と、ぱらぱら落ちるしずく
+            noise(a, t, { dur: 0.5, f0: 1800, f1: 500, q: 0.7, vol: 0.4 * s, type: 'lowpass', attack: 0.02 });
+            noise(a, t, { dur: 0.3, f0: 4000, q: 0.8, vol: 0.15, type: 'highpass' });
+            for (let i = 0; i < 8; i++)
+                tone(a, t + 0.18 + i * 0.04 + Math.random() * 0.02, { type: 'sine', f0: 900 + Math.random() * 900, f1: 1600, dur: 0.04, vol: 0.04 });
+            break;
+        case 'frost': // 凍てつく息: 高く鳴る吹雪と、ぴきぴき凍る音
+            noise(a, t, { dur: 0.9, f0: 2500, f1: 6000, q: 1.5, vol: 0.32, type: 'bandpass', attack: 0.2, trem: [7, 0.4], wet: 0.4 });
+            for (let i = 0; i < 6; i++)
+                fm(a, t + 0.3 + i * 0.07, { f: 2500 + Math.random() * 1500, ratio: 2.7, index: 1.5, dur: 0.1, vol: 0.04, wet: 0.4 });
+            break;
+        case 'fireWall': // 炎の壁: ぼうっと燃え立つ音
+            noise(a, t, { dur: 0.6, f0: 300, f1: 1400, q: 0.6, vol: 0.38, type: 'bandpass', attack: 0.06, trem: [20, 0.5], wet: 0.2 });
+            tone(a, t, { type: 'sine', f0: 110, f1: 70, dur: 0.3, vol: 0.25 });
+            debris(a, t + 0.1, 6, 0.4);
             break;
         case 'summonHorn': // 召喚: 角笛が二度鳴り、渦がまく
             [[55, 0, 0.35], [62, 0.38, 0.7]].forEach(([m, d, l]) => { tone(a, t + d, { type: 'sawtooth', f0: midi(m), dur: l, vol: 0.14, attack: 0.04, vib: [5.5, 3], lp: [700, 1800], wet: 0.5 }); tone(a, t + d, { type: 'sawtooth', f0: midi(m) * 2, dur: l, vol: 0.05, attack: 0.04, detune: 8, lp: [1000, 2400], wet: 0.5 }); });

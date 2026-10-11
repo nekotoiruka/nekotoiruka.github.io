@@ -94,8 +94,8 @@ export function updateCamera(c) {
     this.cam.y = Math.max(vh, Math.min(AH - vh, lerp(this.cam.y, ty, kk)));
     // 画面揺れ: 攻撃が届いた瞬間・会心・KO・ボス撃破
     let shake = 0;
-    if (atk !== 'treasure' && phase >= IMPACT && phase < IMPACT + 0.05)
-        shake = atk === 'nova' || atk === 'meteor' ? 3 : 2;
+    if (atk !== 'treasure' && this.sceneOf(w) !== 'opening' && phase >= IMPACT && phase < IMPACT + 0.05)
+        shake = atk === 'nova' || atk === 'meteor' ? 3 : 2; // 隙あり（よろめいている）ときは、ボスの攻撃の揺れはない
     for (const e of wv.events) {
         const age = phase - e.t;
         if (age >= 0 && age < 0.05 && ((e.type === 'attack' && e.crit) || e.type === 'death' || e.type === 'bossDown'))

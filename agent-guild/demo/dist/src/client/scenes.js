@@ -6,6 +6,8 @@ import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
 import { bossFxFor } from './bossfx.js';
+import { counterFx } from './counterfx.js';
+import { puffs } from './fxkit.js';
 import { STYLE, spriteToWorld } from './bossstyle.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
 export const isUltScene = (s) => !!s && ULT_SCENES.includes(s);
@@ -101,7 +103,7 @@ function vignette(a, color, k) {
     ctx.restore();
 }
 // 正解したキャラたちの中心に、技の名前を一度だけ大きく出す
-function partyLabel(a, color, k, dy = -58) {
+export function partyLabel(a, color, k, dy = -58) {
     const ok = alive(a).filter((v) => v.ok);
     if (!ok.length || k <= 0)
         return;
@@ -249,29 +251,33 @@ export function sceneBack(a) {
 // ============ 手前（キャラより前） ============
 export function sceneFront(a) {
     switch (a.scene) {
-        // ボス側の演出は、ボスの種類ごと（bossfx.ts）。あるときは、竜前提の演出（炎・竜の尾・竜の影・爪痕）は描かない。冒険者側（鏡で受ける・跳んでかわす・影の分身など）は共通
+        // ボス側の演出は、ボスの種類ごと（bossfx.ts）。あるときは、竜前提の演出（炎・竜の尾・竜の影・爪痕）は描かない。冒険者側の対応技も、ボスごと（counterfx.ts）
         case 'breath': {
             const o = bossFxFor(a.theme?.kind, 'breath');
             breathFx(a, !o);
             o?.front?.(a);
+            counterFx(a);
             break;
         }
         case 'tail': {
             const o = bossFxFor(a.theme?.kind, 'tail');
             tailFx(a, !o);
             o?.front?.(a);
+            counterFx(a);
             break;
         }
         case 'dive': {
             const o = bossFxFor(a.theme?.kind, 'dive');
             diveFx(a, !o);
             o?.front?.(a);
+            counterFx(a);
             break;
         }
         case 'claw': {
             const o = bossFxFor(a.theme?.kind, 'claw');
             clawFx(a, !o);
             o?.front?.(a);
+            counterFx(a);
             break;
         }
         case 'opening':
@@ -390,35 +396,6 @@ function breathFx(a, boss = true) {
             }
             ctx.restore();
         }
-        // 正しく動けたキャラの前に青い鏡。炎が上下に割れる
-        for (const v of alive(a)) {
-            if (!v.ok)
-                continue;
-            const mk = win(p, 0.36, 0.42) * fade;
-            const mx = v.x - 14, my = v.y - 14;
-            ctx.save();
-            ctx.globalAlpha = mk;
-            ctx.fillStyle = 'rgba(40,120,220,0.5)';
-            ctx.beginPath();
-            ctx.ellipse(mx, my, 5, 17, 0, 0, TAU);
-            ctx.fill();
-            ctx.strokeStyle = '#bfe8ff';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.ellipse(mx, my, 5, 17, 0, 0, TAU);
-            ctx.stroke();
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(R(mx - 1), R(my - 12 + ((a.frame * 2) % 22)), 2, 3);
-            // 割れた炎が後ろへ流れる
-            for (let i = 0; i < 6; i++) {
-                const t = ((p * 6 + i / 6) % 1);
-                ctx.fillStyle = i % 2 ? '#8fd3ff' : '#ffffff';
-                ctx.fillRect(R(mx + 2 + t * 18), R(my - 18 - t * 10 + i), 2, 2);
-                ctx.fillRect(R(mx + 2 + t * 18), R(my + 18 + t * 8 - i), 2, 2);
-            }
-            ctx.restore();
-        }
-        partyLabel(a, '#bfe8ff', bump(p, 0.42, 0.58));
         flash(a, bump(p, 0.41, 0.45), '#ffb070', 0.35);
     }
 }
@@ -440,90 +417,173 @@ function tailFx(a, boss = true) {
         }
         ctx.restore();
     }
-    const k = win(p, 0.38, 0.5);
+    const k = win(p, 0.36, 0.6);
     if (boss && k > 0 && k < 1) {
-        ctx.save();
-        // 竜の尾が床すれすれを薙ぎはらう（太い帯＋白い風切り）
-        const tipX = lerp(a.foot.x + 40, a.W + 60, ease(k)), tipY = 186;
-        const c1 = { x: a.foot.x + 10, y: a.foot.y - 4 }, c2 = { x: lerp(a.foot.x + 40, tipX, 0.5), y: 210 };
-        ctx.globalAlpha = 1 - win(k, 0.8, 1);
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#3a1f6a';
-        ctx.lineWidth = 18;
-        ctx.beginPath();
-        ctx.moveTo(c1.x, c1.y);
-        ctx.quadraticCurveTo(c2.x, c2.y, tipX, tipY);
-        ctx.stroke();
-        ctx.strokeStyle = '#7a4fd8';
-        ctx.lineWidth = 12;
-        ctx.stroke();
-        ctx.strokeStyle = '#a98bff';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        // 尾の先のとげ
-        ctx.fillStyle = '#e8d5a8';
-        ctx.beginPath();
-        ctx.moveTo(tipX + 14, tipY - 2);
-        ctx.lineTo(tipX - 4, tipY - 10);
-        ctx.lineTo(tipX - 4, tipY + 8);
-        ctx.closePath();
-        ctx.fill();
-        // 風切りの白線
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        for (let i = 0; i < 6; i++) {
-            ctx.globalAlpha = (1 - k) * (0.9 - i * 0.12);
-            const x = tipX - 20 - i * 18;
-            ctx.beginPath();
-            ctx.moveTo(x, tipY - 22 - i * 4);
-            ctx.lineTo(x - 30, tipY - 18 - i * 4);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x, tipY + 14 + i * 2);
-            ctx.lineTo(x - 26, tipY + 12 + i * 2);
-            ctx.stroke();
-        }
-        // 舞い上がる砂ぼこり
-        const rng = new Rng(`${a.seed}:dust`);
-        for (let i = 0; i < 30; i++) {
-            const x = rng.range(a.foot.x + 30, a.W), y = rng.range(150, 210);
-            const t = clamp01((k - (x - a.foot.x) / a.W) * 3);
-            if (t <= 0 || t >= 1)
-                continue;
-            ctx.globalAlpha = 1 - t;
-            ctx.fillStyle = '#c8b48a';
-            const sz = 2 + t * 6;
-            ctx.fillRect(R(x - sz / 2), R(y - t * 20 - sz / 2), R(sz), R(sz));
-        }
-        ctx.restore();
+        dragonTail(a);
         flash(a, bump(p, 0.41, 0.45), '#ffffff', 0.25);
     }
-    // 正しく動けたキャラの跳躍の軌跡に、燕の形の白い残光
-    for (const v of alive(a)) {
-        if (!v.ok)
+}
+// 竜の尾: 背を向けた竜の尾が、高く振り上げた所から床へ叩きつけられ、床をこすりながら討伐隊を薙ぎはらう。
+// 節ごとの鱗（濃い紫の縁・明るい背・金の腹）と背の骨のとげ、先は骨の鋤。先ほど遅れてしなる（鞭のように）。残像・風の弧・砂ぼこり
+const TAIL_COL = { line: '#1e1548', dark: '#3a2a80', body: '#5f3ea8', hi: '#8d68d4', belly: '#bf9a52', bellyHi: '#e6c886', bone: '#d6c6a2', boneHi: '#f6eedc', boneLo: '#9e8a6c' };
+const TAIL_N = 16, TAIL_L = 14; // 先が後衛まで届く
+function tailPts(a, s, len) {
+    // 付け根: 背を向けた竜の、尾の付け根（絵の (30,63) を左右反転した所）
+    const root = { x: a.foot.x + 16 + 8 * bump(a.phase, 0.36, 0.5), y: a.foot.y - 20 };
+    const floor = a.foot.y + 6;
+    const pts = [[root.x, root.y, 10]];
+    let x = root.x, y = root.y;
+    for (let i = 0; i < TAIL_N; i++) {
+        const si = ease(clamp01(s * 1.4 - i * 0.03)); // 先ほど遅れる
+        const ang = lerp(-1.5, 0.36, si) + 0.08 * Math.sin(i * 0.7 + s * 6) * (1 - si); // 振り上げた所 → 床へ
+        x += Math.cos(ang) * TAIL_L * len;
+        y += Math.sin(ang) * TAIL_L * len;
+        if (y > floor)
+            y = floor + (y - floor) * 0.12; // 床をこする
+        pts.push([x, y, Math.max(2.2, 10 - i * 0.52)]);
+    }
+    return pts;
+}
+// 太さの変わる線（節ごとに、オフセット off・太さ k 倍で）
+function tailStroke(ctx, pts, col, k, add, off = 0) {
+    ctx.strokeStyle = col;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0, r0] = pts[i], [x1, y1, r1] = pts[i + 1];
+        const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = (y1 - y0) / l, ny = -(x1 - x0) / l; // 上向きの法線
+        const r = (r0 + r1) / 2;
+        ctx.lineWidth = Math.max(1, r * 2 * k + add);
+        ctx.beginPath();
+        ctx.moveTo(x0 + nx * off * r0, y0 + ny * off * r0);
+        ctx.lineTo(x1 + nx * off * r1, y1 + ny * off * r1);
+        ctx.stroke();
+    }
+}
+function dragonTail(a) {
+    const { ctx, phase: p } = a;
+    const s = win(p, 0.36, 0.47), back = win(p, 0.5, 0.6), len = 1 - 0.7 * ease(back);
+    const alpha = 1 - win(p, 0.54, 0.6);
+    if (alpha <= 0)
+        return;
+    const pts = tailPts(a, s, len);
+    ctx.save();
+    // 先の通り道（風を切る白い帯）
+    if (s > 0.02 && s < 1) {
+        ctx.lineCap = 'round';
+        let prev = null;
+        for (let j = 10; j >= 0; j--) {
+            const sj = s - j * 0.025;
+            if (sj <= 0)
+                continue;
+            const g = tailPts(a, sj, len), t = g[g.length - 1];
+            if (prev) {
+                ctx.globalAlpha = alpha * 0.5 * (1 - j / 11);
+                ctx.strokeStyle = '#f6eedc';
+                ctx.lineWidth = 1 + 5 * (1 - j / 11);
+                ctx.beginPath();
+                ctx.moveTo(prev[0], prev[1]);
+                ctx.lineTo(t[0], t[1]);
+                ctx.stroke();
+            }
+            prev = t;
+        }
+    }
+    // 残像（少し前の尾）
+    for (const [ds, al] of [[0.14, 0.16], [0.07, 0.28]]) {
+        if (s - ds <= 0 || s >= 1)
             continue;
-        const u = win(p, 0.4, 0.56);
-        if (u <= 0 || u >= 1)
-            continue;
+        ctx.globalAlpha = alpha * al;
+        tailStroke(ctx, tailPts(a, s - ds, len), TAIL_COL.hi, 1, 0);
+    }
+    ctx.globalAlpha = alpha;
+    // 背の骨のとげ（尾の上側。先へいくほど小さい）
+    for (let i = 1; i < pts.length - 1; i++) {
+        const [x0, y0, r] = pts[i], [x1, y1] = pts[i + 1];
+        const l = Math.hypot(x1 - x0, y1 - y0) || 1, ux = (x1 - x0) / l, uy = (y1 - y0) / l, nx = uy, ny = -ux;
+        const h = 3 + r * 0.8, bx = x0 + ux * l * 0.4, by = y0 + uy * l * 0.4;
+        ctx.fillStyle = TAIL_COL.line;
+        ctx.beginPath();
+        ctx.moveTo(bx + nx * (r - 2) - ux * 5, by + ny * (r - 2) - uy * 5);
+        ctx.lineTo(bx + nx * (r + h + 1) + ux * 3, by + ny * (r + h + 1) + uy * 3);
+        ctx.lineTo(bx + nx * (r - 2) + ux * 4, by + ny * (r - 2) + uy * 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = TAIL_COL.bone;
+        ctx.beginPath();
+        ctx.moveTo(bx + nx * (r - 2) - ux * 4, by + ny * (r - 2) - uy * 4);
+        ctx.lineTo(bx + nx * (r + h) + ux * 2.5, by + ny * (r + h) + uy * 2.5);
+        ctx.lineTo(bx + nx * (r - 2) + ux * 3, by + ny * (r - 2) + uy * 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = TAIL_COL.boneHi;
+        ctx.beginPath();
+        ctx.moveTo(bx + nx * (r - 1) - ux * 3, by + ny * (r - 1) - uy * 3);
+        ctx.lineTo(bx + nx * (r + h - 1) + ux * 2, by + ny * (r + h - 1) + uy * 2);
+        ctx.lineTo(bx + nx * (r - 1) - ux * 1, by + ny * (r - 1) - uy * 1);
+        ctx.closePath();
+        ctx.fill();
+    }
+    // 体: 縁 → 濃い紫 → 背の紫 → 照り → 金の腹
+    tailStroke(ctx, pts, TAIL_COL.line, 1, 2);
+    tailStroke(ctx, pts, TAIL_COL.dark, 1, 0);
+    tailStroke(ctx, pts, TAIL_COL.body, 0.62, 0, 0.3);
+    tailStroke(ctx, pts, TAIL_COL.hi, 0.18, 0, 0.62);
+    tailStroke(ctx, pts, TAIL_COL.belly, 0.3, 0, -0.55);
+    tailStroke(ctx, pts, TAIL_COL.bellyHi, 0.08, 0, -0.45);
+    // 節の境目（鱗の段）
+    ctx.strokeStyle = TAIL_COL.line;
+    ctx.lineWidth = 1;
+    for (let i = 1; i < pts.length - 1; i++) {
+        const [x0, y0, r] = pts[i], [x1, y1] = pts[i + 1];
+        const l = Math.hypot(x1 - x0, y1 - y0) || 1, ux = (x1 - x0) / l, uy = (y1 - y0) / l, nx = uy, ny = -ux;
+        ctx.beginPath();
+        ctx.moveTo(x0 + nx * r * 0.9, y0 + ny * r * 0.9);
+        ctx.quadraticCurveTo(x0 + ux * r * 0.5, y0 + uy * r * 0.5, x0 - nx * r * 0.2, y0 - ny * r * 0.2);
+        ctx.stroke();
+    }
+    // 先の骨の鋤（とがった葉の形）
+    {
+        const [x0, y0] = pts[pts.length - 2], [x1, y1] = pts[pts.length - 1];
+        const ang = Math.atan2(y1 - y0, x1 - x0);
         ctx.save();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 1 - u;
-        const bx = v.x - 4, by = v.y - 30 - Math.sin(u * Math.PI) * 14;
+        ctx.translate(x1, y1);
+        ctx.rotate(ang);
+        const leaf = (k, dx) => { ctx.beginPath(); ctx.moveTo(-2 + dx, 0); ctx.quadraticCurveTo(4, -9 * k, 16 * k + dx, 0); ctx.quadraticCurveTo(4, 9 * k, -2 + dx, 0); ctx.closePath(); ctx.fill(); };
+        ctx.fillStyle = TAIL_COL.line;
+        leaf(1.1, 0);
+        ctx.fillStyle = TAIL_COL.boneLo;
+        leaf(0.95, 0.5);
+        ctx.fillStyle = TAIL_COL.bone;
         ctx.beginPath();
-        ctx.moveTo(bx - 10, by - 6);
-        ctx.quadraticCurveTo(bx - 3, by - 1, bx, by + 2);
-        ctx.quadraticCurveTo(bx + 3, by - 1, bx + 10, by - 6);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(bx, by + 2);
-        ctx.lineTo(bx - 3, by + 8);
-        ctx.moveTo(bx, by + 2);
-        ctx.lineTo(bx + 3, by + 8);
-        ctx.stroke();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(4, -8, 15, 0);
+        ctx.lineTo(0, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = TAIL_COL.boneHi;
+        ctx.fillRect(3, -3, 7, 1);
         ctx.restore();
     }
-    partyLabel(a, '#ffffff', bump(p, 0.42, 0.6));
+    // 床をこする所の砂ぼこりと、先の風切りの白線
+    const floor = a.foot.y + 6;
+    const tip = pts[pts.length - 1];
+    if (s > 0.3 && back < 1) {
+        for (let i = 0; i < pts.length; i += 3)
+            if (pts[i][1] >= floor - 1)
+                puffs(ctx, pts[i][0], floor, { n: 3, t: p * 4 + i * 0.1, dx: -14, dy: -12, spread: 10, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.7 * alpha, seed: 300 + i });
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 5; i++) {
+            ctx.globalAlpha = alpha * (1 - s * 0.6) * (0.9 - i * 0.15);
+            const x = tip[0] - 16 - i * 16, y = tip[1] - 16 - i * 3;
+            ctx.beginPath();
+            ctx.moveTo(R(x), R(y));
+            ctx.lineTo(R(x - 24), R(y + 2));
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
 }
 // ---- 急降下: 空が暗くなる → 竜の影が落ちる → 衝撃波と岩 ----
 function diveFx(a, boss = true) {
@@ -587,20 +647,6 @@ function diveFx(a, boss = true) {
         ctx.restore();
         flash(a, bump(p, 0.42, 0.46), '#ffffff', 0.55);
     }
-    for (const v of alive(a)) {
-        if (!v.ok)
-            continue;
-        const u = bump(p, 0.4, 0.58);
-        if (u > 0) {
-            ctx.save();
-            ctx.globalAlpha = u * 0.7;
-            ctx.fillStyle = '#c8b48a';
-            for (let i = -2; i <= 2; i++)
-                ctx.fillRect(R(v.x + i * 5 - 1), R(v.y - 2 - Math.abs(i)), 3, 2);
-            ctx.restore();
-        }
-    }
-    partyLabel(a, '#c8d0ff', bump(p, 0.44, 0.6));
 }
 // ---- 爪: 画面を裂く三本の爪痕 → 横へすり抜けて間合いを外す ----
 function clawFx(a, boss = true) {
@@ -665,23 +711,6 @@ function clawFx(a, boss = true) {
         ctx.restore();
         flash(a, bump(p, 0.4, 0.44), '#ff3050', 0.3);
     }
-    for (const v of alive(a)) {
-        if (!v.ok)
-            continue;
-        const u = bump(p, 0.38, 0.56);
-        if (u <= 0)
-            continue;
-        ctx.save(); // 影の分身
-        for (let i = 1; i <= 3; i++) {
-            ctx.globalAlpha = u * 0.35 / i;
-            ctx.fillStyle = '#6a3a9a';
-            ctx.beginPath();
-            ctx.ellipse(v.x - i * 7, v.y - 10, 5, 10, 0, 0, TAU);
-            ctx.fill();
-        }
-        ctx.restore();
-    }
-    partyLabel(a, '#e2c2ff', bump(p, 0.44, 0.6));
 }
 // ---- 隙: よろめく竜 → 看破のモノクルで弱点の紋章 → 属性の大技 ----
 function openingFx(a) {
@@ -738,6 +767,29 @@ function openingFx(a) {
             text(ctx, elementLabel(a.element), cx, cy, R(10 + lk * 10), el.main, lk, el.dark);
         if (scanned && a.element)
             text(ctx, tl(`弱点：{0}`, elementLabel(a.element)), cx + 40, cy - 30, 9, el.light, lk, el.dark);
+    }
+    // 弱点を突きそこねた冒険者は、よろめくボスの硬い体にはじき返される（ボスは攻撃していない）
+    for (const v of alive(a)) {
+        if (!v.hit)
+            continue;
+        const u = win(p, 0.4, 0.5);
+        if (u <= 0 || u >= 1)
+            continue;
+        const x = v.x - 12, y = v.y - 16;
+        ctx.save();
+        ctx.globalAlpha = 1 - u;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 6; i++) {
+            const t = (i / 6) * TAU;
+            ctx.beginPath();
+            ctx.moveTo(R(x + Math.cos(t) * (3 + u * 4)), R(y + Math.sin(t) * (3 + u * 4)));
+            ctx.lineTo(R(x + Math.cos(t) * (6 + u * 9)), R(y + Math.sin(t) * (6 + u * 9)));
+            ctx.stroke();
+        }
+        ctx.restore();
+        if (v.mine)
+            text(ctx, tl('はじかれた！'), v.x, v.y - 44 - u * 6, 9, '#ffe27a', 1 - Math.max(0, u - 0.6) / 0.4, '#3a2a00');
     }
     // 反撃: 属性の大技が竜に降りそそぐ
     const firsts = alive(a).filter((v) => v.ok && v.atT !== undefined).map((v) => v.atT);

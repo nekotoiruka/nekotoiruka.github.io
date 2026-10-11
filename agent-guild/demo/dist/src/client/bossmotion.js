@@ -375,7 +375,8 @@ function tail({ kind, p, S, reach }) {
     if (kind === 'dragon') { // 振り向いて背を向け、尾を高く持ち上げて、ぶん！と振る → 向きなおる
         const turn = ease(win(p, 0.08, 0.22)) * (1 - ease(win(p, 0.5, 0.62)));
         m.face = Math.cos(Math.PI * turn);
-        m.pose = { eye: m.pose.eye, tail: -3 * wind * (1 - win(p, 0.36, 0.4)) + 6 * sw, lean: -2 * wind, wing: 1 };
+        // 尾は振り上げて高く巻き（溜め）、振るときは、まっすぐ伸ばす（伸びた尾は scenes.ts の dragonTail が描く）
+        m.pose = { eye: m.pose.eye, tail: 5 * wind * (1 - win(p, 0.34, 0.38)) - 3 * win(p, 0.36, 0.4) * (1 - win(p, 0.56, 0.62)), lean: -2 * wind, wing: 1 };
         m.sy = 1 + 0.03 * bump(p, 0.08, 0.22) - 0.04 * sw;
         m.dy = -2 * bump(p, 0.08, 0.22);
         m.rot = turn > 0.9 ? -0.05 * wind * (1 - win(p, 0.36, 0.4)) + 0.12 * sw : 0;
