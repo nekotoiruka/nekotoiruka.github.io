@@ -419,4 +419,20 @@ export function estimateSubmitCost(b, cases, pricing = { inPerM: 1, outPerM: 5 }
     };
     return { low: at(1 + 0.35 * Math.min(tools, 2) + (skills ? 0.2 : 0)), high: at(1 + Math.min(tools, 4) + (skills ? 1 : 0)) };
 }
+export function diffBuilds(prev, cur) {
+    const set = (xs) => new Set(xs);
+    const minus = (a, b) => { const s = set(b); return a.filter((x) => !s.has(x)); };
+    const pSk = new Map(prev.skills.map((x) => [x.name, x])), cSk = new Map(cur.skills.map((x) => [x.name, x]));
+    const pw = prev.guardrail?.words ?? [], cw = cur.guardrail?.words ?? [];
+    const d = {
+        same: false,
+        toolsAdded: minus(cur.tools, prev.tools), toolsRemoved: minus(prev.tools, cur.tools),
+        skillsAdded: [...cSk.keys()].filter((n) => !pSk.has(n)), skillsRemoved: [...pSk.keys()].filter((n) => !cSk.has(n)),
+        skillsChanged: [...cSk.keys()].filter((n) => { const a = pSk.get(n); const b = cSk.get(n); return a && (a.content !== b.content || a.description !== b.description); }),
+        guardAdded: minus(cw, pw).length, guardRemoved: minus(pw, cw).length,
+    };
+    if (prev.main.prompt !== cur.main.prompt)
+        d.promptChars = [prev.main.prompt.length, cur.main.prompt.length];
+    return d;
+}
 //# sourceMappingURL=build.js.map

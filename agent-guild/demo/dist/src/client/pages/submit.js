@@ -3,6 +3,7 @@ import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAM
 import { COST_RULES, WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { accountBar, entryCard, loginForm } from '../account.js';
 import { traceView } from '../trace.js';
+import { accuracyDeltas, diffParts, sparkline } from '../history.js';
 import { demoMode, getMe, getSeason, mySubmissions, runTrial, submitBuild } from '../api.js';
 import { charmSprite, drawHero, familiarSprite, gearOf, lookOf, portrait, PORTRAIT_H, PORTRAIT_W, weaponSprite } from '../hero.js';
 import { BODY_STYLE, STYLE_LABEL } from '../fx.js';
@@ -373,7 +374,9 @@ export async function renderSubmit(root) {
         }
         const { items } = await mySubmissions().catch(() => ({ items: [] }));
         const stateOf = (s) => s.status === 'queued' ? tl('順番待ち') : s.status === 'grading' ? tl(`戦闘中 {0}%`, Math.round(s.progress * 100)) : s.status === 'done' ? tl(`戦果 {0}%`, s.accuracy) : tl(`エラー: {0}`, s.error ?? '');
-        subsEl.replaceChildren(h('h3', {}, tl('あなたが送り出した冒険者')), items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s))), h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ送り出していません。')));
+        const spark = sparkline(items), deltas = accuracyDeltas(items);
+        const toolName = (id) => toolById[id]?.name ?? id;
+        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが送り出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('提出ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ送り出していません。'))));
         const busy = items.some((s) => s.status === 'queued' || s.status === 'grading');
         clearInterval(poll);
         if (busy)

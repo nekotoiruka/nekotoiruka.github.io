@@ -4,6 +4,7 @@
 import { Rng } from '../shared/rng.js';
 import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
+import { flashScale } from './motion.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
 export const isUltScene = (s) => !!s && ULT_SCENES.includes(s);
 export const SCENE_LABEL = {
@@ -65,7 +66,7 @@ function flash(a, k, color = '#ffffff', max = 0.7) {
         return;
     const { ctx } = a;
     ctx.save();
-    ctx.globalAlpha = max * k;
+    ctx.globalAlpha = max * k * flashScale();
     ctx.fillStyle = color;
     ctx.fillRect(-a.W, -a.H, a.W * 3, a.H * 3);
     ctx.restore();
@@ -4836,7 +4837,7 @@ function chainCutin(a, c) {
 function flashHud(ctx, W, H, alpha, col) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = alpha * flashScale();
     ctx.fillStyle = col;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
@@ -4996,7 +4997,7 @@ function shoutHud(a, c) {
         // 全体の後光
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = (0.35 + 0.25 * Math.sin(a.frame / 2)) * out * k;
+        ctx.globalAlpha = (0.35 + 0.25 * Math.sin(a.frame / 2)) * out * k * flashScale();
         const gg = ctx.createRadialGradient(W / 2, cy, 0, W / 2, cy, W * 0.45);
         gg.addColorStop(0, 'rgba(255,220,140,0.6)');
         gg.addColorStop(1, 'rgba(255,180,60,0)');

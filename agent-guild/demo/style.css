@@ -77,7 +77,9 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .badge-boss { background: var(--danger); }
 .canvas-wrap { position: relative; line-height: 0; }
 .arena-canvas { width: 100%; height: auto; display: block; background: #4b8b3b; }
-.controls { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; }
+.controls-opts { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.controls-opts .btn { white-space: nowrap; }
 .controls input[type=range] { flex: 1; accent-color: var(--accent); min-width: 60px; }
 .banner {
   position: absolute; left: 50%; top: 10px; transform: translate(-50%, -10px); opacity: 0; pointer-events: none;
@@ -868,3 +870,28 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 html[dir="rtl"] canvas, html[dir="rtl"] .editor, html[dir="rtl"] pre, html[dir="rtl"] code, html[dir="rtl"] .radar { direction: ltr; }
 html[dir="rtl"] .logo-tag { margin-left: 0; margin-right: -12px; }
 html[dir="rtl"] .editor, html[dir="rtl"] textarea { text-align: left; }
+
+/* --- スマホの幅（375px 前後）: 押しやすさと、表のはみ出し --- */
+@media (max-width: 600px) {
+  .btn, .tab, select.lang-sw { min-height: 36px; }
+  .btn-small { min-height: 34px; padding-top: 7px; padding-bottom: 7px; }
+  .btn-icon { min-width: 44px; }
+  input[type=checkbox], input[type=radio] { width: 20px; height: 20px; }
+  input:not([type=range]):not([type=checkbox]):not([type=radio]) { min-height: 34px; }
+  input[type=number] { min-width: 48px; }
+  /* 表は、中で横にスクロールする（列がつぶれて 1 文字ずつ縦に並ばないように、最低の幅をもたせる） */
+  .table-wrap > .table { min-width: 520px; }
+  .table-wrap > .table.compact { min-width: 380px; }
+  .who { min-width: 190px; }
+  .roster-item { min-height: 40px; }
+}
+.diag-real { margin-top: 2px; color: var(--ink); }
+.diag-real .chip { color: var(--accent); }
+.diag-glossary { margin: 8px 0; }
+.spark-box { margin: 6px 0 10px; }
+.sparkline { display: block; max-width: 100%; background: var(--panel-2); }
+.spark-line { stroke: var(--accent-2); stroke-width: 2; }
+.spark-dot { fill: var(--accent-2); }
+.spark-dot.last { fill: var(--accent); }
+.delta.up { color: var(--accent-2); } .delta.down { color: var(--danger); }
+.sent-diff { margin-top: 2px; }

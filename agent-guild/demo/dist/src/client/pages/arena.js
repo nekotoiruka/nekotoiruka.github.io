@@ -9,6 +9,7 @@ import { pickStage, restage, STAGE_ALL_MAX, STAGE_LABELS, STAGE_MAX } from '../.
 import { getBattle, getMe, getSeason, scriptFor } from '../api.js';
 import { avatarCanvas, fmtMs, h, loadoutChips, nodes, radar } from '../ui.js';
 import { setSfx, sfxEnabled } from '../sfx.js';
+import { loadRange, nextIncluded, saveRange, waveFilter } from '../playback.js';
 import { tl } from '../../shared/i18n.js';
 const KIND_LABEL = { normal: tl('通常'), trap: tl('ひっかけ'), bonus: tl('宝箱'), boss: tl('ボス') };
 const WAVE_SECONDS = 6; // 1回の仕掛けにかける秒数（何が起きたか追えるよう、ゆっくり）
@@ -124,20 +125,59 @@ function mountPlayer(root, script) {
     const roster = h('ol', { class: 'roster-list' });
     const card = h('div', { class: 'fighter-card' }, h('p', { class: 'muted' }, tl('キャラをクリックすると詳細が出ます')));
     const results = h('div', { class: 'results hidden' });
+    // 再生範囲（既定は全部。「見どころだけ」「自分が外した場面だけ」は、もう一度押すと全部に戻る）
+    let range = loadRange();
+    let inc = [];
+    let curWave = -1; // 直前に見ていた場面（飛ばす場面に入ったら次の場面へ進める）
+    const hlBtn = h('button', { class: 'btn btn-speed', 'data-range': 'highlights', title: tl('大技の場面・連携詠唱・最後の場面だけを再生します') }, tl('見どころだけ'));
+    const missBtn = h('button', { class: 'btn btn-speed', 'data-range': 'misses', title: tl('自分の冒険者が誤った場面だけを再生します（振り返り用）') }, tl('自分が外した場面だけ'));
+    const nextBtn = h('button', { class: 'btn btn-speed', 'data-act': 'next-scene', title: tl('いまの場面を飛ばして、次の場面へ進みます') }, tl('次の場面へ'));
     const slowBtn = h('button', { class: 'btn btn-speed on', title: tl('注目キャラの技をスローで見せる'), 'aria-pressed': 'true' }, tl('スロー演出'));
     // 効果音（初期は消音。押すと鳴る。設定はブラウザに覚える）
     const sndBtn = h('button', { class: 'btn btn-speed' + (sfxEnabled() ? ' on' : ''), title: tl('効果音'), 'aria-pressed': String(sfxEnabled()) }, sfxEnabled() ? tl('♪ 音あり') : tl('♪ 音なし'));
     sndBtn.onclick = () => { const on = !sfxEnabled(); setSfx(on); sndBtn.classList.toggle('on', on); sndBtn.setAttribute('aria-pressed', String(on)); sndBtn.textContent = on ? tl('♪ 音あり') : tl('♪ 音なし'); };
     slowBtn.onclick = () => { slowOn = !slowOn; slowBtn.classList.toggle('on', slowOn); slowBtn.setAttribute('aria-pressed', String(slowOn)); };
-    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, banner, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { time = 0; ended = false; results.classList.add('hidden'); playing = true; } }, '⏮'), playBtn, seek, ...speeds, slowBtn, sndBtn, h('button', { class: 'btn btn-icon', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { time = total; } }, '⏭'))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
+    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, banner, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { jump(0); playing = true; } }, '⏮'), playBtn, seek, h('button', { class: 'btn btn-icon', 'data-act': 'to-results', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { time = total; } }, '⏭'), h('div', { class: 'controls-opts' }, ...speeds, slowBtn, sndBtn, hlBtn, missBtn, nextBtn))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
     playBtn.onclick = () => { playing = !playing; if (ended) {
         time = 0;
         ended = false;
         results.classList.add('hidden');
         playing = true;
     } };
-    seek.oninput = () => { time = Number(seek.value); ended = false; results.classList.add('hidden'); };
+    seek.oninput = () => { time = Number(seek.value); ended = false; results.classList.add('hidden'); curWave = Math.floor(time); }; // 自分で選んだ場面は飛ばさない
     speeds.forEach((b) => (b.onclick = () => { speed = Number(b.dataset.speed); speeds.forEach((x) => x.classList.toggle('on', x === b)); }));
+    const jump = (t) => { time = t; ended = false; results.classList.add('hidden'); curWave = -1; };
+    const applyRange = () => {
+        const mine = script.fighters.map((f, i) => (mineIds.has(f.id) ? i : -1)).filter((i) => i >= 0);
+        const missed = waveFilter(script, 'misses', mine);
+        const canMiss = missed.some(Boolean);
+        missBtn.disabled = !canMiss;
+        missBtn.title = canMiss ? tl('自分の冒険者が誤った場面だけを再生します（振り返り用）') : tl('自分の冒険者が誤った場面がありません（または自分の冒険者が出ていません）');
+        if (range === 'misses' && !canMiss)
+            range = 'all';
+        inc = waveFilter(script, range, mine);
+        for (const b of [hlBtn, missBtn]) {
+            const on = b.dataset.range === range;
+            b.classList.toggle('on', on);
+            b.setAttribute('aria-pressed', String(on));
+        }
+        if (time < waves && !inc[Math.floor(time)])
+            jump(nextIncluded(inc, Math.floor(time)) ?? waves);
+    };
+    const setRange = (r) => { range = range === r ? 'all' : r; saveRange(range); applyRange(); };
+    hlBtn.onclick = () => setRange('highlights');
+    missBtn.onclick = () => setRange('misses');
+    nextBtn.onclick = () => {
+        const cur = Math.floor(time);
+        if (cur >= waves) {
+            jump(total);
+            ended = false;
+            return;
+        } // 余韻から結果へ
+        jump(nextIncluded(inc, cur + 1) ?? waves);
+        playing = true;
+    };
+    applyRange();
     const toggleMine = (f) => {
         const id = script.fighters[f].id;
         const pinned = new Set(loadPinned());
@@ -151,6 +191,7 @@ function mountPlayer(root, script) {
         }
         savePinned([...pinned]);
         syncMine();
+        applyRange();
         renderCard(card, script, f, mineIds.has(id), () => toggleMine(f));
     };
     const select = (f) => {
@@ -186,6 +227,14 @@ function mountPlayer(root, script) {
         last = now;
         if (playing && !ended) {
             time += (dt / WAVE_SECONDS) * speed * (slowOn ? r.slowFactor(time) : 1);
+            const wi = Math.floor(time);
+            if (wi !== curWave) {
+                curWave = wi;
+                if (wi < waves && !inc[wi]) {
+                    time = nextIncluded(inc, wi) ?? waves;
+                    curWave = Math.floor(time);
+                }
+            }
             if (time >= total) {
                 time = total;
                 ended = true;
