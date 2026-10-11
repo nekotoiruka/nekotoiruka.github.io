@@ -1,14 +1,27 @@
-// 演出ギャラリー（運営・開発用）: 大技の演出を「場面 × 武器」で選んで再生し、連携詠唱（7人で成功・あなたが最後の節）も見る。
+// 演出ギャラリー（運営・開発用）: 大技の演出を「場面 × 武器」で選んで再生し、ボスの攻撃の準備・攻撃のモーションを「ボス × 場面」で見比べ、
+// 連携詠唱（7人で成功・あなたが最後の節）も見る。
 // scripts/build-gallery.mjs が 1ファイルの HTML にまとめる。討伐データは window.__DEMO__（紹介ページと同じ吸血鬼伯爵の見本）。
 import { ArenaRenderer, CHAIN_TEMPOS } from './arena.js';
 import { getDemoBattle, scriptFor } from './api.js';
 import { ULT_SCENES, ultName } from './scenes.js';
 import { setSfx } from './sfx.js';
 import { WEAPON_KINDS, WEAPON_LABELS } from '../shared/catalog.js';
+import { reducedMotion } from './motion.js';
 import { h } from './ui.js';
 import { tl } from '../shared/i18n.js';
 const SCENE_JA = { ougi: tl('奥義（跳躍）'), rush: tl('乱舞'), summon: tl('召喚'), parry: tl('返し技'), seal: tl('封印'), awaken: tl('覚醒') };
 const SECONDS_PER_WAVE = 3.4;
+// ボスのモーション: ボスの種類（と、そのボスのブレスの種類）と、見せる場面（bossmotion.ts の moveFor で動きが決まる）
+const BOSSES = [
+    { kind: 'dragon', name: '竜', breath: 'fire' }, { kind: 'spider', name: '大蜘蛛', breath: 'web' }, { kind: 'goblin', name: 'ゴブリンの群れ', breath: 'arrows' },
+    { kind: 'kraken', name: 'クラーケン', breath: 'water' }, { kind: 'golem', name: '石の巨人', breath: 'rocks' }, { kind: 'vampire', name: '吸血鬼伯爵', breath: 'mist' },
+    { kind: 'giant', name: '氷の巨人', breath: 'ice' },
+];
+const MOTION_SCENES = [
+    { scene: 'breath', name: 'ブレス（息を吸って吐く）' }, { scene: 'claw', name: '爪・突進' }, { scene: 'tail', name: '尾（背を向けて振る）' },
+    { scene: 'dive', name: '急降下（跳ぶ・登る・踏みつけ）' }, { scene: 'opening', name: 'ふらつき（隙）' }, { scene: 'fog', name: '霧の中' },
+    { scene: 'spell', name: '詠唱' }, { scene: 'illusion', name: '幻術の声' },
+];
 async function main() {
     const root = document.getElementById('app');
     const data = await getDemoBattle();
@@ -64,6 +77,49 @@ async function main() {
         r.looks[f].weapon = weapon;
         r.draw(ultW + t);
     };
+    // ---- ボスのモーション: ボス × 場面。見本の討伐のふつうの場面の上で、ボスの種類と場面を差し替えて再生する ----
+    const normW = Math.max(0, full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.kind === 'normal'));
+    let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false;
+    const mWrap = h('div', { class: 'canvas-wrap' });
+    const mTitle = h('h2', { class: 'g-title' });
+    const mKindRow = h('div', { class: 'g-row' });
+    const mSceneRow = h('div', { class: 'g-row' });
+    let mr;
+    const makeMotion = () => {
+        const b = BOSSES.find((x) => x.kind === mKind);
+        const theme = { hue: 0, kind: mKind, breath: b.breath };
+        const sc = { ...full, theme, boss: { ...full.boss, name: b.name } };
+        const cv = h('canvas', { class: 'arena-canvas pixel' });
+        mr = new ArenaRenderer(cv, sc);
+        mr.muted = true;
+        mr.mine = new Set([best]);
+        const self = mr;
+        self.sceneOf = () => mScene;
+        self.caseTitle = () => MOTION_SCENES.find((x) => x.scene === mScene).name;
+        mWrap.replaceChildren(cv);
+        mt = 0;
+        mTitle.textContent = `${b.name}：${MOTION_SCENES.find((x) => x.scene === mScene).name}`;
+        for (const x of mKindRow.querySelectorAll('button'))
+            x.classList.toggle('on', x.dataset.k === mKind);
+        for (const x of mSceneRow.querySelectorAll('button'))
+            x.classList.toggle('on', x.dataset.k === mScene);
+    };
+    for (const b of BOSSES)
+        mKindRow.append(h('button', { class: 'btn g-chip', 'data-k': b.kind, onclick: () => { mKind = b.kind; makeMotion(); } }, b.name));
+    for (const m of MOTION_SCENES)
+        mSceneRow.append(h('button', { class: 'btn g-chip', 'data-k': m.scene, onclick: () => { mScene = m.scene; makeMotion(); } }, m.name));
+    const mAutoBtn = h('button', { class: 'btn', onclick: () => { mAuto = !mAuto; mAutoBtn.textContent = mAuto ? '順番に見る：オン' : '順番に見る：オフ'; } }, '順番に見る：オフ');
+    const mNext = () => {
+        const si = MOTION_SCENES.findIndex((x) => x.scene === mScene);
+        if (si < MOTION_SCENES.length - 1)
+            mScene = MOTION_SCENES[si + 1].scene;
+        else {
+            mScene = MOTION_SCENES[0].scene;
+            mKind = BOSSES[(BOSSES.findIndex((x) => x.kind === mKind) + 1) % BOSSES.length].kind;
+        }
+        makeMotion();
+    };
+    makeMotion();
     // ---- 連携詠唱: 討伐隊の全員が大呪を知っている見本。あなたが最後の第7節（成功）／あなたが第7節で詰まる（失敗） ----
     const chainW0 = full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.scene === 'chain');
     const makeChain = (fail) => {
@@ -119,6 +175,19 @@ async function main() {
             r.frame++;
         }
         draw();
+        if (playing) {
+            mt += dt / SECONDS_PER_WAVE;
+            if (mt >= 0.7) {
+                if (mAuto)
+                    mNext();
+                else {
+                    mt = 0;
+                    mr.frame = 0;
+                }
+            }
+            mr.frame++;
+        }
+        mr.draw(normW + mt);
         for (const c of chains) {
             c.t += (dt / SECONDS_PER_WAVE) * c.r.slowFactor(c.w + c.t);
             if (c.t >= 0.99) {
@@ -130,7 +199,7 @@ async function main() {
         }
         requestAnimationFrame(loop);
     };
-    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
+    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
     sync();
     requestAnimationFrame(loop);
 }

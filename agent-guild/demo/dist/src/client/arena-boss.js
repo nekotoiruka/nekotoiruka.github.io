@@ -1,3 +1,5 @@
+import { attackHitFx, tailBandColors } from './bossfx.js';
+import { STYLE, spriteToWorld } from './bossstyle.js';
 import { IMPACT, clamp01, lerp, win01 } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from './boss.js';
@@ -31,7 +33,7 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
     }
     // 攻撃の準備と攻撃のモーション（場面とボスの種類ごと。予兆に合わせて動く）。連携詠唱・撃破・逃走のときは使わない
     const kind = (s.theme?.kind ?? 'dragon');
-    const mo = !chain && down < 0 && !fleeing && atk !== 'treasure' ? bossMotion(kind, scene, atk, phase) : null;
+    const mo = !chain && down < 0 && !fleeing && atk !== 'treasure' ? bossMotion(kind, scene, atk, phase, { reach: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)) + 28 - s.boss.x }) : null;
     if (mo?.move) {
         Object.assign(p, mo.pose);
         dx += mo.dx;
@@ -94,10 +96,21 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
     ctx.globalAlpha = 1;
     mv?.fx?.(ctx, 'back', at, foot); // 土ぼこり・足もとの霧など
     const body = bossCanvas(p, flash && !reducedMotion(), kind);
-    const drawBody = (offX, a) => {
+    // 足場（海面・霧の台座）は、体が跳ねても・傾いても動かさない。体は足場の線より上だけ描き、足場の帯は絵の下から切り出して同じ場所に描く
+    const gr = STYLE[kind].ground;
+    const moved = transformed || dy !== 0 || tr.y !== 0;
+    const drawBody = (offX, a, withGround = true) => {
         ctx.globalAlpha = a;
         if (s.theme?.filter || s.theme?.hue)
             ctx.filter = s.theme.filter ?? `hue-rotate(${s.theme.hue}deg)`; // ボスごとの色合い
+        const split = !!gr && moved && withGround;
+        const baseY = Math.round(s.boss.y + 2 - (BH - (gr?.y0 ?? BH)));
+        if (split) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(s.boss.x - 400, -2000, 800, 2000 + baseY);
+            ctx.clip();
+        }
         if (!transformed)
             ctx.drawImage(body, Math.round(s.boss.x - BW / 2 + dx + tr.x + offX), Math.round(s.boss.y - BH + 2 + dy + tr.y));
         else {
@@ -108,10 +121,14 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
             ctx.drawImage(body, -BW / 2, -(BH - 2));
             ctx.restore();
         }
+        if (split) {
+            ctx.restore();
+            ctx.drawImage(body, 0, gr.y0, BW, BH - gr.y0, Math.round(s.boss.x - BW / 2 + (gr.followX ? dx + offX : 0)), baseY, BW, BH - gr.y0);
+        }
         ctx.filter = 'none';
     };
     for (const g of mv?.ghosts ?? [])
-        drawBody(g.dx, alpha * (mv?.alpha ?? 1) * g.alpha); // 残像
+        drawBody(g.dx, alpha * (mv?.alpha ?? 1) * g.alpha, false); // 残像
     drawBody(0, alpha * (mv?.alpha ?? 1));
     ctx.globalAlpha = 1;
     mv?.fx?.(ctx, 'front', at, foot); // 口の光・煙・星・声の輪など
@@ -125,8 +142,9 @@ export function attackFxBack(ctx, atk, phase, views, targeted) {
             const x = lerp(this.bossFoot.x + 30, 384, k);
             ctx.save();
             ctx.globalAlpha = 1 - k * 0.6;
+            const bc = tailBandColors((this.script.theme?.kind ?? 'dragon')) ?? ['#e8d5a8', '#b8a37a'];
             for (let y = 96; y < 212; y += 6) {
-                ctx.fillStyle = y % 12 ? '#e8d5a8' : '#b8a37a';
+                ctx.fillStyle = y % 12 ? bc[0] : bc[1];
                 ctx.fillRect(Math.round(x - 6 + Math.sin(y / 9) * 4), y, 8, 4);
             }
             ctx.fillStyle = 'rgba(232,213,168,0.4)';
@@ -166,13 +184,17 @@ export function attackFxBack(ctx, atk, phase, views, targeted) {
 }
 // 攻撃エフェクト（キャラの前）: 爪・炎・隕石・宝箱。防いだキャラの手前で止まる
 export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items) {
-    const mouth = { x: this.bossFoot.x + 46, y: this.bossFoot.y - 50 };
+    const kind = (this.script.theme?.kind ?? 'dragon');
+    const mouth = kind === 'dragon' ? { x: this.bossFoot.x + 46, y: this.bossFoot.y - 50 } : spriteToWorld(this.bossFoot, STYLE[kind].mouth);
     const rng = new Rng(`fx:${Math.floor(this.lastTime)}`);
     for (const v of views) {
         if (!targeted(v.f))
             continue;
         const blocked = evaded.has(v.f);
         const stopX = v.x - (blocked ? 12 : 0);
+        // 竜以外のボスは、ボスごとの飛び道具（蝙蝠・糸・矢・墨・岩・氷など）。竜は今までどおり
+        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
+            continue;
         if (atk === 'claw') {
             const k = clamp01((phase - 0.4) / 0.06);
             if (k > 0 && k < 1) {

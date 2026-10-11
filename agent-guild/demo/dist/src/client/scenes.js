@@ -5,6 +5,8 @@ import { Rng } from '../shared/rng.js';
 import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
+import { bossFxFor } from './bossfx.js';
+import { STYLE, spriteToWorld } from './bossstyle.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
 export const isUltScene = (s) => !!s && ULT_SCENES.includes(s);
 export const SCENE_LABEL = {
@@ -43,7 +45,21 @@ const bump = (p, a, b) => (p < a || p > b ? 0 : Math.sin(((p - a) / (b - a)) * M
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
 const R = Math.round;
-const mouthOf = (a) => ({ x: a.foot.x + 46, y: a.foot.y - 50 });
+// 口の位置。竜は今までどおり。ほかのボスは、絵ごとの口（ゴーレムは目）の位置
+const kindOf = (a) => (a.theme?.kind ?? 'dragon');
+const mouthOf = (a) => (kindOf(a) === 'dragon' || !STYLE[kindOf(a)] ? { x: a.foot.x + 46, y: a.foot.y - 50 } : spriteToWorld(a.foot, STYLE[kindOf(a)].mouth));
+// 呪文・大技のときの、ボスの魔力の色（竜は紅。ほかのボスは、そのボスらしい色）
+const SPELL_COL = {
+    dragon: { main: '#ff4fa0', light: '#ff8ab8', deep: 'rgba(160,0,70,0.6)', pale: '#ffd0e4', warn: '#ff6b8a', ring: '#ff2f6e' },
+    vampire: { main: '#e8204a', light: '#ff7a9a', deep: 'rgba(130,0,40,0.6)', pale: '#ffd0da', warn: '#ff6b8a', ring: '#e8204a' },
+    spider: { main: '#4fd070', light: '#9af0b0', deep: 'rgba(10,100,40,0.6)', pale: '#d8ffe0', warn: '#9af0b0', ring: '#4fd070' },
+    goblin: { main: '#ffb030', light: '#ffd166', deep: 'rgba(150,90,0,0.6)', pale: '#fff0c0', warn: '#ffd166', ring: '#ffb030' },
+    kraken: { main: '#3f9fe8', light: '#8fd0ff', deep: 'rgba(10,60,150,0.6)', pale: '#d8f0ff', warn: '#8fd0ff', ring: '#3f9fe8' },
+    golem: { main: '#30d0c0', light: '#7af0e0', deep: 'rgba(0,100,90,0.6)', pale: '#d0fff8', warn: '#7af0e0', ring: '#30d0c0' },
+    giant: { main: '#8fd3ff', light: '#c8ecff', deep: 'rgba(40,100,170,0.6)', pale: '#f0faff', warn: '#c8ecff', ring: '#8fd3ff' },
+};
+const spellCol = (a) => SPELL_COL[kindOf(a)] ?? SPELL_COL.dragon;
+const handOf = (a) => (kindOf(a) === 'dragon' || !STYLE[kindOf(a)] ? { x: a.foot.x + 30, y: a.foot.y - 46 } : spriteToWorld(a.foot, STYLE[kindOf(a)].hand));
 const alive = (a) => a.fighters.filter((v) => v.alive);
 function text(ctx, s, x, y, size, color, alpha = 1, outline = '#1a1c2c') {
     if (alpha <= 0)
@@ -85,13 +101,13 @@ function vignette(a, color, k) {
     ctx.restore();
 }
 // 正解したキャラたちの中心に、技の名前を一度だけ大きく出す
-function partyLabel(a, s0, color, k, dy = -58) {
+function partyLabel(a, color, k, dy = -58) {
     const ok = alive(a).filter((v) => v.ok);
     if (!ok.length || k <= 0)
         return;
-    // 技の名前: 自分のキャラが正しく動けたら、その答え。竜以外のボスで分からなければ「かわした」
+    // 技の名前: 自分のキャラが正しく動けたら、その答え。それ以外は「かわした」（正解の名前はネタバレになるので出さない）
     const own = ok.find((v) => v.mine);
-    const s = own ? own.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : (a.theme?.breath ?? 'fire') === 'fire' ? s0 : tl('かわした');
+    const s = own ? own.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : tl('かわした');
     const x = ok.reduce((t, v) => t + v.x, 0) / ok.length, y = Math.min(...ok.map((v) => v.y)) + dy;
     text(a.ctx, tl(`{0}！`, s), x, Math.max(24, y), R(11 + 5 * bump(k, 0, 0.35)), color, Math.min(1, k * 4));
 }
@@ -107,6 +123,11 @@ export function sceneBack(a) {
             chainBack(a, a.chain);
         return;
     }
+    const ov = a.scene === 'breath' || a.scene === 'tail' || a.scene === 'dive' || a.scene === 'claw' ? bossFxFor(a.theme?.kind, a.scene) : null;
+    if (ov?.back) {
+        ov.back(a);
+        return;
+    } // ボスごとの奥の演出（足もとの色・影など）
     switch (a.scene) {
         case 'breath': { // 足元が熱で赤く染まる
             const k = win(p, 0.1, 0.42) * (1 - win(p, 0.5, 0.62));
@@ -151,7 +172,7 @@ export function sceneBack(a) {
                 ctx.globalAlpha = k * (cancel ? 1 - broke : 1 - win(p, 0.5, 0.7));
                 ctx.translate(a.foot.x + 4, a.foot.y);
                 ctx.scale(1, 0.32);
-                ctx.strokeStyle = '#ff2f6e';
+                ctx.strokeStyle = spellCol(a).ring;
                 ctx.lineWidth = 3;
                 ctx.beginPath();
                 ctx.arc(0, 0, 70 * k, 0, TAU);
@@ -168,7 +189,7 @@ export function sceneBack(a) {
                     i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
                 }
                 ctx.stroke();
-                ctx.fillStyle = '#ff8ab8';
+                ctx.fillStyle = spellCol(a).light;
                 for (let i = 0; i < 16; i++) {
                     const t = (i / 16) * TAU;
                     ctx.fillRect(R(Math.cos(t) * 63 * k) - 2, R(Math.sin(t) * 63 * k) - 2, 4, 4);
@@ -228,18 +249,31 @@ export function sceneBack(a) {
 // ============ 手前（キャラより前） ============
 export function sceneFront(a) {
     switch (a.scene) {
-        case 'breath':
-            breathFx(a);
+        // ボス側の演出は、ボスの種類ごと（bossfx.ts）。あるときは、竜前提の演出（炎・竜の尾・竜の影・爪痕）は描かない。冒険者側（鏡で受ける・跳んでかわす・影の分身など）は共通
+        case 'breath': {
+            const o = bossFxFor(a.theme?.kind, 'breath');
+            breathFx(a, !o);
+            o?.front?.(a);
             break;
-        case 'tail':
-            tailFx(a);
+        }
+        case 'tail': {
+            const o = bossFxFor(a.theme?.kind, 'tail');
+            tailFx(a, !o);
+            o?.front?.(a);
             break;
-        case 'dive':
-            diveFx(a);
+        }
+        case 'dive': {
+            const o = bossFxFor(a.theme?.kind, 'dive');
+            diveFx(a, !o);
+            o?.front?.(a);
             break;
-        case 'claw':
-            clawFx(a);
+        }
+        case 'claw': {
+            const o = bossFxFor(a.theme?.kind, 'claw');
+            clawFx(a, !o);
+            o?.front?.(a);
             break;
+        }
         case 'opening':
             openingFx(a);
             break;
@@ -287,8 +321,8 @@ export function sceneFront(a) {
     if (hn)
         text(a.ctx, tl(`さっきの幻術の声が、まだ頭に響いている…（{0}人）`, hn), a.W * 0.6, 204, 7, '#d0a0ff', bump(a.phase, 0.04, 0.34), '#2a0a4a');
 }
-// ---- ブレス: 喉に集まる炎 → 画面を焼く炎の奔流 → 水鏡で受け流す ----
-function breathFx(a) {
+// ---- ブレス: 喉に集まる炎 → 画面を焼く炎の奔流 → 鏡で受け流す ----
+function breathFx(a, boss = true) {
     const { ctx, phase: p } = a;
     const m = mouthOf(a);
     const rng = new Rng(`${a.seed}:breath`);
@@ -298,7 +332,7 @@ function breathFx(a) {
     const pal = PAL[a.theme?.breath ?? 'fire'];
     // 予兆: 火の粉が口に吸い込まれる
     const gather = win(p, 0.06, 0.4);
-    if (gather > 0 && p < 0.44) {
+    if (boss && gather > 0 && p < 0.44) {
         for (let i = 0; i < 26; i++) {
             const ang = rng.range(0, TAU), d0 = rng.range(30, 80), sp = rng.range(0.6, 1.4);
             const t = (gather * sp + rng.next()) % 1;
@@ -324,37 +358,39 @@ function breathFx(a) {
     const k = win(p, 0.38, 0.44), fade = 1 - win(p, 0.52, 0.6);
     if (k > 0 && fade > 0) {
         const reach = lerp(m.x, a.W + 40, ease(k));
-        ctx.save();
-        ctx.globalAlpha = fade;
-        // ボスによって色を変える（炎・蜘蛛の糸・矢の雨）
-        const layers = [[pal[0], 1], [pal[1], 0.78], [pal[2], 0.55], [pal[3], 0.28]];
-        for (const [col, wk] of layers) {
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.moveTo(m.x, m.y - 3 * wk);
-            const steps = 14;
-            for (let i = 1; i <= steps; i++) {
-                const x = lerp(m.x, reach, i / steps);
-                const spread = (i / steps) * 70 * wk;
-                ctx.lineTo(x, m.y + 40 * (i / steps) - spread + Math.sin(a.frame / 1.5 + i) * 3);
+        if (boss) {
+            ctx.save();
+            ctx.globalAlpha = fade;
+            // ボスによって色を変える（炎・蜘蛛の糸・矢の雨）
+            const layers = [[pal[0], 1], [pal[1], 0.78], [pal[2], 0.55], [pal[3], 0.28]];
+            for (const [col, wk] of layers) {
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.moveTo(m.x, m.y - 3 * wk);
+                const steps = 14;
+                for (let i = 1; i <= steps; i++) {
+                    const x = lerp(m.x, reach, i / steps);
+                    const spread = (i / steps) * 70 * wk;
+                    ctx.lineTo(x, m.y + 40 * (i / steps) - spread + Math.sin(a.frame / 1.5 + i) * 3);
+                }
+                for (let i = steps; i >= 1; i--) {
+                    const x = lerp(m.x, reach, i / steps);
+                    const spread = (i / steps) * 70 * wk;
+                    ctx.lineTo(x, m.y + 40 * (i / steps) + spread + Math.cos(a.frame / 1.7 + i) * 3);
+                }
+                ctx.closePath();
+                ctx.fill();
             }
-            for (let i = steps; i >= 1; i--) {
-                const x = lerp(m.x, reach, i / steps);
-                const spread = (i / steps) * 70 * wk;
-                ctx.lineTo(x, m.y + 40 * (i / steps) + spread + Math.cos(a.frame / 1.7 + i) * 3);
+            // 火の粉
+            for (let i = 0; i < 40; i++) {
+                const t = (rng.next() + p * 4) % 1;
+                const x = lerp(m.x, reach, t), y = m.y + 40 * t + rng.range(-1, 1) * 70 * t;
+                ctx.fillStyle = i % 2 ? pal[2] : pal[1];
+                ctx.fillRect(R(x), R(y), 2, 2);
             }
-            ctx.closePath();
-            ctx.fill();
+            ctx.restore();
         }
-        // 火の粉
-        for (let i = 0; i < 40; i++) {
-            const t = (rng.next() + p * 4) % 1;
-            const x = lerp(m.x, reach, t), y = m.y + 40 * t + rng.range(-1, 1) * 70 * t;
-            ctx.fillStyle = i % 2 ? pal[2] : pal[1];
-            ctx.fillRect(R(x), R(y), 2, 2);
-        }
-        ctx.restore();
-        // 水鏡の構え: 正解したキャラの前に青い鏡。炎が上下に割れる
+        // 正しく動けたキャラの前に青い鏡。炎が上下に割れる
         for (const v of alive(a)) {
             if (!v.ok)
                 continue;
@@ -382,16 +418,16 @@ function breathFx(a) {
             }
             ctx.restore();
         }
-        partyLabel(a, tl('水鏡の構え'), '#bfe8ff', bump(p, 0.42, 0.58));
+        partyLabel(a, '#bfe8ff', bump(p, 0.42, 0.58));
         flash(a, bump(p, 0.41, 0.45), '#ffb070', 0.35);
     }
 }
-// ---- 尾: 画面を横切る巨大な弧 → 燕返しで跳ぶ ----
-function tailFx(a) {
+// ---- 尾: 画面を横切る巨大な弧 → 高く跳んでかわす ----
+function tailFx(a, boss = true) {
     const { ctx, phase: p } = a;
     // 予兆: 風切りの線が竜の背後から
     const pre = win(p, 0.08, 0.36) * (p < 0.4 ? 1 : 0);
-    if (pre > 0) {
+    if (boss && pre > 0) {
         ctx.save();
         ctx.strokeStyle = '#e8d5a8';
         ctx.lineWidth = 1;
@@ -405,7 +441,7 @@ function tailFx(a) {
         ctx.restore();
     }
     const k = win(p, 0.38, 0.5);
-    if (k > 0 && k < 1) {
+    if (boss && k > 0 && k < 1) {
         ctx.save();
         // 竜の尾が床すれすれを薙ぎはらう（太い帯＋白い風切り）
         const tipX = lerp(a.foot.x + 40, a.W + 60, ease(k)), tipY = 186;
@@ -462,7 +498,7 @@ function tailFx(a) {
         ctx.restore();
         flash(a, bump(p, 0.41, 0.45), '#ffffff', 0.25);
     }
-    // 燕返し: 正解したキャラの跳躍の軌跡に、燕の形の白い残光
+    // 正しく動けたキャラの跳躍の軌跡に、燕の形の白い残光
     for (const v of alive(a)) {
         if (!v.ok)
             continue;
@@ -487,13 +523,13 @@ function tailFx(a) {
         ctx.stroke();
         ctx.restore();
     }
-    partyLabel(a, tl('燕返し'), '#ffffff', bump(p, 0.42, 0.6));
+    partyLabel(a, '#ffffff', bump(p, 0.42, 0.6));
 }
 // ---- 急降下: 空が暗くなる → 竜の影が落ちる → 衝撃波と岩 ----
-function diveFx(a) {
+function diveFx(a, boss = true) {
     const { ctx, phase: p } = a;
     const dark = win(p, 0.14, 0.4) * (1 - win(p, 0.46, 0.6));
-    if (dark > 0) {
+    if (boss && dark > 0) {
         ctx.save();
         const g = ctx.createLinearGradient(0, 0, 0, a.H);
         g.addColorStop(0, 'rgba(5,4,12,0.85)');
@@ -507,7 +543,7 @@ function diveFx(a) {
     }
     // 竜の影が上空から突っ込む
     const k = win(p, 0.36, 0.43);
-    if (k > 0 && k < 1) {
+    if (boss && k > 0 && k < 1) {
         ctx.save();
         ctx.fillStyle = '#05040a';
         ctx.globalAlpha = 0.85;
@@ -527,7 +563,7 @@ function diveFx(a) {
     }
     // 着弾: 衝撃波・岩・白い閃光
     const b = win(p, 0.42, 0.56);
-    if (b > 0 && b < 1) {
+    if (boss && b > 0 && b < 1) {
         ctx.save();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 4 * (1 - b);
@@ -564,14 +600,14 @@ function diveFx(a) {
             ctx.restore();
         }
     }
-    partyLabel(a, tl('地這い'), '#c8d0ff', bump(p, 0.44, 0.6));
+    partyLabel(a, '#c8d0ff', bump(p, 0.44, 0.6));
 }
-// ---- 爪: 画面を裂く三本の爪痕 → 影踏みで間合いを外す ----
-function clawFx(a) {
+// ---- 爪: 画面を裂く三本の爪痕 → 横へすり抜けて間合いを外す ----
+function clawFx(a, boss = true) {
     const { ctx, phase: p } = a;
     const glint = bump(p, 0.12, 0.36);
-    if (glint > 0) { // 爪のきらめき
-        const x = a.foot.x + 30, y = a.foot.y - 46;
+    if (boss && glint > 0) { // 爪のきらめき
+        const { x, y } = handOf(a);
         ctx.save();
         ctx.globalAlpha = glint;
         ctx.fillStyle = '#ffffff';
@@ -581,7 +617,7 @@ function clawFx(a) {
         ctx.restore();
     }
     const k = win(p, 0.39, 0.46);
-    if (k > 0) {
+    if (boss && k > 0) {
         const fade = 1 - win(p, 0.46, 0.62);
         ctx.save();
         for (let i = 0; i < 3; i++) {
@@ -645,7 +681,7 @@ function clawFx(a) {
         }
         ctx.restore();
     }
-    partyLabel(a, tl('影踏み'), '#e2c2ff', bump(p, 0.44, 0.6));
+    partyLabel(a, '#e2c2ff', bump(p, 0.44, 0.6));
 }
 // ---- 隙: よろめく竜 → 看破のモノクルで弱点の紋章 → 属性の大技 ----
 function openingFx(a) {
@@ -929,22 +965,24 @@ function spellOrb(a) {
 }
 // 明かり（暗くする前に足す）: 魔法弾の光と、打ち消しの呪文を知る者たちのスポットライト
 function spellLights(a) {
+    const sc = spellCol(a);
     const orb = spellOrb(a);
     if (orb.on)
-        a.lights?.push({ x: orb.x, y: orb.y, r: 40 + orb.r * 2, a: 0.9, col: orb.rev > 0.5 ? '#8fd3ff' : '#ff4fa0' });
+        a.lights?.push({ x: orb.x, y: orb.y, r: 40 + orb.r * 2, a: 0.9, col: orb.rev > 0.5 ? '#8fd3ff' : sc.main });
     const sk = win(a.phase, 0.2, 0.26) * (1 - win(a.phase, 0.5, 0.56));
     if (sk > 0)
         for (const v of spellCasters(a))
             a.lights?.push({ x: v.x, y: v.y - 14, r: v.mine ? 44 : 36, a: sk, col: v.mine ? '#ffd166' : '#bfe8ff' });
 }
 function spellFx(a) {
+    const sc = spellCol(a);
     const { ctx, phase: p } = a;
     const T = SPELL_T;
     const o0 = spellOrbStart(a);
     const cancel = spellCasters(a);
     const orb = spellOrb(a);
     const rng = new Rng(`${a.seed}:rune`);
-    const pc = (rev) => (rev > 0.5 ? '#5fcde4' : '#ff4fa0');
+    const pc = (rev) => (rev > 0.5 ? '#5fcde4' : sc.main);
     // スポットライト: 打ち消しの呪文を知る者だけ、天から光が差す
     const sk = cancel.length ? win(p, 0.2, 0.26) * (1 - win(p, 0.5, 0.56)) : 0;
     if (sk > 0) {
@@ -988,7 +1026,7 @@ function spellFx(a) {
         for (let i = 0; i < 12; i++) {
             const t = (p * 2 + i / 12) % 1;
             const x = a.foot.x - 30 + rng.range(0, 120), y = a.foot.y - t * 120;
-            text(ctx, 'ᚱᚨᛞᛟᚷᛗ'[i % 6], x, y, 7, '#ff8ab8', (1 - t) * 0.9 * (1 - win(p, T.launch, T.launch + 0.04)), '#3a0a1e');
+            text(ctx, 'ᚱᚨᛞᛟᚷᛗ'[i % 6], x, y, 7, sc.light, (1 - t) * 0.9 * (1 - win(p, T.launch, T.launch + 0.04)), '#3a0a1e');
         }
     }
     // ボスの詠唱（呪文の名前が1文字ずつ浮かぶ）
@@ -999,14 +1037,14 @@ function spellFx(a) {
         const n = Math.max(1, Math.ceil(chantK * [...name0].length));
         const shown = [...name0].slice(0, n).join('');
         const al = Math.min(1, chantK * 4) * (1 - win(p, T.launch + 0.02, T.launch + 0.06));
-        text(ctx, chantLabels(a)[0], o0.x - 30, o0.y - 40, 8, '#ff8ab8', al, '#3a0a1e');
-        text(ctx, tl(`「{0}」`, shown), o0.x + 10, o0.y - 28, 12, a.frame % 8 < 4 ? '#ff4fa0' : '#ffd0e4', al, '#3a0a1e');
+        text(ctx, chantLabels(a)[0], o0.x - 30, o0.y - 40, 8, sc.light, al, '#3a0a1e');
+        text(ctx, tl(`「{0}」`, shown), o0.x + 10, o0.y - 28, 12, a.frame % 8 < 4 ? sc.main : sc.pale, al, '#3a0a1e');
     }
     // 放たれた！ 討伐隊へ迫る
     const party = spellPartyAt(a);
     const warn = bump(p, T.launch, T.caught + 0.03);
     if (warn > 0)
-        text(ctx, tl('来るぞ…！'), party.x, party.y - 46, R(11 + 3 * bump(p, T.launch, T.launch + 0.03)), a.frame % 6 < 3 ? '#ff6b8a' : '#ffd0e4', Math.min(1, warn * 2), '#3a0a1e');
+        text(ctx, tl('来るぞ…！'), party.x, party.y - 46, R(11 + 3 * bump(p, T.launch, T.launch + 0.03)), a.frame % 6 < 3 ? sc.warn : sc.pale, Math.min(1, warn * 2), '#3a0a1e');
     // 魔法弾（溜め → 飛ぶ → つかまる → 押し返されて青く）
     if (orb.on) {
         const r = orb.r + Math.sin(a.frame / 2) * 1.5;
@@ -1025,7 +1063,7 @@ function spellFx(a) {
             }
         }
         const g = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, r * 2);
-        const mid = orb.rev > 0.5 ? '#5fcde4' : '#ff4fa0', outer = orb.rev > 0.5 ? 'rgba(40,120,220,0.6)' : 'rgba(160,0,70,0.6)';
+        const mid = orb.rev > 0.5 ? '#5fcde4' : sc.main, outer = orb.rev > 0.5 ? 'rgba(40,120,220,0.6)' : sc.deep;
         g.addColorStop(0, '#ffffff');
         g.addColorStop(0.3, mid);
         g.addColorStop(0.7, outer);
@@ -1048,13 +1086,13 @@ function spellFx(a) {
         if (k > 0 && k < 1) {
             ctx.save();
             ctx.globalAlpha = 1 - k;
-            ctx.strokeStyle = '#ff4fa0';
+            ctx.strokeStyle = sc.main;
             ctx.lineWidth = 5;
             ctx.beginPath();
             ctx.ellipse(party.x, party.y + 20, k * 200, k * 70, 0, 0, TAU);
             ctx.stroke();
             ctx.restore();
-            flash(a, bump(p, IMPACT_SPELL, IMPACT_SPELL + 0.05), '#ff4fa0', 0.45);
+            flash(a, bump(p, IMPACT_SPELL, IMPACT_SPELL + 0.05), sc.main, 0.45);
             text(ctx, tl('呪文が炸裂した…'), a.W * 0.62, 70, 10, '#ffb0d0', bump(p, IMPACT_SPELL + 0.02, 0.6));
         }
         return;
@@ -1151,7 +1189,7 @@ function spellFx(a) {
         for (let i = 0; i < 14; i++) {
             const ang = sr.range(0, TAU), d = sr.range(4, 22);
             ctx.globalAlpha = bk;
-            ctx.fillStyle = i % 2 ? '#ff8ab8' : '#bfe8ff';
+            ctx.fillStyle = i % 2 ? sc.light : '#bfe8ff';
             ctx.fillRect(R(orb.x + Math.cos(ang) * d), R(orb.y + Math.sin(ang) * d), 2, 2);
         }
         ctx.restore();
@@ -1165,7 +1203,7 @@ function spellFx(a) {
         const hx = lerp(from.x, v.x, k), hy = lerp(from.y, v.y - 12, k) - Math.sin(k * Math.PI) * 10;
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = '#ff4fa0';
+        ctx.fillStyle = sc.main;
         ctx.beginPath();
         ctx.arc(hx, hy, 2.5, 0, TAU);
         ctx.fill();
@@ -4141,7 +4179,7 @@ function rushLightFx(a) {
         ctx.restore();
         flash(a, bump(p, 0.41, 0.45), '#ffffff', 0.25);
     }
-    partyLabel(a, tl('見切り'), '#ffe0c8', bump(p, 0.44, 0.6));
+    partyLabel(a, '#ffe0c8', bump(p, 0.44, 0.6));
 }
 export const verseAt = (c, i) => c.start + i * c.verse;
 // その節のうち、文字を打ち出す区間の割合・輪が描き足される瞬間・外す人が詰まる瞬間

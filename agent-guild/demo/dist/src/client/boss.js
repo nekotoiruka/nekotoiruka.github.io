@@ -162,4 +162,22 @@ export function bossCanvas(p, flash = false, kind = 'dragon') {
     cache.set(key, c);
     return c;
 }
+// ボス自身の黒いシルエット（急降下の影など）。待機のポーズを黒で塗りつぶしたもの
+const silCache = new Map();
+export function bossSilhouette(kind = 'dragon') {
+    let c = silCache.get(kind);
+    if (c)
+        return c;
+    const src = bossCanvas({ ...BOSS_IDLE, eye: 'open' }, false, kind);
+    c = document.createElement('canvas');
+    c.width = BW;
+    c.height = BH;
+    const x = c.getContext('2d');
+    x.drawImage(src, 0, 0);
+    x.globalCompositeOperation = 'source-in';
+    x.fillStyle = '#05040a';
+    x.fillRect(0, 0, BW, BH);
+    silCache.set(kind, c);
+    return c;
+}
 //# sourceMappingURL=boss.js.map

@@ -11,6 +11,7 @@ import { AGILE, EVADE_LABEL, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_S
 import { attackBanner, bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, rageOverlay, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
+import { bossSilhouette } from './boss.js';
 import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
 import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
@@ -386,6 +387,8 @@ export class ArenaRenderer {
             }),
             ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,
+            partyX: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)),
+            bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;
         if (sa)

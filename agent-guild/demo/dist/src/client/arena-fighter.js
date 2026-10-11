@@ -74,7 +74,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         if (u > 0 && u < 1) {
             const arc = Math.sin(u * Math.PI); // 0→1→0 のなめらかな山
             switch ((this.sceneOf(w) && SCENE_EVADE[this.sceneOf(w)]) || this.evades[v.f]) {
-                case 'jump': { // 燕返し: 高く跳んで宙返り
+                case 'jump': { // 高く跳んで宙返り
                     this.dust(ctx, v.x, v.y, u < 0.15 ? u / 0.15 : (u - 0.85) / 0.15);
                     oy += -Math.sin(u * Math.PI) * 34;
                     ox += Math.sin(u * Math.PI) * 4;
@@ -86,13 +86,13 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                     }
                     break;
                 }
-                case 'crawl': { // 地這い: 地面に伏せる
+                case 'crawl': { // 地面に伏せる
                     oy += arc * 6;
                     tilt = arc * 1.2;
                     set('guard', 1);
                     break;
                 }
-                case 'step': { // 影踏み: 横へすり抜け、残像を残す
+                case 'step': { // 横へすり抜け、残像を残す
                     ox += ease(arc) * 16;
                     set('dash', 0);
                     for (let i = 1; i <= 4; i++) {
