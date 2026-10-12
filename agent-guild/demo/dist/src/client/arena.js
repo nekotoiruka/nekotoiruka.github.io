@@ -1,4 +1,4 @@
-import { ATTACKS, CHAIN_T, waveTitleFor } from '../shared/simulate.js';
+import { attackRows, CHAIN_T, waveTitleFor } from '../shared/simulate.js';
 import { POSITION_LABELS } from '../shared/build.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { crownSprite, potionSprite, shieldIcon, tombSprite } from './sprites.js';
@@ -317,7 +317,7 @@ export class ArenaRenderer {
                 items.add(e.f);
         }
         const atk = wv.attack;
-        const rows = ATTACKS[atk].rows;
+        const rows = attackRows(atk, s.mode); // 討伐では全員が狙われる
         const prevAlive = w > 0 ? s.waves[w - 1].aliveAfter : s.fighters.map(() => true);
         const chain = this.chainOf(w); // 連携詠唱の場面（ボスのふつうの攻撃はない）
         const targeted = (f) => !chain && prevAlive[f] && rows[s.fighters[f].row] !== undefined;
@@ -348,25 +348,32 @@ export class ArenaRenderer {
             if (v?.alive && !s.fighters[f].off)
                 this.lights.push({ x: v.x, y: v.y - 14, r: 46, a: 0.85, col: '#ffd166' });
         }
-        // --- 隊列の帯と、狙われた列の警告 ---
+        // --- 隊列の帯と、狙われた列の警告（討伐には隊列がないので、討伐隊ぜんたいに一つの警告） ---
         const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
         const tele = atk === 'treasure' || chain || dazed ? 0 : clamp01((phase - 0.26) / 0.06) * (phase < IMPACT + 0.04 ? 1 : 0);
-        for (const r of ['front', 'mid', 'back']) {
-            const xs = s.fighters.filter((fi) => fi.row === r && !fi.off).map((fi) => fi.slot.x);
-            if (!xs.length)
-                continue;
-            const x = (Math.min(...xs) + Math.max(...xs)) / 2;
-            ctx.fillStyle = 'rgba(255,255,255,0.05)';
-            ctx.fillRect(Math.round(x - 28), 86, 56, 124);
-            const hot = tele > 0 && rows[r] !== undefined;
-            if (hot) {
-                ctx.fillStyle = `rgba(255,60,80,${(0.12 + 0.14 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
-                ctx.fillRect(Math.round(x - 30), 84, 60, 128);
+        if (s.mode === 'royale') {
+            const xs = s.fighters.filter((fi) => !fi.off).map((fi) => fi.slot.x);
+            if (tele > 0 && xs.length) {
+                ctx.fillStyle = `rgba(255,60,80,${(0.1 + 0.12 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
+                ctx.fillRect(Math.round(Math.min(...xs) - 30), 84, Math.round(Math.max(...xs) - Math.min(...xs) + 60), 128);
             }
-            const p = this.proj(x, 208);
-            if (s.mode !== 'royale')
-                this.ui.push(() => this.labelAt(POSITION_LABELS[r], p.x, p.y, hot ? '#ff8a9a' : '#9aa0c8'));
         }
+        else
+            for (const r of ['front', 'mid', 'back']) {
+                const xs = s.fighters.filter((fi) => fi.row === r && !fi.off).map((fi) => fi.slot.x);
+                if (!xs.length)
+                    continue;
+                const x = (Math.min(...xs) + Math.max(...xs)) / 2;
+                ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                ctx.fillRect(Math.round(x - 28), 86, 56, 124);
+                const hot = tele > 0 && rows[r] !== undefined;
+                if (hot) {
+                    ctx.fillStyle = `rgba(255,60,80,${(0.12 + 0.14 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
+                    ctx.fillRect(Math.round(x - 30), 84, 60, 128);
+                }
+                const p = this.proj(x, 208);
+                this.ui.push(() => this.labelAt(POSITION_LABELS[r], p.x, p.y, hot ? '#ff8a9a' : '#9aa0c8'));
+            }
         // --- 墓標 ---
         for (const v of vis)
             if (!v.alive && s.mode !== 'royale') { // 討伐では墓標を立てず、倒れたまま（あとで起き上がる）
@@ -386,7 +393,7 @@ export class ArenaRenderer {
             foot: this.bossFoot, body: this.bossBody, W: AW, H: AH, seed: `${s.seed}:${w}`, theme: s.theme,
             fighters: vis.map((v) => {
                 const st = strikeOf.get(v.f), at = attackOf.get(v.f);
-                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
+                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), evaded: evaded.has(v.f), lag: this.lagOf(w, v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
             }),
             ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,

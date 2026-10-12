@@ -1086,8 +1086,9 @@ export function attackHitFx(kind, atk, o) {
             ctx.stroke();
         }
         else if (kind === 'giant') {
-            iceSpear(ctx, lerp(hand.x, stopX, k), lerp(hand.y, ty, k), Math.atan2(ty - hand.y, stopX - hand.x), 24);
-        }
+            const ex = blocked ? x - 34 : stopX, ey = blocked ? y - 10 : ty;
+            iceSpear(ctx, lerp(hand.x, ex, k), lerp(hand.y, ey, k), Math.atan2(ey - hand.y, ex - hand.x), 24);
+        } // 正しく動けた人は、手前の空中で撃ち落とす（counterfx.ts の shootDown）
         ctx.restore();
         return true;
     }

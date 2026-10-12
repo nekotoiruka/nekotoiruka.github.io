@@ -5,7 +5,7 @@ import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
 import { drawHero, familiarHome, weaponSprite } from './hero.js';
 import { ultPose, verseAt } from './scenes.js';
-import { isBaseScene } from './bossmoves.js';
+import { counterFor, isBaseScene } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 import { reducedMotion } from './motion.js';
 // --- キャラ1体: 回答 → 構え → 回避 or 被弾 → 反撃 ---
@@ -71,6 +71,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         }
     }
     if (evaded && !uHero) {
+        const co = counterFor(this.script.theme?.kind, this.sceneOf(w)); // ボスごとの対応技（基本の4場面だけ）
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
         if (u > 0 && u < 1) {
             const arc = Math.sin(u * Math.PI); // 0→1→0 のなめらかな山
@@ -117,9 +118,11 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 case 'block': {
                     ox -= Math.sin(clamp01((u - 0.3) / 0.7) * Math.PI) * 3; // 受け止めて少し押される
                     set('guard', Math.min(1, u * 5));
-                    this.guardFx(ctx, v.x - 10, v.y - 12, arc);
-                    if (u > 0.25 && u < 0.6)
-                        this.hitSpark(ctx, v.x - 14, v.y - 12, (u - 0.25) / 0.35, false); // 盾で受けた火花
+                    if (co?.fx !== 'shieldWall') { // 頭上に盾をかかげて矢を受けるときは、前に向けた守りの光・火花は出さない（盾と刺さる矢は counterfx.ts）
+                        this.guardFx(ctx, v.x - 10, v.y - 12, arc);
+                        if (u > 0.25 && u < 0.6)
+                            this.hitSpark(ctx, v.x - 14, v.y - 12, (u - 0.25) / 0.35, false); // 盾で受けた火花
+                    }
                     this.dust(ctx, v.x + 2, v.y, (u - 0.3) / 0.5); // 押されて足元が滑る
                     break;
                 }
@@ -140,7 +143,12 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 case 'shoot': {
                     set('attack', u * 0.9);
                     ox -= Math.sin(clamp01((u - 0.35) / 0.4) * Math.PI) * 2.5; // 発射の反動
-                    if (u > 0.3 && u < 0.75)
+                    // 撃ち落とし（氷の槍）: 飛んでくる槍に当たる所・時刻（counterfx.ts の shootDown）に合わせて、早めに撃つ
+                    if (co?.fx === 'shootDown') {
+                        if (u > 0.15 && u < 0.5)
+                            this.projectile(ctx, this.looks[v.f].weapon, v, { x: v.x - 34, y: v.y - 10 }, clamp01((u - 0.15) / 0.35), false);
+                    }
+                    else if (u > 0.3 && u < 0.75)
                         this.projectile(ctx, this.looks[v.f].weapon, v, { x: v.x - 30, y: v.y - 4 }, clamp01((u - 0.3) / 0.35), false);
                     break;
                 }

@@ -17,6 +17,17 @@ const BOSSES = [
     { kind: 'kraken', name: 'クラーケン', breath: 'water' }, { kind: 'golem', name: '石の巨人', breath: 'rocks' }, { kind: 'vampire', name: '吸血鬼伯爵', breath: 'mist' },
     { kind: 'giant', name: '氷の巨人', breath: 'ice' },
 ];
+// 正しく動けた冒険者の対応技（bossmoves.ts の COUNTERS と同じ組み合わせ）。ギャラリーで動きと見比べるための説明で、本番の画面には出さない
+// （本番の技名は、自分の冒険者がその場面で答えた言葉。ほかの人は「かわした」）
+const COUNTER_NAMES = {
+    dragon: { breath: '鏡で炎を受ける', claw: '影を残してすり抜ける', dive: '伏せる', tail: '跳んでかわす' },
+    vampire: { breath: '聖なる光で蝙蝠を散らす', claw: '爪をはじく', dive: '飛びのく', tail: '振り向いて受け止める' },
+    spider: { breath: '糸を斬りはらう', claw: '横へ跳ぶ', dive: '影を残してすり抜ける', tail: '脚を跳び越える' },
+    goblin: { breath: '盾をかかげて矢を受ける', claw: '落とし穴を跳び越える', dive: '投石から飛びのく', tail: '穂先をはらう' },
+    kraken: { breath: '風で墨を吹きはらう', claw: '伏せて触手をくぐる', dive: '跳んで離れる', tail: '触手を斬る' },
+    golem: { breath: '石礫を打ち砕く', claw: '拳から飛びのく', dive: '地割れを跳び越える', tail: '伏せてやりすごす' },
+    giant: { breath: '炎で冷気を溶かす', claw: '氷の槍を撃ち落とす', dive: '踏みつけから飛びのく', tail: '棍棒を跳び越える' },
+};
 const MOTION_SCENES = [
     { scene: 'breath', name: 'ブレス（息を吸って吐く）' }, { scene: 'claw', name: '爪・突進' }, { scene: 'tail', name: '尾（背を向けて振る）' },
     { scene: 'dive', name: '急降下（跳ぶ・登る・踏みつけ）' }, { scene: 'opening', name: 'ふらつき（隙）' }, { scene: 'fog', name: '霧の中' },
@@ -82,13 +93,17 @@ async function main() {
     let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false;
     const mWrap = h('div', { class: 'canvas-wrap' });
     const mTitle = h('h2', { class: 'g-title' });
+    const mCounter = h('p', { class: 'small' });
     const mKindRow = h('div', { class: 'g-row' });
     const mSceneRow = h('div', { class: 'g-row' });
     let mr;
     const makeMotion = () => {
         const b = BOSSES.find((x) => x.kind === mKind);
         const theme = { hue: 0, kind: mKind, breath: b.breath };
-        const sc = { ...full, theme, boss: { ...full.boss, name: b.name } };
+        // 正しく動けた冒険者の答えを、この組み合わせの対応技の説明に差し替える（技名の表示と吹き出しが、動きと一致するように）
+        const counter = COUNTER_NAMES[mKind][mScene] ?? '（共通の動き）'; // （ で始まる答えは、技名・呪文名として出さない
+        const waves = full.waves.map((wv, i) => (i !== normW ? wv : { ...wv, events: wv.events.map((e) => (e.type === 'strike' && e.success ? { ...e, excerpt: counter } : e)) }));
+        const sc = { ...full, waves, theme, boss: { ...full.boss, name: b.name } };
         const cv = h('canvas', { class: 'arena-canvas pixel' });
         mr = new ArenaRenderer(cv, sc);
         mr.muted = true;
@@ -99,6 +114,7 @@ async function main() {
         mWrap.replaceChildren(cv);
         mt = 0;
         mTitle.textContent = `${b.name}：${MOTION_SCENES.find((x) => x.scene === mScene).name}`;
+        mCounter.textContent = COUNTER_NAMES[mKind][mScene] ? `正しく動けた冒険者の対応技：${counter}` : 'この場面の冒険者の動きは、ボスによらず共通です';
         for (const x of mKindRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === mKind);
         for (const x of mSceneRow.querySelectorAll('button'))
@@ -199,7 +215,7 @@ async function main() {
         }
         requestAnimationFrame(loop);
     };
-    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
+    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
     sync();
     requestAnimationFrame(loop);
 }

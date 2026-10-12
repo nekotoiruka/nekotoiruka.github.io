@@ -1,8 +1,8 @@
 // 採点結果 → ボス戦の台本（決定的）。
 // 全員で1体の大型ボスに挑む。1テストケース = 1ウェーブ。
-//   1. ボスが問題（＝攻撃）を出す。攻撃の種類でどの隊列（前衛・中衛・後衛）が狙われるかが決まる
-//   2. 各キャラが回答する（速い順に ○ / ×）。狙われた隊列のキャラは、正解なら回避、不正解なら被弾
-//   3. 正解したキャラはボスに反撃する（前衛ほど大ダメージ）。ツール・スキル・仲間の演出はここで出る
+//   1. ボスが問題（＝攻撃）を出す。討伐では攻撃は全員に向かう（チーム対抗・1対1では、攻撃の種類で狙われる隊列が決まる）
+//   2. 各キャラが回答する（速い順に ○ / ×）。狙われたキャラは、正解なら回避、不正解なら被弾
+//   3. 正解したキャラはボスに反撃する（チーム対抗・1対1では前衛ほど大ダメージ）。ツール・スキル・仲間の演出はここで出る
 //   4. 後半はボスが怒り、燃費（MP）の悪いキャラほど余波で削られる
 // 最後まで立っていた人が勝ち。ボスを倒した場合は、生き残りの中で与ダメージが多い順。
 import { Rng } from './rng.js';
@@ -22,7 +22,17 @@ export const ATTACKS = perLang(() => ({
     nova: { name: tl('全体爆発'), rows: { front: 1, mid: 1, back: 1 } },
     treasure: { name: tl('宝箱を落とした'), rows: {} },
 }));
-// 隊列ごとの与ダメージ倍率
+// 討伐（royale）には隊列がない。ボスの攻撃は、いつも討伐隊の全員に向かう（正しく動けた人はかわし、間違えた人は受ける）。
+// 強さは攻撃の種類ごとに一つ（隊列ごとの強さの平均）
+export function attackRows(attack, mode) {
+    const rows = ATTACKS[attack].rows;
+    if (mode !== 'royale' || attack === 'treasure')
+        return rows;
+    const v = Object.values(rows);
+    const m = Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100;
+    return { front: m, mid: m, back: m };
+}
+// 隊列ごとの与ダメージ倍率（チーム対抗・1対1だけ）
 export const ROW_DEAL = { front: 1.4, mid: 1.0, back: 0.75 };
 const DMG_SCALE = 11; // ダメージの桁（見た目の手応え）
 const SKILL_DMG = 4; // 必殺技（巻物が要る場面）の倍率
@@ -107,7 +117,7 @@ export function assignTeams(entrants) {
     order.forEach((x, k) => { team[x.i] = [0, 1, 1, 0][k % 4]; }); // スネークドラフト
     return { team, teams: [{ name: tl('レッド'), color: TEAM_COLORS[0] }, { name: tl('ブルー'), color: TEAM_COLORS[1] }] };
 }
-// 隊列の配置: ボスは左、隊列は中央から右へ（前衛がボスに近い）
+// 立ち位置: ボスは左、冒険者は中央から右へ3列に並ぶ（討伐では見た目だけ。チーム対抗・1対1では隊列。前衛がボスに近い）
 export const BOSS_POS = { x: 74, y: 150 };
 const ROW_X = { front: 178, mid: 248, back: 318 };
 export function layout(rows) {
@@ -253,7 +263,7 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
         const order = living().sort((a, b) => res[a].latencyMs - res[b].latencyMs || a - b);
         const ok = new Set();
         const over = new Set();
-        const rowMul = ATTACKS[attack].rows;
+        const rowMul = attackRows(attack, mode);
         order.forEach((f, k) => {
             const r = res[f];
             const t = round2(0.08 + 0.22 * (k / Math.max(1, order.length)));

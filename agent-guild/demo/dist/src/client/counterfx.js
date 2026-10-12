@@ -5,15 +5,16 @@ import { Rng } from '../shared/rng.js';
 import { counterFor } from './bossmoves.js';
 import { arrow, bat, bump, dustRing, ease, glowAt, hash, puffs, R, rock, shard, sparkle, TAU, win } from './fxkit.js';
 import { partyLabel } from './scenes.js';
-const oks = (a) => a.fighters.filter((v) => v.alive && v.ok);
 /** 対応技の演出。基本の4場面でなければ何もしない */
 export function counterFx(a) {
     const co = counterFor(a.theme?.kind, a.scene);
     if (!co)
         return;
     const { ctx, phase: p } = a;
-    for (const v of oks(a))
-        DRAW[co.fx](ctx, v, p, a, co);
+    // 対応技の動きをした（かわした）人だけ。動き（arena-fighter.ts）と同じく、技が届くのが遅れる分だけずらす
+    for (const v of a.fighters)
+        if (v.alive && v.evaded)
+            DRAW[co.fx](ctx, v, p - (v.lag ?? 0), a, co);
     const [l0, l1] = co.fx === 'mirror' ? [0.42, 0.58] : co.fx === 'trail' ? [0.42, 0.6] : [0.44, 0.6];
     partyLabel(a, co.color, bump(p, l0, l1)); // 正しく動けた自分の答え（ほかの人は「かわした」）
 }
@@ -165,23 +166,24 @@ const DRAW = {
     },
     // 飛びのく: 後ろへ跳んだ跡に、風の線と、着地の土ぼこり
     roll(ctx, v, p, _a, co) {
-        const u = win(p, 0.36, 0.56);
+        const u = win(p, 0.36, 0.56); // 体の動き（arena-fighter.ts の dodge）と同じ進み方: 右うしろへ跳んで、もとの場所に着地する
         if (u <= 0 || u >= 1)
             return;
+        const arc = Math.sin(u * Math.PI), hx = v.x + ease(arc) * 11, hy = v.y - Math.sin(Math.pow(u, 0.8) * Math.PI) * 17;
         ctx.save();
         ctx.strokeStyle = co.color;
         ctx.lineWidth = 1;
         for (let i = 0; i < 4; i++) {
-            ctx.globalAlpha = (1 - u) * 0.8;
-            const y = v.y - 6 - i * 6 - Math.sin(u * Math.PI) * 10;
+            ctx.globalAlpha = (1 - u) * 0.8 * Math.min(1, arc * 3);
+            const y = hy - 6 - i * 6;
             ctx.beginPath();
-            ctx.moveTo(R(v.x - 6 - i * 3), R(y));
-            ctx.lineTo(R(v.x - 18 - i * 3 - 8 * (1 - u)), R(y));
+            ctx.moveTo(R(hx - 8 - i * 2), R(y));
+            ctx.lineTo(R(hx - 20 - i * 2 - 8 * arc), R(y + 3));
             ctx.stroke();
-        }
+        } // 跳んだ向きの反対へ流れる風
         ctx.restore();
-        dustRing(ctx, v.x + 4, v.y, win(p, 0.36, 0.46), 14, co.color);
-        dustRing(ctx, v.x + 12, v.y, win(p, 0.5, 0.62), 16, co.color);
+        dustRing(ctx, v.x, v.y, win(p, 0.36, 0.46), 14, co.color); // 踏み切り
+        dustRing(ctx, v.x, v.y, win(p, 0.52, 0.62), 16, co.color); // 着地
     },
     // 振り向いて受ける: 背後（右）から来る一撃を、振り向いて受け止める。右側に紅い火花（伯爵）
     backGuard(ctx, v, p, _a, co) {
@@ -241,7 +243,7 @@ const DRAW = {
     },
     // 跳び越える: 跳んだ弧に光の粒の軌跡、着地にきらめき
     leap(ctx, v, p, _a, co) {
-        const u = win(p, 0.38, 0.58);
+        const u = win(p, 0.36, 0.56); // 体の動き（arena-fighter.ts の jump）と同じ進み方
         if (u <= 0 || u >= 1)
             return;
         ctx.save();
@@ -351,10 +353,10 @@ const DRAW = {
     },
     // 撃ち落とす: 飛んでくる氷の槍を空中で撃ち抜き、かけらが散る（氷巨人の爪）
     shootDown(ctx, v, p) {
-        const u = win(p, 0.42, 0.56);
+        const u = win(p, 0.46, 0.58); // 撃った弾が、飛んでくる槍に当たる時刻（arena-fighter.ts の shoot・bossfx.ts の氷の槍と合わせる）
         if (u <= 0 || u >= 1)
             return;
-        const x = v.x - 34, y = v.y - 8;
+        const x = v.x - 34, y = v.y - 10;
         glowAt(ctx, x, y, 10 * (1 - u) + 2, '#ffffff', '#8fd3ff', 1 - u);
         for (let i = 0; i < 6; i++) {
             const t = (i / 6) * TAU + 0.3, d = 2 + u * (14 + 8 * hash(i, 7));
