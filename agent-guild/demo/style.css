@@ -864,6 +864,8 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-table th { white-space: nowrap; }
 
 /* --- 多言語 --- */
+.lp-langbar { display: flex; justify-content: flex-end; max-width: 1120px; margin: 0 auto; padding: 8px 12px 0; box-sizing: border-box; }
+.lp-langbar .lang-sw { margin: 0; }
 .lang-sw { font-family: var(--font); font-size: 13px; background: #0b0e1e; color: var(--ink); border: 0; box-shadow: 0 0 0 2px var(--line); padding: 3px 6px; margin-inline-start: auto; }
 .demo-flag { margin-inline-start: 8px; margin-left: 8px; }
 /* 右から左へ書く言語（アラビア語）。コードや YAML・バトルの画面は左から右のまま */

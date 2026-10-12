@@ -3,10 +3,12 @@
 import { renderAbout } from './pages/about.js';
 import { BRAND } from './brand.js';
 import { h } from './ui.js';
-import { tl } from '../shared/i18n.js';
+import { LANGS, getLang, setBrowserLang, tl } from '../shared/i18n.js';
 document.title = BRAND.name;
 document.querySelector('meta[name=description]')?.setAttribute('content', BRAND.description);
 const root = document.getElementById('app');
+// 言語の切り替え（右上）。選ぶと、その言語で読み込み直す。URL の ?lang=ja などでも指定できる
+document.body.prepend(h('div', { class: 'lp-langbar' }, h('select', { class: 'lang-sw', 'aria-label': tl('言語'), onchange: (e) => setBrowserLang(e.target.value) }, ...LANGS.map((l) => h('option', { value: l.code, selected: l.code === getLang() }, l.native)))));
 renderAbout(root, { playUrl: window.__LP__?.playUrl ?? '', demoUrl: window.__LP__?.demoUrl || undefined }).catch((e) => {
     root.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, tl('読み込みに失敗しました')), h('p', {}, e.message)));
 });

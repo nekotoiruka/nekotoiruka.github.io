@@ -17,6 +17,12 @@ export const DEFAULT_LANG = 'ja';
 export const LANG_CODES = LANGS.map((l) => l.code);
 export const isLang = (x) => typeof x === 'string' && LANG_CODES.includes(x);
 export const langInfo = (l) => LANGS.find((x) => x.code === l);
+// URL の ?lang= の値。言語コード（ja・en・zh…）のほか、国のコードで書かれがちなもの（jp・cn・kr・br）や ja-JP の形も受けつける
+const LANG_ALIAS = { jp: 'ja', cn: 'zh', kr: 'ko', br: 'pt', sa: 'ar', in: 'hi' };
+export function urlLang(v) {
+    const k = String(v ?? '').trim().toLowerCase();
+    return LANG_ALIAS[k] ?? matchLang(k);
+}
 // ブラウザの言語設定（ja-JP, zh-Hans-CN, pt-PT …）から、対応している言語を1つ選ぶ
 export function matchLang(tag) {
     const p = String(tag ?? '').toLowerCase().split(/[-_]/)[0];
@@ -99,8 +105,8 @@ export function chooseBrowserLang() {
     if (isLang(fixed))
         return fixed;
     try {
-        const q = new URLSearchParams(location.search).get('lang');
-        if (isLang(q)) {
+        const q = urlLang(new URLSearchParams(location.search).get('lang'));
+        if (q) {
             localStorage.setItem(KEY, q);
             return q;
         }
