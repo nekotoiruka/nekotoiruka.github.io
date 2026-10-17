@@ -434,13 +434,13 @@ function synth(a, t, name, strength) {
         case 'fail': // ぷっぷっぷー（悲しいトロンボーン）
             [[67, 0.2], [66, 0.2], [65, 0.2], [62, 0.7]].reduce((at, [m, d], i) => { tone(a, at, { type: 'sawtooth', f0: midi(m), f1: i === 3 ? midi(m) * 0.82 : undefined, dur: d, vol: 0.12, vib: i === 3 ? [6, 8] : undefined, lp: [1500, 600], wet: 0.2 }); return at + d + 0.02; }, t);
             break;
-        case 'win': { // 勝利のファンファーレ（約3秒）
+        case 'win': { // 貢献1位の発表ファンファーレ（約3秒）: ソドミソー → ラファラ → ソレシ → ドーー（I→IV→V→I）
             const st = 0.12;
-            melody(a, t, [[72, 1], [72, 1], [72, 1], [72, 3], [68, 3], [70, 3], [72, 2], [70, 1], [72, 6]], st, { type: 'pulse25', vol: 0.1, wet: 0.3 });
-            melody(a, t, [[64, 1], [64, 1], [64, 1], [64, 3], [60, 3], [62, 3], [64, 2], [62, 1], [64, 6]], st, { type: 'pulse12', vol: 0.06, wet: 0.2 });
-            melody(a, t, [[48, 4], [48, 3], [44, 3], [46, 3], [48, 3], [43, 1], [48, 6]], st, { type: 'triangle', vol: 0.2 });
-            [[60, 7.5], [64, 7.5], [67, 7.5]].forEach(([m]) => tone(a, t + 19 * st, { type: 'sawtooth', f0: midi(m), dur: 1.5, vol: 0.04, attack: 0.02, lp: [3000, 800], wet: 0.5 }));
-            fm(a, t + 19 * st, { f: midi(96), ratio: 3.5, index: 2, dur: 1.4, vol: 0.06, wet: 0.5 });
+            melody(a, t, [[67, 1], [72, 1], [76, 1], [79, 3], [81, 2], [77, 1], [81, 1], [79, 2], [74, 1], [71, 1], [84, 7]], st, { type: 'pulse25', vol: 0.1, wet: 0.3 });
+            melody(a, t, [[64, 1], [67, 1], [72, 1], [76, 3], [77, 2], [72, 1], [77, 1], [74, 2], [71, 1], [67, 1], [76, 7]], st, { type: 'pulse12', vol: 0.06, wet: 0.2 });
+            melody(a, t, [[48, 6], [53, 4], [43, 4], [48, 7]], st, { type: 'triangle', vol: 0.2 });
+            [60, 64, 67].forEach((m) => tone(a, t + 18 * st, { type: 'sawtooth', f0: midi(m), dur: 1.5, vol: 0.04, attack: 0.02, lp: [3000, 800], wet: 0.5 }));
+            fm(a, t + 18 * st, { f: midi(96), ratio: 3.5, index: 2, dur: 1.4, vol: 0.06, wet: 0.5 });
             break;
         }
         case 'bossDown': { // ボス撃破: うめき声 → 連鎖する大爆発 → 魂が昇っていく → 余韻

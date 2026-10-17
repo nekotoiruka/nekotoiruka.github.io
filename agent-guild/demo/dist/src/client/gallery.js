@@ -4,7 +4,7 @@
 import { ArenaRenderer, CHAIN_TEMPOS } from './arena.js';
 import { getDemoBattle, scriptFor } from './api.js';
 import { ULT_SCENES, ultName } from './scenes.js';
-import { setSfx } from './sfx.js';
+import { play, setSfx } from './sfx.js';
 import { WEAPON_KINDS, WEAPON_LABELS } from '../shared/catalog.js';
 import { reducedMotion } from './motion.js';
 import { h } from './ui.js';
@@ -215,7 +215,10 @@ async function main() {
         }
         requestAnimationFrame(loop);
     };
-    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
+    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
+        ['win', '貢献1位の発表（ファンファーレ）'], ['bossDown', 'ボス撃破'], ['chantDone', '連携詠唱の完成'], ['shout', '大魔法の名を叫ぶ'],
+        ['spellImpact', '大魔法の着弾'], ['fanfare', 'ぬか喜びの小さなファンファーレ'], ['fail', 'ずっこける'],
+    ].map(([k, label]) => h('button', { class: 'btn g-chip', onclick: () => { setSfx(true); play(k); } }, label)))), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
     sync();
     requestAnimationFrame(loop);
 }
