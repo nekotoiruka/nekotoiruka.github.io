@@ -2,6 +2,7 @@
 // 連携詠唱（7人で成功・あなたが最後の節）も見る。
 // scripts/build-gallery.mjs が 1ファイルの HTML にまとめる。討伐データは window.__DEMO__（紹介ページと同じ吸血鬼伯爵の見本）。
 import { ArenaRenderer, CHAIN_TEMPOS } from './arena.js';
+import { CHAIN_INSIDE_MAX } from './arena-chain.js';
 import { getDemoBattle, scriptFor } from './api.js';
 import { ULT_SCENES, ultName } from './scenes.js';
 import { play, setSfx } from './sfx.js';
@@ -36,12 +37,12 @@ const MOTION_SCENES = [
 async function main() {
     const root = document.getElementById('app');
     const data = await getDemoBattle();
-    const first = scriptFor(data, 'royale');
+    const first = scriptFor(data);
     const best = first.standings.slice().sort((a, b) => a.rank - b.rank)[0].f;
     const bestId = first.fighters[best].id;
-    const full = scriptFor(data, 'royale', undefined, [bestId]);
+    const full = scriptFor(data, [bestId]);
     // ---- 大技: 場面 × 武器 ----
-    const ultW = full.waves.findIndex((wv) => !wv.sudden && ['ougi', 'rush', 'summon'].includes(full.cases[wv.caseIndex]?.scene ?? ''));
+    const ultW = full.waves.findIndex((wv) => ['ougi', 'rush', 'summon'].includes(full.cases[wv.caseIndex]?.scene ?? ''));
     const canvas = h('canvas', { class: 'arena-canvas pixel' });
     const r = new ArenaRenderer(canvas, full);
     r.muted = true;
@@ -89,7 +90,7 @@ async function main() {
         r.draw(ultW + t);
     };
     // ---- ボスのモーション: ボス × 場面。見本の討伐のふつうの場面の上で、ボスの種類と場面を差し替えて再生する ----
-    const normW = Math.max(0, full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.kind === 'normal'));
+    const normW = Math.max(0, full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.kind === 'normal'));
     let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false;
     const mWrap = h('div', { class: 'canvas-wrap' });
     const mTitle = h('h2', { class: 'g-title' });
@@ -137,21 +138,23 @@ async function main() {
     };
     makeMotion();
     // ---- 連携詠唱: 討伐隊の全員が大呪を知っている見本。あなたが最後の第7節（成功）／あなたが第7節で詰まる（失敗） ----
-    const chainW0 = full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.scene === 'chain');
-    const makeChain = (fail) => {
+    const chainW0 = full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.scene === 'chain');
+    const makeChain = (fail, size = data.entrants.length) => {
         if (chainW0 < 0)
             return null;
         const cc = full.cases[full.waves[chainW0].caseIndex];
         const len = cc.chant?.length ?? 7;
-        const party = data.entrants.map((e) => {
+        // 人数を絞るときは、あなた（見本の1位）＋ほかの人を先頭から
+        const pool = [data.entrants.find((e) => e.id === bestId), ...data.entrants.filter((e) => e.id !== bestId)].slice(0, size);
+        const party = pool.map((e) => {
             const me = e.id === bestId;
             const ok = !(fail && me);
             return { ...e, result: { ...e.result, cases: e.result.cases.map((c) => (c.caseId === cc.id ? { ...c, score: ok ? 1 : 0, runs: c.runs.map(() => (ok ? 1 : 0)), mpOut: false, chainUpto: ok ? len : len - 1 } : c)) } };
         });
-        const sc = scriptFor({ ...data, entrants: party }, 'royale', undefined, [bestId]);
+        const sc = scriptFor({ ...data, entrants: party }, [bestId]);
         if (!sc)
             return null;
-        const w = sc.waves.findIndex((wv) => !wv.sudden && sc.cases[wv.caseIndex]?.scene === 'chain');
+        const w = sc.waves.findIndex((wv) => sc.cases[wv.caseIndex]?.scene === 'chain');
         const cv = h('canvas', { class: 'arena-canvas pixel' });
         const cr = new ArenaRenderer(cv, sc);
         cr.muted = true;
@@ -159,11 +162,28 @@ async function main() {
         return { r: cr, w, t: 0, box: h('div', { class: 'canvas-wrap' }, cv) };
     };
     const chains = [makeChain(false), makeChain(true)].filter((x) => !!x && x.w >= 0);
+    // 連携詠唱の並び: 唱える人数（1〜7人）ごとの立ち位置。3人までは魔法陣の中、4人からは陣を囲む
+    let crowdN = 1;
+    const crowdBox = h('div');
+    const crowdTitle = h('h2', { class: 'g-title' });
+    const crowdRow = h('div', { class: 'g-row' });
+    let crowd = null;
+    const makeCrowd = () => {
+        crowd = makeChain(false, crowdN);
+        if (crowd)
+            crowd.r.chainTempo = tempo;
+        crowdBox.replaceChildren(...(crowd ? [crowd.box] : []));
+        crowdTitle.textContent = `連携詠唱の並び（${crowdN}人・${crowdN <= CHAIN_INSIDE_MAX ? '魔法陣の中に立つ' : '魔法陣を囲む'}）`;
+        for (const b of crowdRow.querySelectorAll('button'))
+            b.classList.toggle('on', b.dataset.k === String(crowdN));
+    };
+    for (let n = 1; n <= 7; n++)
+        crowdRow.append(h('button', { class: 'btn g-chip', 'data-k': String(n), onclick: () => { crowdN = n; makeCrowd(); } }, `${n}人`));
     // 連携詠唱のテンポ（節の詠唱・叫び・タメ・着弾・そのあとの余韻）を選んで見比べる
     let tempo = 'calm';
     const tempoRow = h('div', { class: 'g-row' });
     const syncTempo = () => {
-        for (const c of chains)
+        for (const c of [...chains, ...(crowd ? [crowd] : [])])
             c.r.chainTempo = tempo;
         for (const b of tempoRow.querySelectorAll('button'))
             b.classList.toggle('on', b.dataset.k === tempo);
@@ -174,6 +194,7 @@ async function main() {
                 c.r.frame = 0;
             } syncTempo(); } }, CHAIN_TEMPOS[k].label));
     syncTempo();
+    makeCrowd();
     let last = performance.now();
     const loop = (now) => {
         const dt = Math.min(0.1, (now - last) / 1000);
@@ -204,7 +225,7 @@ async function main() {
             mr.frame++;
         }
         mr.draw(normW + mt);
-        for (const c of chains) {
+        for (const c of [...chains, ...(crowd ? [crowd] : [])]) {
             c.t += (dt / SECONDS_PER_WAVE) * c.r.slowFactor(c.w + c.t);
             if (c.t >= 0.99) {
                 c.t = 0;
@@ -218,7 +239,7 @@ async function main() {
     root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
         ['win', '貢献1位の発表（ファンファーレ）'], ['bossDown', 'ボス撃破'], ['chantDone', '連携詠唱の完成'], ['shout', '大魔法の名を叫ぶ'],
         ['spellImpact', '大魔法の着弾'], ['fanfare', 'ぬか喜びの小さなファンファーレ'], ['fail', 'ずっこける'],
-    ].map(([k, label]) => h('button', { class: 'btn g-chip', onclick: () => { setSfx(true); play(k); } }, label)))), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
+    ].map(([k, label]) => h('button', { class: 'btn g-chip', onclick: () => { setSfx(true); play(k); } }, label)))), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), h('section', { class: 'card' }, crowdTitle, h('p', { class: 'small muted' }, '唱える人数ごとの立ち位置。あなたは必ず最後の節で、ボスに向いた左の先頭。3人までは魔法陣の中に立ち、4人からは陣のふちを囲みます。'), crowdBox, crowdRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
     sync();
     requestAnimationFrame(loop);
 }

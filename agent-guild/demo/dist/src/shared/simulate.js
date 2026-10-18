@@ -13,7 +13,6 @@ export const ARENA = { w: 384, h: 216 };
 const MAX_HP = 100;
 // ボスの大技の場面（巻物が要る大技）。client/scenes.ts の ULT_SCENES と同じ
 const ULT_SCENE_SET = new Set(['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken']);
-export const MODE_LABELS = perLang(() => ({ royale: tl('討伐'), team: tl('チーム対抗'), duel: tl('1対1') }));
 export const ATTACKS = perLang(() => ({
     claw: { name: tl('ひっかき'), rows: { front: 1.15 } },
     breath: { name: tl('火炎ブレス'), rows: { front: 1, mid: 0.85 } },
@@ -22,18 +21,16 @@ export const ATTACKS = perLang(() => ({
     nova: { name: tl('全体爆発'), rows: { front: 1, mid: 1, back: 1 } },
     treasure: { name: tl('宝箱を落とした'), rows: {} },
 }));
-// 討伐（royale）には隊列がない。ボスの攻撃は、いつも討伐隊の全員に向かう（正しく動けた人はかわし、間違えた人は受ける）。
+// 討伐には隊列がない。ボスの攻撃は、いつも討伐隊の全員に向かう（正しく動けた人はかわし、間違えた人は受ける）。
 // 強さは攻撃の種類ごとに一つ（隊列ごとの強さの平均）
-export function attackRows(attack, mode) {
+export function attackRows(attack) {
     const rows = ATTACKS[attack].rows;
-    if (mode !== 'royale' || attack === 'treasure')
+    if (attack === 'treasure')
         return rows;
     const v = Object.values(rows);
     const m = Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100;
     return { front: m, mid: m, back: m };
 }
-// 隊列ごとの与ダメージ倍率（チーム対抗・1対1だけ）
-export const ROW_DEAL = { front: 1.4, mid: 1.0, back: 0.75 };
 const DMG_SCALE = 11; // ダメージの桁（見た目の手応え）
 const SKILL_DMG = 4; // 必殺技（巻物が要る場面）の倍率
 const CHAIN_MUL = 3;
@@ -77,7 +74,6 @@ export function chainOrder(parts, ok, len, opts = {}) {
     const upto = fail >= 0 ? fail : chanters.length === len && chanters.every((f) => okSet.has(f)) ? len : 0;
     return { order, chanters, upto };
 }
-const TEAM_COLORS = ['#e43b44', '#3e8ef7', '#63c74d', '#feae34', '#c77dff', '#5fcde4'];
 const round1 = (v) => Math.round(v * 10) / 10;
 const round2 = (v) => Math.round(v * 100) / 100;
 // 採点結果に記録された、抽選で引いた番号（ほかの人の分はネタバレ防止で消えていることがある）
@@ -102,22 +98,7 @@ export function orderCases(cases) {
         .map((x) => x.c);
 }
 const accuracyOf = (e) => weightedAccuracy(e.result.cases);
-// チーム分け: team 項目が2種類以上あればそれで、なければ実力が均等になるよう2チームに分ける
-export function assignTeams(entrants) {
-    const names = [...new Set(entrants.map((e) => e.loadout.team?.trim()).filter((x) => !!x))];
-    if (names.length >= 2 && entrants.every((e) => e.loadout.team?.trim())) {
-        const top = names.slice(0, TEAM_COLORS.length);
-        return {
-            team: entrants.map((e) => Math.max(0, top.indexOf(e.loadout.team.trim()))),
-            teams: top.map((name, i) => ({ name, color: TEAM_COLORS[i] })),
-        };
-    }
-    const order = entrants.map((e, i) => ({ i, a: accuracyOf(e) })).sort((x, y) => y.a - x.a || x.i - y.i);
-    const team = new Array(entrants.length).fill(0);
-    order.forEach((x, k) => { team[x.i] = [0, 1, 1, 0][k % 4]; }); // スネークドラフト
-    return { team, teams: [{ name: tl('レッド'), color: TEAM_COLORS[0] }, { name: tl('ブルー'), color: TEAM_COLORS[1] }] };
-}
-// 立ち位置: ボスは左、冒険者は中央から右へ3列に並ぶ（討伐では見た目だけ。チーム対抗・1対1では隊列。前衛がボスに近い）
+// 立ち位置: ボスは左、冒険者は中央から右へ3列に並ぶ（見た目だけ。隊列による差はない）
 export const BOSS_POS = { x: 74, y: 150 };
 const ROW_X = { front: 178, mid: 248, back: 318 };
 export function layout(rows) {
@@ -150,20 +131,15 @@ function attackFor(cm, rng) {
     return rng.pick(['claw', 'breath', 'tail']);
 }
 export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpOverride, opts = {}) {
-    if (mode === 'duel' && entrants.length !== 2)
-        throw new Error(tl('1対1は2体を選んでください'));
     const cases = orderCases(casesIn);
     const n = entrants.length;
     const viewerSet = new Set(opts.viewer ?? []); // 見ている人（連携詠唱の結果だけが変わる）
-    const tm = mode === 'team' ? assignTeams(entrants)
-        : { team: entrants.map((_, i) => i), teams: entrants.map((e, i) => ({ name: e.name, color: TEAM_COLORS[i % TEAM_COLORS.length] })) };
-    // 討伐（royale）では隊列を選ばない。立ち位置は見た目のために自動で散らす
-    const raid = mode === 'royale';
-    const rows = entrants.map((e, i) => (raid ? ['front', 'mid', 'back'][i % 3] : e.loadout.position ?? 'mid'));
+    // 隊列は選ばない。立ち位置は見た目のために自動で散らす
+    const rows = entrants.map((_, i) => ['front', 'mid', 'back'][i % 3]);
     const slots = layout(rows);
     const fighters = entrants.map((e, i) => ({
         id: e.id, name: e.name, owner: e.owner, kodawari: e.kodawari, loadout: e.loadout,
-        stats: computeStats(e.result, casesIn), team: tm.team[i], row: rows[i], slot: slots[i],
+        stats: computeStats(e.result, casesIn), row: rows[i], slot: slots[i],
         ...variantsOf(e),
     }));
     const resultMap = entrants.map((e) => new Map(e.result.cases.map((c) => [c.caseId, c])));
@@ -174,69 +150,42 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
     };
     // 反撃のダメージ（正解したときだけ）
     // 通常の反撃でおよそ100、会心で150、巻物が要る場面（必殺技）で500くらい
-    const attackDmg = (f, score) => DMG_SCALE * (4 + 6 * score) * (raid ? 1 : ROW_DEAL[fighters[f].row]) * (0.6 + fighters[f].stats.atk / 125) * (0.85 + fighters[f].stats.spd / 400);
-    // ボスの体力: 全員が全問で反撃したときの合計よりやや多い。脱落者が出るので、倒せるのはサドンデスに入ってからが普通
-    const potential = fighters.reduce((a, _, f) => a + cases.reduce((b, c) => { const r = getRes(f, c.id); return b + (r.score >= 0.6 && !r.mpOut ? attackDmg(f, r.score) * ((r.weight ?? 1) > 1 ? SKILL_DMG : 1) : 0); }, 0), 0);
+    const attackDmg = (f, score) => DMG_SCALE * (4 + 6 * score) * (0.6 + fighters[f].stats.atk / 125) * (0.85 + fighters[f].stats.spd / 400);
     // 討伐: 12人の討伐隊が、それぞれ8割ほど正しく動ければ倒しきれる体力（人数が足りない・正解が少ないと倒しきれない）。
     // 一人ぶんの力は、いまの討伐隊の平均（全問に正しく動けたときの与ダメージ。連携詠唱の大魔法も入れる）
     const fullPot = (f) => cases.reduce((b, c) => b + (isChainCase(c) ? attackDmg(f, 1) * SKILL_DMG * CHAIN_MUL : attackDmg(f, 1) * (c.keySkill ? SKILL_DMG : 1)), 0);
     const raidHp = () => Math.round((fighters.reduce((a, _, f) => a + fullPot(f), 0) / Math.max(1, n)) * RAID_PARTY * RAID_CLEAR);
-    const bossMax = bossHpOverride ?? Math.max(60, raid ? raidHp() : Math.round(potential * 1.3));
+    const bossMax = bossHpOverride ?? Math.max(60, raidHp());
     let bossHp = bossMax;
     const hp = new Array(n).fill(MAX_HP);
     const shield = new Array(n).fill(0);
     const alive = new Array(n).fill(true);
-    const deathWave = new Array(n).fill(-1);
     const endured = new Array(n).fill(false);
     const st = fighters.map(() => ({ dmg: 0, evades: 0, hits: 0, items: 0, mvp: 0 }));
     const living = () => fighters.map((_, f) => f).filter((f) => alive[f]);
-    const aliveTeams = () => new Set(living().map((f) => fighters[f].team));
-    const decided = () => bossHp <= 0 || (!raid && (mode === 'team' ? aliveTeams().size <= 1 : living().length <= 1));
-    const hard = cases.slice().sort((a, b) => b.difficulty - a.difficulty || (b.kind === 'boss' ? 1 : 0) - (a.kind === 'boss' ? 1 : 0));
-    const SUDDEN_MAX = 8;
-    const played = [];
     const waves = [];
-    let finalAnnounced = false;
-    for (let w = 0; w < cases.length + SUDDEN_MAX; w++) {
-        const sudden = w >= cases.length;
-        if (sudden && (raid || decided() || n < 2))
-            break;
-        const suddenIdx = w - cases.length;
-        const cm0 = sudden ? hard[suddenIdx % hard.length] : cases[w];
-        const cm = sudden ? { ...cm0, title: tl(`サドンデス: {0}`, cm0.title) } : cm0;
-        played.push(cm);
+    for (let w = 0; w < cases.length; w++) {
+        const cm = cases[w];
         const wr = new Rng(`${seed}:${mode}:w${w}`);
-        const attack = sudden ? (suddenIdx % 2 ? 'nova' : wr.pick(['claw', 'breath', 'meteor'])) : attackFor(cm0, wr);
+        const attack = attackFor(cm, wr);
         const events = [];
-        const res = fighters.map((_, f) => getRes(f, cm0.id));
-        if (sudden && suddenIdx === 0)
-            events.push({ type: 'sudden', t: 0.01 });
-        if (!finalAnnounced && !raid && mode !== 'duel' && n > 3 && living().length <= 3) {
-            finalAnnounced = true;
-            events.push({ type: 'final', t: 0.01, alive: living().length });
-        }
+        const res = fighters.map((_, f) => getRes(f, cm.id));
+        const last = w === cases.length - 1;
         events.push({ type: 'bossAttack', t: 0.36, attack });
-        const ultWave = raid && !sudden && ULT_SCENE_SET.has(cm0.scene ?? '');
+        const ultWave = ULT_SCENE_SET.has(cm.scene ?? '');
         const kill = (f, t, cause) => {
             if (!alive[f])
                 return;
-            // 討伐: ふつうの攻撃では倒れない（HP1で踏みとどまる。表示は最初の1回だけ）。
+            // ふつうの攻撃では倒れない（HP1で踏みとどまる。表示は最初の1回だけ）。
             // ボスの大技を外したときだけ倒れる。倒れても、あとで正しく動けた場面で起き上がる（戦果・順位には関係しない）
-            if (raid && !(ultWave && cause === 'boss')) {
+            if (!(ultWave && cause === 'boss')) {
                 hp[f] = 1;
                 if (!endured[f])
                     events.push({ type: 'endure', t: round2(t), f });
                 endured[f] = true;
                 return;
             }
-            // 全滅で終わらないよう、最後の1体はHP1で踏みとどまる
-            if (living().length === 1 && !raid) {
-                hp[f] = 1;
-                events.push({ type: 'endure', t: round2(t), f });
-                return;
-            }
             alive[f] = false;
-            deathWave[f] = w;
             hp[f] = 0;
             events.push({ type: 'death', t: round2(t), f, cause });
         };
@@ -247,23 +196,22 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             hp[f] = Math.max(0, hp[f] - dmg);
             return { dmg: round1(dmg), absorbed: round1(absorbed) };
         };
-        // 0. 討伐: 倒れていた人は、この場面で正しく動ければ起き上がって戦いに戻る（答えは倒れていても出している）
-        if (raid)
-            for (const f of fighters.map((_, i) => i)) {
-                if (alive[f])
-                    continue;
-                const r = res[f];
-                if (r.mpOut || r.score < 0.6)
-                    continue;
-                alive[f] = true;
-                hp[f] = Math.round(MAX_HP * 0.5);
-                events.push({ type: 'revive', t: 0.06, f });
-            }
+        // 0. 倒れていた人は、この場面で正しく動ければ起き上がって戦いに戻る（答えは倒れていても出している）
+        for (const f of fighters.map((_, i) => i)) {
+            if (alive[f])
+                continue;
+            const r = res[f];
+            if (r.mpOut || r.score < 0.6)
+                continue;
+            alive[f] = true;
+            hp[f] = Math.round(MAX_HP * 0.5);
+            events.push({ type: 'revive', t: 0.06, f });
+        }
         // 1. 回答（速い順に ○ / ×）
         const order = living().sort((a, b) => res[a].latencyMs - res[b].latencyMs || a - b);
         const ok = new Set();
         const over = new Set();
-        const rowMul = attackRows(attack, mode);
+        const rowMul = attackRows(attack);
         order.forEach((f, k) => {
             const r = res[f];
             const t = round2(0.08 + 0.22 * (k / Math.max(1, order.length)));
@@ -279,9 +227,9 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             }
         });
         // 連携詠唱の場面: ボスは大技を溜めているだけで、ふつうの攻撃も反撃もない（詠唱の成否で決まる）
-        const chainWave = !sudden && isChainCase(cm0);
+        const chainWave = isChainCase(cm);
         // 2. ボスの攻撃: 狙われた隊列は、正解なら回避、不正解なら被弾
-        const base = (10 + 7 * cm.difficulty) * (sudden ? 1.3 + suddenIdx * 0.15 : 1);
+        const base = 10 + 7 * cm.difficulty;
         for (const f of chainWave ? [] : order) {
             const m = rowMul[fighters[f].row];
             if (attack === 'treasure') {
@@ -329,14 +277,14 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             const pot = okParts.reduce((a, f) => a + base1(f), 0);
             const raw = full ? pot * CHAIN_MUL : pot * CHAIN_FIZZLE;
             // 討伐: 大魔法が決まればそのまま倒れる。途切れたときはボスは踏みとどまり（体力1）、このあと総攻撃でとどめ
-            const floor = raid && (w < cases.length - 1 || !full) ? 1 : 0;
-            const dmg = round1(raid ? raw : Math.min(bossHp, raw));
+            const floor = !last || !full ? 1 : 0;
+            const dmg = round1(raw);
             bossHp = Math.max(floor, bossHp - dmg);
             const okPot = pot || 1;
             const credit = okParts.map((f) => ({ f, dmg: round1((dmg * base1(f)) / okPot) }));
             for (const c of credit)
                 st[c.f].dmg += c.dmg;
-            const len = chainLen(cm0);
+            const len = chainLen(cm);
             const viewerUpto = vWrong ? (res[vw].chainUpto ?? 0) : undefined;
             const def = chainOrder(parts, okParts, len, { mine: vw !== undefined ? [vw] : [], mineUpto: viewerUpto });
             events.push({ type: 'chain', t: CHAIN_T.impact, len, parts, ok: okParts, full, dmg, order: def.order, chanters: def.chanters, upto: def.upto, credit, ...(vw !== undefined ? { viewer: vw } : {}), ...(viewerUpto !== undefined ? { viewerUpto } : {}) });
@@ -354,9 +302,9 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             const s = res[f].score;
             const crit = s >= 0.99 && k < Math.ceil(attackers.length / 3);
             const full = attackDmg(f, s) * (crit ? 1.5 : 1) * ((res[f].weight ?? 1) > 1 ? SKILL_DMG : 1); // 巻物が要る場面は必殺技なので重い
-            // 討伐では、最後の仕掛けまでボスは倒れない（体力1で踏みとどまる）。数字は削った分ではなく、技の威力をそのまま見せる
-            const floor = raid && w < cases.length - 1 ? 1 : 0;
-            const dmg = round1(raid ? full : Math.min(bossHp, full));
+            // 最後の仕掛けまでボスは倒れない（体力1で踏みとどまる）。数字は削った分ではなく、技の威力をそのまま見せる
+            const floor = last ? 0 : 1;
+            const dmg = round1(full);
             bossHp = Math.max(floor, bossHp - dmg);
             st[f].dmg += dmg;
             events.push({ type: 'attack', t, f, dmg, crit });
@@ -369,7 +317,7 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
         });
         // 討伐の最後の仕掛けで、体力1で踏みとどまっていたボスに反撃が入らなかったときは、
         // 生き残った冒険者が総攻撃でとどめを刺す（演出のみ。与ダメージの集計には入れない）
-        if (raid && w === cases.length - 1 && bossHp > 0 && bossHp <= 1) {
+        if (last && bossHp > 0 && bossHp <= 1) {
             const rest = order.filter((f) => alive[f]);
             let lastT = 0.86;
             // 連携詠唱が途切れたあとの総攻撃は、詠唱の演出が終わってから
@@ -382,50 +330,23 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             events.push({ type: 'bossDown', t: round2(lastT + 0.04) });
         }
         // 討伐の最後まで削りきれなかったときは、ボスが去っていく（討伐失敗）
-        if (raid && w === cases.length - 1 && bossHp > 1)
+        if (last && bossHp > 1)
             events.push({ type: 'bossEscape', t: 0.9, hpLeft: round2(bossHp / bossMax) });
-        // 4. ボスの怒り（後半とサドンデス）: 燃費の悪いキャラほど余波で削られる
-        const enrageStart = Math.floor(cases.length * 0.4);
-        if (!raid && bossHp > 0 && w >= enrageStart) {
-            const k = sudden ? 1 + suddenIdx * 0.5 : (w - enrageStart + 1) / Math.max(1, cases.length - enrageStart);
-            for (const f of living()) {
-                const raw = (3 + 18 * k) * (1.3 - (fighters[f].stats.mp / 100) * 0.8);
-                const { dmg } = damage(f, raw);
-                events.push({ type: 'storm', t: 0.88, f, dmg });
-                if (hp[f] <= 0)
-                    kill(f, 0.9, 'storm');
-            }
-        }
         if (mvp >= 0) {
             st[mvp].mvp++;
             events.push({ type: 'mvp', t: 0.93, f: mvp });
         }
-        const lastWave = decided() || w === (raid ? cases.length - 1 : cases.length + SUDDEN_MAX - 1);
-        if (lastWave) {
-            const winner = rankOrder()[0] ?? null;
-            events.push({ type: 'winner', t: 0.97, f: winner, team: winner !== null ? fighters[winner].team : null });
-        }
+        if (last)
+            events.push({ type: 'winner', t: 0.97, f: rankOrder()[0] ?? null });
         events.sort((x, y) => x.t - y.t);
-        waves.push({ caseIndex: w, sudden, attack, events, hpAfter: hp.map(round1), shieldAfter: shield.map(round1), aliveAfter: [...alive], bossHpAfter: round1(bossHp) });
-        if (lastWave)
-            break;
+        waves.push({ caseIndex: w, attack, events, hpAfter: hp.map(round1), shieldAfter: shield.map(round1), aliveAfter: [...alive], bossHpAfter: round1(bossHp) });
     }
-    // 順位: 生存 → ボスへの与ダメージ → 残りHP（脱落者は長く生きた順）
+    // 順位: 戦果（正答率）→ 燃費（トークンの少なさ）→ 速さ
     function rankOrder() {
-        // 討伐: 戦果（正答率）→ 燃費（トークンの少なさ）→ 速さ
-        if (raid) {
-            const acc = (f) => weightedAccuracy(cases.map((c) => getRes(f, c.id)));
-            const tok = (f) => cases.reduce((a, c) => { const r = getRes(f, c.id); return a + r.tokensIn + r.tokensOut; }, 0);
-            const lat = (f) => cases.reduce((a, c) => a + getRes(f, c.id).latencyMs, 0);
-            return fighters.map((_, f) => f).sort((a, b) => acc(b) - acc(a) || tok(a) - tok(b) || lat(a) - lat(b) || a - b);
-        }
-        return fighters.map((_, f) => f).sort((a, b) => {
-            if (alive[a] !== alive[b])
-                return alive[a] ? -1 : 1;
-            if (alive[a])
-                return st[b].dmg - st[a].dmg || hp[b] - hp[a] || a - b;
-            return deathWave[b] - deathWave[a] || st[b].dmg - st[a].dmg || a - b;
-        });
+        const acc = (f) => weightedAccuracy(cases.map((c) => getRes(f, c.id)));
+        const tok = (f) => cases.reduce((a, c) => { const r = getRes(f, c.id); return a + r.tokensIn + r.tokensOut; }, 0);
+        const lat = (f) => cases.reduce((a, c) => a + getRes(f, c.id).latencyMs, 0);
+        return fighters.map((_, f) => f).sort((a, b) => acc(b) - acc(a) || tok(a) - tok(b) || lat(a) - lat(b) || a - b);
     }
     const totalScore = fighters.map((_, f) => weightedAccuracy(cases.map((c) => getRes(f, c.id))));
     const standings = rankOrder().map((f, k) => {
@@ -433,27 +354,15 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
         const s = st[f];
         return {
             f, rank: k + 1, alive: alive[f],
-            survivalWaves: alive[f] ? played.length : deathWave[f] + 1,
             damageDealt: Math.round(s.dmg), evades: s.evades, hits: s.hits, items: s.items, mvp: s.mvp,
             accuracy: Math.round(totalScore[f] * 1000) / 10,
             avgTokens: Math.round(rs.reduce((a, r) => a + r.tokensIn + r.tokensOut, 0) / Math.max(1, rs.length)),
             avgLatencyMs: Math.round(rs.reduce((a, r) => a + r.latencyMs, 0) / Math.max(1, rs.length)),
         };
     });
-    // チーム順位（生存人数 → ボスへの与ダメージ合計）
-    const teamStandings = tm.teams.map((_, t) => {
-        const ms = fighters.map((_, f) => f).filter((f) => fighters[f].team === t);
-        return {
-            team: t, rank: 0, members: ms.length,
-            alive: ms.filter((f) => alive[f]).length,
-            hp: Math.round(ms.reduce((a, f) => a + (alive[f] ? hp[f] : 0), 0)),
-            damage: Math.round(ms.reduce((a, f) => a + st[f].dmg, 0)),
-        };
-    }).sort((a, b) => b.alive - a.alive || b.damage - a.damage || b.hp - a.hp || a.team - b.team)
-        .map((x, i) => ({ ...x, rank: i + 1 }));
     return {
         version: 3, mode, seed, arena: { ...ARENA }, boss: { name: tl('ドラゴン'), maxHp: bossMax, ...BOSS_POS },
-        cases: played, fighters, teams: tm.teams, waves, standings, teamStandings,
+        cases, fighters, waves, standings,
     };
 }
 //# sourceMappingURL=simulate.js.map

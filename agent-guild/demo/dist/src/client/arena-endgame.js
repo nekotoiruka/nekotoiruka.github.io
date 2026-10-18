@@ -2,24 +2,11 @@ import { clamp01, ease } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
-// --- 終盤の演出: 決勝の鼓動、サドンデス、ボス撃破、勝者 ---
+// --- 終盤の演出: ボス撃破・撃退、戦果1位 ---
 export function endgame(ctx, w, phase, outro, views, down) {
     const s = this.script;
     const { w: AW, h: AH } = s.arena;
     const t = w + phase + outro;
-    if (this.finalWave >= 0 && w >= this.finalWave && outro === 0 && down < 0) {
-        const beat = Math.pow(Math.max(0, Math.sin(this.frame / 9)), 6);
-        const a = 0.08 + beat * 0.18 + (this.suddenWave >= 0 && w >= this.suddenWave ? 0.08 : 0);
-        const g = ctx.createRadialGradient(AW / 2, AH / 2, AH * 0.35, AW / 2, AH / 2, AW * 0.62);
-        g.addColorStop(0, 'rgba(255,40,60,0)');
-        g.addColorStop(1, `rgba(255,40,60,${a})`);
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, AW, AH);
-    }
-    if (this.finalWave >= 0)
-        this.bigBanner(ctx, t - this.finalWave, 'FINAL ROUND', tl(`残り{0}人！ 最後まで立っていられるか`, views.filter((v) => v.alive).length), '#ff5a6e');
-    if (this.suddenWave >= 0)
-        this.bigBanner(ctx, t - this.suddenWave - (this.suddenWave === this.finalWave ? 0.8 : 0), 'SUDDEN DEATH', tl('ボスが本気を出した！ 決着まで難問が続く'), '#c77dff');
     const fin = this.finisher(w);
     if (fin !== null && phase > fin && phase < fin + 0.05 && outro === 0) {
         ctx.fillStyle = `rgba(255,255,255,${0.7 * flashScale() * (1 - (phase - fin) / 0.05)})`;
@@ -30,14 +17,9 @@ export function endgame(ctx, w, phase, outro, views, down) {
     if (this.escapeAt && esc >= 0)
         this.bigBanner(ctx, esc - 0.15, tl('討伐成功！'), tl('{0}はたまらず逃げ出した！ 戦果1位は…', s.boss.name), '#ffd166');
     if (down >= 0)
-        this.bigBanner(ctx, down, s.mode === 'royale' ? tl('討伐成功！') : 'VICTORY', s.mode === 'royale' ? tl(`{0}を倒した！ 戦果1位は…`, s.boss.name) : tl('ボスを倒した！ いちばんダメージを与えたのは…'), '#ffd166');
+        this.bigBanner(ctx, down, tl('討伐成功！'), tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
     const winT = this.winner !== null ? t - (s.waves.length - 1 + ((s.waves[s.waves.length - 1].events.find((e) => e.type === 'winner')?.t) ?? 1)) : -1;
-    if (s.mode === 'team' && outro > 0) {
-        const top = s.teamStandings[0];
-        this.winBanner(ctx, outro, tl(`{0} の勝利！`, s.teams[top.team].name), 'TEAM WIN', s.teams[top.team].color);
-        this.confetti(ctx, outro);
-    }
-    else if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75) && (esc < 0 || esc > 0.9)) {
+    if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75) && (esc < 0 || esc > 0.9)) {
         const v = views[this.winner];
         const p = this.proj(v.x, v.y);
         const k = clamp01(winT / 0.3);
@@ -59,7 +41,7 @@ export function endgame(ctx, w, phase, outro, views, down) {
         ctx.fill();
         ctx.restore();
         this.confetti(ctx, winT);
-        this.winBanner(ctx, winT, s.fighters[this.winner].name, s.mode === 'duel' ? 'WIN!' : s.mode === 'royale' ? tl('戦果1位') : 'WINNER!', '#ffd166');
+        this.winBanner(ctx, winT, s.fighters[this.winner].name, tl('戦果1位'), '#ffd166');
     }
 }
 export function bigBanner(ctx, age, title, sub, color) {

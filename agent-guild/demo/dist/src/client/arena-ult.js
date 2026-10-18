@@ -9,7 +9,7 @@ export function ultWeapon(f) { return f === undefined ? undefined : this.looks[f
 export function figuresOf() {
     return (this.figs ??= this.script.fighters.map((_, i) => figure(this.looks[i], this.gears[i], 5)));
 }
-export function skillWave(w) { const wv = this.script.waves[w]; return !!wv && !wv.sudden && !!this.script.cases[wv.caseIndex]?.keySkill; }
+export function skillWave(w) { const wv = this.script.waves[w]; return !!wv && !!this.script.cases[wv.caseIndex]?.keySkill; }
 // 必殺技カットインの区間。大技カウンター（ougi/rush/summon）は主役の大技が 0.3 から始まるので、それより前に終える
 export function ultWindow(st, w) {
     const t0 = this.ultOf(w) ? Math.min(0.12, Math.max(0.08, st.t)) : Math.min(0.2, Math.max(0.1, st.t));

@@ -22,7 +22,7 @@ export function saveRange(r) {
 export function highlightWaves(script) {
     const last = script.waves.length - 1;
     return script.waves.map((wv, i) => {
-        const scene = wv.sudden ? undefined : script.cases[wv.caseIndex]?.scene;
+        const scene = script.cases[wv.caseIndex]?.scene;
         return i === last || scene === 'chain' || isUltScene(scene);
     });
 }

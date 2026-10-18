@@ -1,9 +1,27 @@
 import { runeLine } from './arena-common.js';
 import { CHAIN_T, chainOrder } from '../shared/simulate.js';
 import { chainBreakAt, isUltScene, verseAt } from './scenes.js';
+// 連携詠唱で並ぶ足元の位置（唱える順。最後＝あなたがボスに向いた左の先頭）。
+// 1〜3人は魔法陣の中に立つ（1人: 中心／2人: 斜めに前後／3人: ボスへ向けた矢じり）。
+// 4人からは陣のふちを囲み、最後の人が左の正面、ほかの人は唱える順に輪をまわる
+export const CHAIN_INSIDE_MAX = 3;
+const INSIDE = [
+    [],
+    [{ x: -2, y: 3 }],
+    [{ x: 14, y: -3 }, { x: -14, y: 5 }],
+    [{ x: 6, y: -6 }, { x: 24, y: 8 }, { x: -22, y: 4 }],
+];
+export function chainSpots(n, ring) {
+    if (n <= CHAIN_INSIDE_MAX)
+        return INSIDE[Math.max(0, n)].map((p) => ({ x: ring.x + p.x, y: ring.y + p.y }));
+    return Array.from({ length: n }, (_, k) => {
+        const a = Math.PI + ((n - 1 - k) * Math.PI * 2) / n; // 最後（k = n-1）が左の正面
+        return { x: ring.x + Math.cos(a) * (ring.rx + 8), y: ring.y + 4 + Math.sin(a) * (ring.ry + 6) };
+    });
+}
 export function chainOf(w) {
     const s = this.script, wv = s.waves[w];
-    if (!wv || wv.sudden || s.cases[wv.caseIndex]?.scene !== 'chain')
+    if (!wv || s.cases[wv.caseIndex]?.scene !== 'chain')
         return null;
     const key = `${w}:${[...this.mine].join(',')}:${this.mineLabel}`;
     if (this.chainCache.has(key))
@@ -27,16 +45,12 @@ export function chainOf(w) {
             len: ev.len, lines, chanters, names: chanters.map((f) => s.fighters[f]?.name ?? ''), mineAt, upto, full, dmg: ev.dmg,
             start: CHAIN_T.start, verse, breakT, doneT, impact: ev.t, rally: CHAIN_T.rally, spell: cm.shout?.name ?? cm.spell ?? (cm.chant?.[ev.len - 1] ?? '').split(/[\s,，、]/)[0], reading: cm.shout?.reading, mineLabel: this.mineLabel,
         };
-        // 魔法陣を囲む輪: 最後に唱える人（あなた）がボスに向いた正面（左）、ほかの人は唱える順に輪をまわる。
-        // 唱えない人は右端へ場を譲って見守る
+        // 並び（chainSpots）: 3人までは魔法陣の中に立ち、4人からは陣を囲む。唱えない人は右端へ場を譲って見守る
         const line = new Map();
         const ring = { x: 262, y: 134, rx: 48, ry: 20 };
         const front = order.filter(visible);
-        const n = front.length;
-        front.forEach((f, k) => {
-            const a = Math.PI + ((n - 1 - k) * Math.PI * 2) / Math.max(1, n); // 最後（k = n-1）が左の正面
-            line.set(f, { x: ring.x + Math.cos(a) * (ring.rx + 8), y: ring.y + 4 + Math.sin(a) * (ring.ry + 6) });
-        });
+        const spots = chainSpots(front.length, ring);
+        front.forEach((f, k) => line.set(f, spots[k]));
         view.ring = ring;
         plan = { ev, view, line, dmgAt: full ? ev.t : breakT + 0.05, last: w === s.waves.length - 1 };
     }

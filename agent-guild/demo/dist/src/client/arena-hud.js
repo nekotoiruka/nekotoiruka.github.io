@@ -1,8 +1,5 @@
 import { MINE_BAND, bump, clamp01, ease, lerp } from './arena-common.js';
-import { ATTACKS } from '../shared/simulate.js';
-import { attackName } from './bossmoves.js';
-import { Rng } from '../shared/rng.js';
-import { POSITION_LABELS, skillLook } from '../shared/build.js';
+import { skillLook } from '../shared/build.js';
 import { TOOL_BY_ID } from '../shared/catalog.js';
 import { SKILL_WEIGHT } from '../shared/stats.js';
 import { guardIcon, scrollIcon, toolIcon } from './toolIcons.js';
@@ -82,7 +79,7 @@ export function progressBar(w, phase, strikeOf) {
     const mine = [...this.mine].find((f) => !s.fighters[f].off);
     if (mine === undefined || w >= s.waves.length)
         return;
-    const waves = s.waves.map((wv, i) => ({ wv, i })).filter((x) => !x.wv.sudden);
+    const waves = s.waves.map((wv, i) => ({ wv, i }));
     if (!waves.length)
         return;
     const wt = (i) => (s.cases[s.waves[i].caseIndex]?.keySkill ? SKILL_WEIGHT : 1);
@@ -153,7 +150,7 @@ export function mineBand(ctx, w, phase, strikeOf, scene) {
     sceneBanner(ctx, scene, tl('{0}（{1}）', name, this.mineLabel), ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, st.charmed ? '……' : tl('{0}！', act), '#6ab8ff');
 }
 // --- 画面上部: ボスの体力 ---
-export function bossBar(time, rage) {
+export function bossBar(time) {
     const ctx = this.ctx, s = this.script;
     const hp = this.bossHp(time), k = hp / s.boss.maxHp;
     const x = 96, y = 6, w = 192;
@@ -162,8 +159,8 @@ export function bossBar(time, rage) {
     ctx.fillRect(x - 4, y - 2, w + 8, 17);
     ctx.font = `8px ${PIXEL_FONT}`;
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = rage ? '#ff8a9a' : '#ffffff';
-    ctx.fillText(`${s.boss.name}${rage ? tl('（怒り）') : ''}`, x, y + 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(s.boss.name, x, y + 4);
     ctx.fillStyle = '#2a1630';
     ctx.fillRect(x, y + 9, w, 4);
     ctx.fillStyle = k > 0.5 ? '#c77dff' : k > 0.2 ? '#ff8a3a' : '#ff3b3b';
@@ -174,40 +171,6 @@ export function bossBar(time, rage) {
     ctx.restore();
 }
 // ボスの攻撃名と狙う列（構えの間だけ）
-export function attackBanner(atk, phase, scene, big = false) {
-    if (phase < 0.26 || phase > 0.5 || scene === 'opening')
-        return; // 隙あり: ボスはよろめいていて、攻撃してこない
-    const ctx = this.ctx;
-    const a = ATTACKS[atk];
-    const rows = Object.keys(a.rows).map((r) => POSITION_LABELS[r]).join(tl('・'));
-    const name = big ? tl('大技') : attackName(this.script.theme?.kind, scene, atk) || a.name;
-    const text = atk === 'treasure' ? tl('宝箱を落とした！ 正解した人がもらえる')
-        : this.script.mode === 'royale' ? tl(`{0}！ 正しく動ければかわせる`, name) : tl(`{0}！ {1}を狙っている`, name, Object.keys(a.rows).length === 3 ? tl('全員') : rows);
-    const k = clamp01((phase - 0.26) / 0.03) * clamp01((0.5 - phase) / 0.03);
-    ctx.save();
-    ctx.globalAlpha = k;
-    ctx.font = `9px ${PIXEL_FONT}`;
-    const tw = ctx.measureText(text).width + 16;
-    const x = 8, y = 28;
-    ctx.fillStyle = atk === 'treasure' ? 'rgba(80,60,10,0.9)' : 'rgba(90,10,30,0.9)';
-    ctx.fillRect(x, y, tw, 14);
-    ctx.fillStyle = atk === 'treasure' ? '#feae34' : '#ff5a6e';
-    ctx.fillRect(x, y, 2, 14);
-    ctx.fillStyle = '#ffffff';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + 8, y + 7.5);
-    ctx.restore();
-}
-export function rageOverlay() {
-    const ctx = this.ctx;
-    const { w, h } = this.script.arena;
-    ctx.fillStyle = 'rgba(120, 10, 30, 0.14)';
-    ctx.fillRect(0, 0, w, h);
-    const rng = new Rng(this.frame >> 1);
-    ctx.fillStyle = 'rgba(255,90,90,0.6)';
-    for (let i = 0; i < 40; i++)
-        ctx.fillRect(rng.int(0, w), rng.int(0, h), 2, 2);
-}
 // --- 文字類（画面座標） ---
 export function labelAt(text, x, y, color, size = 8) {
     const ctx = this.ctx;
@@ -322,7 +285,7 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
             ctx.fillStyle = g;
         }
         else
-            ctx.fillStyle = kind === 'boss' ? '#ffffff' : kind === 'storm' ? '#d6a0ff' : '#ff6b6b';
+            ctx.fillStyle = kind === 'boss' ? '#ffffff' : '#ff6b6b';
         ctx.fillText(text, x, y);
         if (crit && k < 0.7) {
             ctx.font = `bold 7px ${PIXEL_FONT}`;
@@ -335,7 +298,7 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
         ctx.restore();
     });
 }
-// 舞台に立たない参加者（控え）: 画面の下に小さな点で並べる。生きていれば明るく、脱落したら暗く
+// 舞台に立たない参加者（控え）: 画面の下に小さな点で並べる。立っていれば明るく、倒れているあいだは暗く（討伐ではダウン＝次に正しく動けば起き上がる。チーム戦・1対1では脱落）
 export function reserveStrip(ctx, views) {
     const off = views.filter((v) => this.script.fighters[v.f].off);
     if (!off.length)
@@ -361,7 +324,7 @@ export function reserveStrip(ctx, views) {
 // 決め手の道具（自分だけ・正解のときだけ）: 答えた直後に頭上へ浮かび、光って、ボスが動く前に武器へ吸いこまれる
 export function keyItem(ctx, w, vis, strikeOf, phase, ultHero) {
     const s = this.script, wv = s.waves[w];
-    if (!wv || wv.sudden)
+    if (!wv)
         return;
     const cm = s.cases[wv.caseIndex];
     for (const v of vis) {

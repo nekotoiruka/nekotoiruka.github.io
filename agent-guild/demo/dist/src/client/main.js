@@ -8,6 +8,7 @@ import { pastSeasonsSection, renderRanking } from './pages/ranking.js';
 import { renderSubmit } from './pages/submit.js';
 import { renderTask } from './pages/task.js';
 import { h } from './ui.js';
+import { setUser } from './userStore.js';
 import { BRAND } from './brand.js';
 import { LANGS, getLang, setBrowserLang, tl } from '../shared/i18n.js';
 // サービス名は brand.ts の1か所で決める
@@ -94,6 +95,11 @@ function lockNav(locked) {
     });
 }
 await detectMode();
+// ログイン中のユーザーを先に確かめる（人ごとの下書きなどを、その人の分だけ読むため。ほかの人の分と昔のキーは、ここで消える）
+if (!demoMode)
+    setUser((await getMe().catch(() => null))?.name ?? null);
+else
+    setUser(null);
 if (!demoMode)
     canWatch();
 if (demoMode)

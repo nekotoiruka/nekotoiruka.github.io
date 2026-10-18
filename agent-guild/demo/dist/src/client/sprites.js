@@ -19,10 +19,6 @@ const MONSTERS = {
         '...ffff..ffff...', '...ddd....ddd...',
     ],
 };
-const TOMB = [
-    '....oooooo....', '...ommmmmmo...', '..ommmkkmmmo..', '..ommkkkkmmo..', '..ommmkkmmmo..',
-    '..ommmkkmmmo..', '..ommmmmmmmo..', '..ommmmmmmmo..', '.oooooooooooo.', 'oggggggggggggo',
-];
 const POTION = ['.oo.', '.ww.', 'orro', 'orro', '.oo.'];
 const CROWN = ['y.y.y', 'yyyyy', 'yryry', 'yyyyy'];
 // --- 色 ---
@@ -119,9 +115,6 @@ const MONSTER_COLORS = {
 const MONSTER_OUTLINE = { normal: '#24572a', trap: '#3f2a7a', bonus: '#4a2a12', boss: '#3a1f18' };
 export function monsterSprite(kind, flash = false) {
     return outlined(`mon:${kind}`, MONSTERS[kind], MONSTER_COLORS[kind], MONSTER_OUTLINE[kind], false, flash);
-}
-export function tombSprite() {
-    return cached('tomb', 14, 10, (ctx) => paint(ctx, TOMB, {}, 0, 0));
 }
 export function potionSprite() {
     return cached('potion', 4, 5, (ctx) => paint(ctx, POTION, {}, 0, 0));

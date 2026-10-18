@@ -81,17 +81,12 @@ export async function getPastSeasons() {
         return [];
     return (await req('GET', 'api/seasons/history')).items;
 }
-// 参加者データからモード別のバトル台本を作る（決定的なので何度作っても同じ）
-export function scriptFor(d, mode, pick, viewer) {
-    if (mode === 'duel') {
-        const es = (pick ?? [d.entrants[0]?.id, d.entrants[1]?.id]).map((id) => d.entrants.find((e) => e.id === id));
-        if (es.some((e) => !e) || es[0] === es[1])
-            return null;
-        return simulateBattle(es, d.cases, `${d.seed}:${es.map((e) => e.id).join('-')}`, 'duel');
-    }
-    if (d.entrants.length < 2)
+// 参加者データから討伐の台本を作る（決定的なので何度作っても同じ）。ひとりでも討伐に出られる。
+// viewer は見ている人（連携詠唱の結果だけが、その人が唱えられたかで変わる）
+export function scriptFor(d, viewer) {
+    if (!d.entrants.length)
         return null;
-    return withTheme(simulateBattle(d.entrants, d.cases, `${d.seed}:${d.entrants.map((e) => e.id).join(',')}`, mode, undefined, { viewer: viewer ? [...viewer] : [] }), d);
+    return withTheme(simulateBattle(d.entrants, d.cases, `${d.seed}:${d.entrants.map((e) => e.id).join(',')}`, 'royale', undefined, { viewer: viewer ? [...viewer] : [] }), d);
 }
 // ボスの名前と色合い・場面の名前を、シーズンの募集要項から付ける
 function withTheme(sc, d) {

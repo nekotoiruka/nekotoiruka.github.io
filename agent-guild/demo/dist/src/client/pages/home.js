@@ -46,7 +46,7 @@ async function landing(season, cta) {
 // --- 参加中の人のダッシュボード ---
 async function dashboard(season, me, rerender) {
     const data = await getBattle().catch(() => null);
-    const script = data ? scriptFor(data, 'royale') : null;
+    const script = data ? scriptFor(data) : null;
     const myFighter = script ? script.fighters.findIndex((f) => f.owner === me.name) : -1;
     const standing = script && myFighter >= 0 ? script.standings.find((s) => s.f === myFighter) : undefined;
     const subs = (await mySubmissions().catch(() => ({ items: [] }))).items;
@@ -60,9 +60,9 @@ async function dashboard(season, me, rerender) {
     const next = !subs.length
         ? { text: tl('まずは募集要項を読んで、冒険者の準備をしましょう。試走で確かめてから送り出せます。'), go: '#/make', label: tl('準備をはじめる') }
         : busy ? { text: tl('冒険者が戦っています（採点中）。終わると討伐に登場します。'), go: '#/arena', label: tl('討伐を見る') }
-            : { text: tl('診断を見て準備を直し、もう一度送り出してみましょう。試走なら回数は減りません。'), go: '#/make', label: tl('準備を直す') };
+            : { text: tl('診断を見て準備を直し、もう一度送り出してみましょう。試走しても送り出しの回数は減りません（試走は1日{0}回まで）。', season.limits.trialsPerDay ?? 3), go: '#/make', label: tl('準備を直す') };
     return [
-        h('div', { class: 'dash' }, accountBar(season, me, rerender), h('p', { class: 'eyebrow' }, tl(`{0}　討伐依頼`, season.task.season)), h('h2', {}, briefingOf(season)?.headline ?? season.task.title), h('div', { class: 'stat-row' }, stat(tl('戦果の順位'), standing ? tl(`{0}位`, standing.rank) : '—', standing ? tl(`全{0}人中・戦果 {1}%`, script.fighters.length, standing.accuracy) : tl('送り出すとつきます')), stat(tl('今日の送り出し'), tl(`残り{0}回`, me.remainingToday), tl(`1日{0}回まで`, season.limits.submissionsPerDay)), stat(tl('試走'), tl(`残り{0}回`, me.trialsLeft), tl('公開サンプルだけ・提出は減りません')), stat(tl('シーズン'), left === null ? tl('開催中') : left === 0 ? tl('最終日') : tl(`あと{0}日`, left), season.seasonEnd ? tl(`〜{0}`, new Date(season.seasonEnd).toLocaleDateString(localeOf())) : '')), h('section', { class: 'card next-card' }, h('p', {}, next.text), h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: next.go }, next.label), last?.status === 'done' ? h('a', { class: 'btn', href: `#/build/${last.id}` }, tl('ギルドマスターの講評')) : null, h('a', { class: 'btn', href: '#/task' }, tl('募集要項')), h('a', { class: 'btn', href: '#/ranking' }, tl('戦果')))), last ? h('p', { class: 'small muted' }, tl(`直近の送り出し: {0}（{1}）`, last.name, last.status === 'done' ? tl(`戦果 {0}%`, last.accuracy) : last.status === 'error' ? tl(`エラー: {0}`, last.error ?? '') : tl('採点中'))) : null, h('h3', {}, tl('いまの討伐')), mini, h('p', {}, h('a', { href: '#/arena' }, tl('大きな画面で見る →')))),
+        h('div', { class: 'dash' }, accountBar(season, me, rerender), h('p', { class: 'eyebrow' }, tl(`{0}　討伐依頼`, season.task.season)), h('h2', {}, briefingOf(season)?.headline ?? season.task.title), h('div', { class: 'stat-row' }, stat(tl('戦果の順位'), standing ? tl(`{0}位`, standing.rank) : '—', standing ? tl(`全{0}人中・戦果 {1}%`, script.fighters.length, standing.accuracy) : tl('送り出すとつきます')), stat(tl('今日の送り出し'), tl(`残り{0}回`, me.remainingToday), tl(`1日{0}回まで`, season.limits.submissionsPerDay)), stat(tl('今日の試走'), tl(`残り{0}回`, me.trialsLeft), tl('1日{0}回まで・送り出しの回数は使いません', season.limits.trialsPerDay ?? 3)), stat(tl('シーズン'), left === null ? tl('開催中') : left === 0 ? tl('最終日') : tl(`あと{0}日`, left), season.seasonEnd ? tl(`〜{0}`, new Date(season.seasonEnd).toLocaleDateString(localeOf())) : '')), h('section', { class: 'card next-card' }, h('p', {}, next.text), h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: next.go }, next.label), last?.status === 'done' ? h('a', { class: 'btn', href: `#/build/${last.id}` }, tl('ギルドマスターの講評')) : null, h('a', { class: 'btn', href: '#/task' }, tl('募集要項')), h('a', { class: 'btn', href: '#/ranking' }, tl('戦果')))), last ? h('p', { class: 'small muted' }, tl(`直近の送り出し: {0}（{1}）`, last.name, last.status === 'done' ? tl(`戦果 {0}%`, last.accuracy) : last.status === 'error' ? tl(`エラー: {0}`, last.error ?? '') : tl('採点中'))) : null, h('h3', {}, tl('いまの討伐')), mini, h('p', {}, h('a', { href: '#/arena' }, tl('大きな画面で見る →')))),
     ];
 }
 export async function renderHome(root) {

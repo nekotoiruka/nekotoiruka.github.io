@@ -6,7 +6,7 @@ import { bossCanvas, BOSS_IDLE, BW, BH } from './boss.js';
 import { reducedMotion } from './motion.js';
 import { bossMotion, makeAt } from './bossmotion.js';
 // --- ボス: 構え → 攻撃 → 被弾でひるむ → 撃破で倒れる ---
-export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fleeing = false, scene) {
+export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing = false, scene) {
     const s = this.script;
     const p = { ...BOSS_IDLE, bob: Math.round(Math.sin(this.frame / 12) * 1.5), wing: Math.sin(this.frame / 10) * 0.8, tail: Math.sin(this.frame / 14), eye: 'open' };
     let dx = 0, dy = 0, flash = false;
@@ -55,8 +55,6 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
             dx -= 1;
         }
     }
-    if (rage)
-        p.tint = 'rage';
     if (fleeing) {
         p.eye = 'hurt';
         p.mouth = 1;
@@ -86,13 +84,6 @@ export function drawBoss(ctx, phase, atk, rage, down, attackOf, chain = null, fl
     ctx.beginPath();
     ctx.ellipse(s.boss.x + dx + 4, s.boss.y + 1, 38 * sh, 6 * sh, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (rage && down < 0) {
-        ctx.globalAlpha = 0.22 + Math.sin(this.frame / 4) * 0.08;
-        ctx.fillStyle = '#ff3b3b';
-        ctx.beginPath();
-        ctx.ellipse(s.boss.x + dx, s.boss.y - BH / 2, BW / 2 + 6, BH / 2 + 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-    }
     ctx.globalAlpha = 1;
     mv?.fx?.(ctx, 'back', at, foot); // 土ぼこり・足もとの霧など
     const body = bossCanvas(p, flash && !reducedMotion(), kind);

@@ -1,14 +1,13 @@
 import { attackRows, CHAIN_T, waveTitleFor } from '../shared/simulate.js';
-import { POSITION_LABELS } from '../shared/build.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
-import { crownSprite, potionSprite, shieldIcon, tombSprite } from './sprites.js';
+import { crownSprite, potionSprite, shieldIcon } from './sprites.js';
 import { drawHero, gearOf, lookOf, portrait } from './hero.js';
 import './bosses/index.js';
 import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
 import { isUltScene, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
 import { AGILE, EVADE_LABEL, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, bump, clamp01, ease, lerp } from './arena-common.js';
-import { attackBanner, bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, rageOverlay, reserveStrip, tag, youMarker } from './arena-hud.js';
+import { bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
 import { bossSilhouette } from './boss.js';
@@ -63,8 +62,6 @@ export class ArenaRenderer {
         return d;
     }
     spotCache = new Map();
-    finalWave = -1;
-    suddenWave = -1;
     downAt = null;
     winner = null;
     lastTime = 0;
@@ -103,10 +100,6 @@ export class ArenaRenderer {
                     this.deaths.set(e.f, [...(this.deaths.get(e.f) ?? []), { wave: w, t: e.t }]);
                 if (e.type === 'bossEscape')
                     this.escapeAt = { wave: w, t: e.t, hpLeft: e.hpLeft };
-                if (e.type === 'final')
-                    this.finalWave = w;
-                if (e.type === 'sudden')
-                    this.suddenWave = w;
                 if (e.type === 'bossDown')
                     this.downAt = { wave: w, t: e.t };
                 if (e.type === 'winner')
@@ -120,11 +113,10 @@ export class ArenaRenderer {
     }
     sceneOf(w) {
         const wv = this.script.waves[w];
-        return wv && !wv.sudden ? this.script.cases[wv.caseIndex]?.scene : undefined;
+        return wv ? this.script.cases[wv.caseIndex]?.scene : undefined;
     }
     get totalWaves() { return this.script.waves.length; }
     get totalTime() { return this.script.waves.length + OUTRO; }
-    teamColor(f) { return this.script.mode === 'team' ? this.script.teams[this.script.fighters[f].team].color : undefined; }
     get bossFoot() { return { x: this.script.boss.x, y: this.script.boss.y }; }
     get bossBody() { return { x: this.script.boss.x + 14, y: this.script.boss.y - 22 }; } // 反撃が当たる所（toolMove は y-8 を狙う）
     makeBackground = makeBackground; // arena-scene.ts
@@ -181,8 +173,6 @@ export class ArenaRenderer {
                 hp[e.f] = Math.max(0, hp[e.f] - e.dmg);
                 shield[e.f] = Math.max(0, shield[e.f] - e.absorbed);
             }
-            else if (e.type === 'storm')
-                hp[e.f] = Math.max(0, hp[e.f] - e.dmg);
             else if (e.type === 'item') {
                 if (e.item === 'potion')
                     hp[e.f] = Math.min(100, hp[e.f] + e.amount);
@@ -214,7 +204,7 @@ export class ArenaRenderer {
         // 連携詠唱のダメージは、見る人ごとの演出の瞬間（大魔法の着弾・詠唱が途切れた瞬間）に減らす
         // 討伐で詠唱が途切れたときは、総攻撃までボスは体力1で踏みとどまる
         if (plan && phase >= plan.dmgAt)
-            v = Math.max(plan.view.full || v < 1 || s.mode !== 'royale' ? Math.min(v, floor) : Math.max(1, Math.min(v, floor)), v - plan.ev.dmg);
+            v = Math.max(plan.view.full || v < 1 ? Math.min(v, floor) : Math.max(1, Math.min(v, floor)), v - plan.ev.dmg);
         for (const e of wv.events) {
             if (e.t > phase)
                 break;
@@ -317,11 +307,10 @@ export class ArenaRenderer {
                 items.add(e.f);
         }
         const atk = wv.attack;
-        const rows = attackRows(atk, s.mode); // 討伐では全員が狙われる
+        const rows = attackRows(atk); // 討伐隊の全員が狙われる
         const prevAlive = w > 0 ? s.waves[w - 1].aliveAfter : s.fighters.map(() => true);
         const chain = this.chainOf(w); // 連携詠唱の場面（ボスのふつうの攻撃はない）
         const targeted = (f) => !chain && prevAlive[f] && rows[s.fighters[f].row] !== undefined;
-        const rage = wv.events.some((e) => e.type === 'storm');
         const down = this.downAt && (w > this.downAt.wave || (w === this.downAt.wave && phase >= this.downAt.t)) ? (w - this.downAt.wave) + phase - this.downAt.t + outro : -1;
         const spot = this.spotlight(w);
         const ult = this.ultOf(w);
@@ -348,43 +337,14 @@ export class ArenaRenderer {
             if (v?.alive && !s.fighters[f].off)
                 this.lights.push({ x: v.x, y: v.y - 14, r: 46, a: 0.85, col: '#ffd166' });
         }
-        // --- 隊列の帯と、狙われた列の警告（討伐には隊列がないので、討伐隊ぜんたいに一つの警告） ---
+        // --- 狙われた警告（隊列はないので、討伐隊ぜんたいに一つ） ---
         const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
         const tele = atk === 'treasure' || chain || dazed ? 0 : clamp01((phase - 0.26) / 0.06) * (phase < IMPACT + 0.04 ? 1 : 0);
-        if (s.mode === 'royale') {
-            const xs = s.fighters.filter((fi) => !fi.off).map((fi) => fi.slot.x);
-            if (tele > 0 && xs.length) {
-                ctx.fillStyle = `rgba(255,60,80,${(0.1 + 0.12 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
-                ctx.fillRect(Math.round(Math.min(...xs) - 30), 84, Math.round(Math.max(...xs) - Math.min(...xs) + 60), 128);
-            }
+        const xs = s.fighters.filter((fi) => !fi.off).map((fi) => fi.slot.x);
+        if (tele > 0 && xs.length) {
+            ctx.fillStyle = `rgba(255,60,80,${(0.1 + 0.12 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
+            ctx.fillRect(Math.round(Math.min(...xs) - 30), 84, Math.round(Math.max(...xs) - Math.min(...xs) + 60), 128);
         }
-        else
-            for (const r of ['front', 'mid', 'back']) {
-                const xs = s.fighters.filter((fi) => fi.row === r && !fi.off).map((fi) => fi.slot.x);
-                if (!xs.length)
-                    continue;
-                const x = (Math.min(...xs) + Math.max(...xs)) / 2;
-                ctx.fillStyle = 'rgba(255,255,255,0.05)';
-                ctx.fillRect(Math.round(x - 28), 86, 56, 124);
-                const hot = tele > 0 && rows[r] !== undefined;
-                if (hot) {
-                    ctx.fillStyle = `rgba(255,60,80,${(0.12 + 0.14 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
-                    ctx.fillRect(Math.round(x - 30), 84, 60, 128);
-                }
-                const p = this.proj(x, 208);
-                this.ui.push(() => this.labelAt(POSITION_LABELS[r], p.x, p.y, hot ? '#ff8a9a' : '#9aa0c8'));
-            }
-        // --- 墓標 ---
-        for (const v of vis)
-            if (!v.alive && s.mode !== 'royale') { // 討伐では墓標を立てず、倒れたまま（あとで起き上がる）
-                const d = this.deathOf(v.f, w, phase);
-                const since = (w - d.wave) + (phase - d.t) + outro - KO_TIME;
-                if (since < 0)
-                    continue;
-                ctx.globalAlpha = Math.min(1, since * 4);
-                ctx.drawImage(tombSprite(), Math.round(v.x - 7), Math.round(v.y - 9));
-                ctx.globalAlpha = 1;
-            }
         // --- 場面演出の準備（課題の種類ごと） ---
         const scene = this.sceneOf(w);
         const cm = s.cases[wv.caseIndex];
@@ -412,7 +372,7 @@ export class ArenaRenderer {
             ctx.save();
             ctx.translate(flinch - run * 230, -run * 50 - Math.sin(run * Math.PI) * 30);
             ctx.globalAlpha = 1 - Math.max(0, run - 0.6) / 0.4;
-            this.drawBoss(ctx, phase, atk, rage, down, attackOf, chain, fleeT >= 0, scene);
+            this.drawBoss(ctx, phase, atk, down, attackOf, chain, fleeT >= 0, scene);
             ctx.restore();
         }
         // 逃げ出した跡に、土煙
@@ -468,7 +428,7 @@ export class ArenaRenderer {
             skillAura(ctx, this.styles[v.f], this.colors[v.f], v.x, v.y + 1, (phase - a0) / (a1 - a0), this.frame, spot?.f === v.f, (dx, dy, alpha) => drawHero(ctx, this.looks[v.f], NO_GEAR, v.x - dx, v.y + 1 + dy, { frame: this.frame, flip: true, alpha, action: 'cast', t: 0.5, ring: false }));
         }
         // --- キャラ（奥から順に） ---
-        const order = vis.filter((v) => v.alive || s.mode === 'royale' || (outro === 0 && this.diedAt(v.f, w, phase))).sort((a, b) => a.y - b.y || a.x - b.x);
+        const order = vis.sort((a, b) => a.y - b.y || a.x - b.x);
         for (const v of order)
             this.drawFighter(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), evaded.has(v.f), hits.get(v.f), targeted(v.f), atk);
         // 決め手: あなたが正しく動けたときだけ、効いた道具（または巻物・結界）を頭上に一瞬掲げ、武器へ吸いこませてから動く
@@ -520,8 +480,6 @@ export class ArenaRenderer {
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
             else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f))
                 this.floatText(ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
-            else if (e.type === 'storm' && v && e.dmg >= 0.5)
-                this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'storm');
             else if (e.type === 'attack' && ult?.f !== e.f) {
                 const bx = this.bossBody.x + ((e.f * 37) % 40) - 20, by = this.bossBody.y - 20 - ((e.f * 13) % 16);
                 this.damageNum(bx, by, e.dmg, fl, e.crit, 'boss');
@@ -561,7 +519,7 @@ export class ArenaRenderer {
             }
         }
         // --- 光と影: 全体を暗くして、光源のまわりだけ抜く。光源の色は加算で重ねる ---
-        this.applyLighting(ctx, scene, rage, !!chain, sa ? sceneDark(sa) : 0);
+        this.applyLighting(ctx, scene, !!chain, sa ? sceneDark(sa) : 0);
         // --- 手前の柱（カメラより速く動く。奥行き） ---
         this.foreground(ctx);
         // 画面下の進み具合（あなたの戦果が、正解するたびに積み上がる）。技名や「大技を潰した！」などの文字より奥に描く
@@ -573,23 +531,19 @@ export class ArenaRenderer {
             sceneTop(sa); // 大技の光・閃光・巨大な数字（明かりの影響を受けない）
         // --- ここから画面座標 ---
         ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
-        if (rage && phase > 0.84 && phase < 0.96)
-            this.rageOverlay();
         for (const fn of this.ui)
             fn();
         for (const fn of this.uiTop)
             fn();
         if (sa)
             sceneHud(sa); // 連携詠唱の字幕（画面座標）
-        this.bossBar(time, rage);
-        if (s.mode !== 'royale' && !chain)
-            this.attackBanner(atk, phase, scene, !!ult);
+        this.bossBar(time);
         const gagNow = [...this.mine].some((f) => this.gagOf(f)?.w === w) && phase > GAG[0] - 0.02 && phase < GAG[1] + 0.02;
         // 連携詠唱の見出しは、並び終えるまでの短いあいだだけ
         if (sa && cm && !gagNow)
             sceneBanner(ctx, scene, this.caseTitle(cm), chain ? phase * 1.8 : phase, AW, ult ? tl('ボスが大技の構え！') : chain ? tl('最後の大技の構え！ みんなで連携詠唱！') : s.theme?.labels?.[scene] ?? sceneHead(s.theme?.kind, scene), ult ? '#ff5a6e' : undefined);
         // あなたの動き（青い帯）: ボスの赤い帯が消えたあと、動き出す前に、答えた技の名前を見せる
-        if (!gagNow && !ult && !chain && !wv.sudden && scene !== 'spell')
+        if (!gagNow && !ult && !chain && scene !== 'spell')
             this.mineBand(ctx, w, phase, strikeOf, scene);
         this.ultimate(ctx, w, phase);
         if (outro === 0)
@@ -630,8 +584,6 @@ export class ArenaRenderer {
     progressBar = progressBar; // arena-hud.ts
     mineBand = mineBand; // arena-hud.ts
     bossBar = bossBar; // arena-hud.ts
-    attackBanner = attackBanner; // arena-hud.ts
-    rageOverlay = rageOverlay; // arena-hud.ts
     labelAt = labelAt; // arena-hud.ts
     youMarker = youMarker; // arena-hud.ts
     floatText = floatText; // arena-hud.ts

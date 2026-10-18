@@ -9,11 +9,11 @@ export async function miniBattle() {
     const wrap = h('div', { class: 'mini-battle' });
     let script = null;
     try {
-        script = scriptFor(await getBattle(), 'royale');
+        script = scriptFor(await getBattle());
     }
     catch { /* サーバーなし */ }
     if (!script) {
-        wrap.append(h('div', { class: 'mini-empty' }, h('p', {}, tl('ここに、みんなのキャラのバトルが映ります。')), h('p', { class: 'muted small' }, tl('提出が2件そろうと始まります。'))));
+        wrap.append(h('div', { class: 'mini-empty' }, h('p', {}, tl('ここに、みんなのキャラのバトルが映ります。')), h('p', { class: 'muted small' }, tl('最初の提出の採点が終わると始まります。'))));
         return wrap;
     }
     const staged = restage(script, pickStage(script, [], 'finals', 8));

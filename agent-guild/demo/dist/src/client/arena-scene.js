@@ -63,7 +63,7 @@ export function makeBackground() {
     g.fillRect(0, 0, 150, h);
     return c;
 }
-export function applyLighting(ctx, scene, rage, chain = false, extra = 0) {
+export function applyLighting(ctx, scene, chain = false, extra = 0) {
     const { w: AW, h: AH } = this.script.arena;
     if (!this.lightmap) {
         this.lightmap = document.createElement('canvas');
@@ -71,7 +71,7 @@ export function applyLighting(ctx, scene, rage, chain = false, extra = 0) {
         this.lightmap.height = AH;
     }
     const lm = this.lightmap.getContext('2d');
-    const dark = Math.min(0.9, (scene === 'fog' ? 0.62 : scene === 'illusion' ? 0.5 : chain ? 0.55 : rage ? 0.45 : 0.38) + extra);
+    const dark = Math.min(0.9, (scene === 'fog' ? 0.62 : scene === 'illusion' ? 0.5 : chain ? 0.55 : 0.38) + extra);
     lm.globalCompositeOperation = 'source-over';
     lm.clearRect(0, 0, AW, AH);
     lm.fillStyle = `rgba(6,4,18,${dark})`;

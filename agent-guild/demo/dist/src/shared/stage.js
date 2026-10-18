@@ -7,7 +7,7 @@ export const STAGE_LABELS = perLang(() => ({ finals: tl('上位'), me: tl('自�
 export function pickStage(script, mine, view, max = STAGE_MAX) {
     const n = script.fighters.length;
     const order = script.standings.slice().sort((a, b) => a.rank - b.rank).map((s) => s.f); // 順位順
-    if (n <= max || script.mode !== 'royale')
+    if (n <= max)
         return order.slice().sort((a, b) => a - b);
     if (view === 'all' && n <= STAGE_ALL_MAX)
         return order.slice().sort((a, b) => a - b);

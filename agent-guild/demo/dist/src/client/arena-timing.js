@@ -214,7 +214,7 @@ export function finisher(w) {
 // 再生速度の倍率（注目キャラの反撃・決着の瞬間はスロー）
 export function bandWave(w) {
     const s = this.script, wv = s.waves[w];
-    if (!wv || wv.sudden || this.chainOf(w) || this.ultOf(w) || this.sceneOf(w) === 'spell')
+    if (!wv || this.chainOf(w) || this.ultOf(w) || this.sceneOf(w) === 'spell')
         return false;
     const mine = [...this.mine].find((f) => !s.fighters[f].off);
     return mine !== undefined && wv.events.some((e) => e.type === 'strike' && e.f === mine);

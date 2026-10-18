@@ -629,7 +629,7 @@ function mainDemo(script, ticker, mine = []) {
         lastW = w;
         const wv = script.waves[w];
         wn.textContent = tl(`場面 {0} / {1}`, w + 1, script.waves.length);
-        title.textContent = wv?.sudden ? tl('最後の嵐') : script.cases[wv.caseIndex]?.title ?? '';
+        title.textContent = script.cases[wv.caseIndex]?.title ?? '';
     };
     ticker.add(canvas, (_t, dt) => {
         if (playing && dt > 0) {
@@ -737,14 +737,14 @@ function clip(script, w, mine, ticker, dir, label, from = 0.08, to = 0.92) {
 export async function renderAbout(root, opts = {}) {
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
     const data = await getDemoBattle();
-    const first = scriptFor(data, 'royale');
+    const first = scriptFor(data);
     if (!first)
         throw new Error(tl('デモの討伐データが読めませんでした'));
     // 見本の討伐でいちばん成績の良い冒険者を「あなたが送り出した冒険者」として見せる（目印はアニメーションの中だけ）。
     // 連携詠唱の結果は見ている人で変わるので、その人を見る人にして流し直す
     const best = first.standings.slice().sort((a, b) => a.rank - b.rank)[0]?.f ?? 0;
     const bestId = first.fighters[best]?.id;
-    const full = scriptFor(data, 'royale', undefined, bestId ? [bestId] : []) ?? first;
+    const full = scriptFor(data, bestId ? [bestId] : []) ?? first;
     const playUrl = opts.playUrl ?? '#/';
     const page = h('div', { class: 'lp' });
     const ticker = makeTicker(page);
@@ -773,7 +773,7 @@ export async function renderAbout(root, opts = {}) {
     // --- 討伐の再生 ---
     const demo = h('section', { class: 'lp-sec', id: 'lp-demo' }, h('h2', {}, tl('実際の討伐')), h('p', { class: 'lp-intro' }, tl(`見本の討伐「{0}」。討伐隊{1}人の記録です。ボスが動くたびに、冒険者それぞれのAIが「どう動くか」を答え、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。`, data.task.title, full.fighters.length)), mainDemo(full, ticker, [best]));
     // --- 演出のこだわり ---
-    const sceneWave = (sc) => full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.scene === sc);
+    const sceneWave = (sc) => full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.scene === sc);
     const fx = [];
     const spellW = sceneWave('spell');
     if (spellW >= 0)
@@ -781,7 +781,7 @@ export async function renderAbout(root, opts = {}) {
     // 必殺技: 巻物の大技（奥義・乱舞・召喚）で、あなたが主役になれる場面を優先
     const ultScenes = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
     const heroOk = (wv, f) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.success && e.used.skills.length > 0);
-    const ultW = (pred) => full.waves.findIndex((wv) => !wv.sudden && ultScenes.includes(full.cases[wv.caseIndex]?.scene ?? '') && !!full.cases[wv.caseIndex]?.keySkill && pred(wv));
+    const ultW = (pred) => full.waves.findIndex((wv) => ultScenes.includes(full.cases[wv.caseIndex]?.scene ?? '') && !!full.cases[wv.caseIndex]?.keySkill && pred(wv));
     let ougiW = ultW((wv) => heroOk(wv, best));
     if (ougiW < 0)
         ougiW = ultW(() => true);
@@ -800,7 +800,7 @@ export async function renderAbout(root, opts = {}) {
     }
     const guarded = (e) => e.type === 'strike' && !e.charmed && e.used.tools.includes('guardrail');
     const calm = (e) => e.type === 'strike' && !e.charmed;
-    const isIll = (wv) => !wv.sudden && full.cases[wv.caseIndex]?.scene === 'illusion';
+    const isIll = (wv) => full.cases[wv.caseIndex]?.scene === 'illusion';
     const mineGuarded = (e) => guarded(e) && e.f === best;
     let illW = full.waves.findIndex((wv) => isIll(wv) && wv.events.some(mineGuarded));
     if (illW < 0)
@@ -812,7 +812,7 @@ export async function renderAbout(root, opts = {}) {
         const e = (ev.find(mineGuarded) ?? ev.find(guarded) ?? ev.find(calm));
         fx.push({ title: tl('幻術と結界'), body: tl('ボスは偉い人の声をまねて、もっともらしい偽の命令を混ぜてくる。あやしい声が、光の壁にはじかれて砕け散る。'), w: illW, mine: [e.f] });
     }
-    const breathW = full.waves.findIndex((wv) => !wv.sudden && full.cases[wv.caseIndex]?.scene === 'breath' && wv.events.some((e) => e.type === 'strike' && e.success));
+    const breathW = full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.scene === 'breath' && wv.events.some((e) => e.type === 'strike' && e.success));
     if (breathW >= 0)
         fx.push({ title: tl('見切りと反撃'), body: tl('ボスの攻撃をひらりとかわし、すかさず反撃。武器ごとに、斬りかかる者もいれば、遠くから撃ちこむ者もいる。'), w: breathW, mine: [best] });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
@@ -829,9 +829,9 @@ export async function renderAbout(root, opts = {}) {
         const party = data.entrants.filter((e) => pick.includes(e)).map((e) => ({
             ...e, result: { ...e.result, cases: e.result.cases.map((c) => (c.caseId === cc.id ? { ...c, score: 1, runs: c.runs.map(() => 1), mpOut: false, chainUpto: len } : c)) },
         }));
-        const alt = party.length >= 2 ? scriptFor({ ...data, entrants: party }, 'royale', undefined, bestId ? [bestId] : []) : null;
+        const alt = party.length >= 2 ? scriptFor({ ...data, entrants: party }, bestId ? [bestId] : []) : null;
         const sc = alt ?? full;
-        const w = sc.waves.findIndex((wv) => !wv.sudden && sc.cases[wv.caseIndex]?.scene === 'chain');
+        const w = sc.waves.findIndex((wv) => sc.cases[wv.caseIndex]?.scene === 'chain');
         const me = sc.fighters.findIndex((f) => f.id === bestId);
         if (w >= 0)
             fx.push({

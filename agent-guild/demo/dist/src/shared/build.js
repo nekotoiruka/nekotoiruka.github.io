@@ -229,6 +229,12 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
         },
     };
 }
+// トークン数 → 重さの換算（computeCost と画面の表示で同じ式を使う）
+export const mainWeight = (tokens) => Math.min(COST_RULES.mainMaxPoints, Math.ceil(tokens / COST_RULES.mainTokensPerPoint));
+export const skillWeight = (tokens) => {
+    const extra = Math.max(0, Math.ceil((tokens - COST_RULES.skillFreeTokens) / COST_RULES.extraTokensPerPoint));
+    return { base: COST_RULES.skillCost, extra, total: COST_RULES.skillCost + extra };
+};
 export function computeCost(b, catalog = TOOL_CATALOG) {
     const byId = Object.fromEntries(catalog.map((t) => [t.id, t]));
     const R = COST_RULES;
@@ -236,13 +242,13 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
     const mt = estimateTokens(b.main.prompt);
     items.push({
         kind: 'main', label: tl('心得（システムプロンプト）'),
-        cost: Math.min(R.mainMaxPoints, Math.ceil(mt / R.mainTokensPerPoint)),
+        cost: mainWeight(mt),
         note: tl(`約{0}トークン`, mt),
     });
     for (const s of b.skills) {
         const t = estimateTokens(s.content);
-        const extra = Math.max(0, Math.ceil((t - R.skillFreeTokens) / R.extraTokensPerPoint));
-        items.push({ kind: 'skill', label: tl(`巻物: {0}`, s.name), cost: R.skillCost + extra, note: tl(`約{0}トークン{1}`, t, extra ? tl(`（超過+{0}）`, extra) : '') });
+        const { extra, total } = skillWeight(t);
+        items.push({ kind: 'skill', label: tl(`巻物: {0}`, s.name), cost: total, note: tl(`約{0}トークン{1}`, t, extra ? tl(`（超過+{0}）`, extra) : '') });
     }
     for (const id of b.tools) {
         const t = byId[id] ?? TOOL_BY_ID[id];

@@ -210,9 +210,6 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
             ox -= Math.sin(clamp01((k - 0.5) * 2) * Math.PI) * 2; // 撃った反動
         }
     }
-    for (const e of s.waves[w].events)
-        if (e.type === 'storm' && e.f === v.f && phase >= e.t && phase - e.t < 0.04)
-            set('hurt', 0);
     let rot = tilt, alpha = upose ? upose.alpha : 1;
     // 連携詠唱: 唱えない人（倒れている人も）は、輪ができるあいだに姿を消し、終わると戻ってくる
     const ch = this.chainOf(w);
@@ -231,8 +228,8 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         set('ko', k);
         rot = (Math.PI / 2) * ease(k * 1.4);
         oy -= Math.sin(Math.min(1, k * 2) * Math.PI) * 6;
-        // 討伐: 倒れたまま、うっすら残る（正しく動ければ起き上がる）。ほかのモードは消えて墓標になる
-        alpha = s.mode === 'royale' ? 1 - Math.min(0.45, Math.max(0, k - 0.75) * 2) : 1 - Math.max(0, k - 0.75) * 4;
+        // 倒れたまま、うっすら残る（正しく動ければ起き上がる）
+        alpha = 1 - Math.min(0.45, Math.max(0, k - 0.75) * 2);
     }
     const winNow = this.winner === v.f && v.alive && (outro > 0 || (w === s.waves.length - 1 && phase > (s.waves[w].events.find((e) => e.type === 'winner')?.t ?? 2)));
     if (winNow)
@@ -299,7 +296,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     drawHero(ctx, look, gear, x, y + 1, {
         frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
         ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
-        famPos: fam, skillGlow, teamColor: this.teamColor(v.f),
+        famPos: fam, skillGlow,
     });
     if (v.alive) {
         this.hpBar(ctx, v);
