@@ -358,12 +358,14 @@ export function barrierFx(ctx, x, y, g) {
 export function slashFx(ctx, x, y, k) {
     if (k <= 0 || k >= 1)
         return;
+    // 振り下ろし（左を向いて斬る）: 頭上のうしろ寄りから、前を回って前の下へ。弧の先が伸び、あとから尾が追いつく
+    const cx = x + 6, cy = y + 4, head = SWING_FROM + (SWING_TO - SWING_FROM) * ease(Math.min(1, k * 1.5)), tail = SWING_FROM + (SWING_TO - SWING_FROM) * ease(clamp01(k * 1.5 - 0.6));
     ctx.save();
     ctx.globalAlpha = 1 - k * 0.6;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3 - k * 2;
     ctx.beginPath();
-    ctx.arc(x + 6, y + 4, 12, Math.PI * (0.7 + k * 0.2), Math.PI * (1.5 + k * 0.2));
+    ctx.arc(cx, cy, 12, tail, head, true);
     ctx.stroke();
     ctx.restore();
 }
@@ -556,22 +558,25 @@ export function gagOf(f) {
     this.gagCache.set(f, out);
     return out;
 }
-// 振りの軌跡（スミア）: 弧を描く三日月形の光。会心は金色で大きく
+// 振りの軌跡（スミア）: 武器と同じ向きに回る三日月形の光。会心は金色で大きく
+//   冒険者は左（ボス）を向いているので、振り下ろしは「頭上のうしろ寄り → 頭上 → 前 → 前の下」（画面の角度は減っていく）
+const SWING_FROM = -0.9, SWING_TO = -3.6; // 終わりは前のやや下（振り終えた武器の向き）
 export function smearFx(ctx, x, y, k, crit, color) {
     if (k <= 0 || k >= 1)
         return;
     this.lights.push({ x, y, r: 35, a: 1 - k, col: color });
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const r = crit ? 22 : 17;
-    const a0 = Math.PI * (-0.55 + k * 0.15), a1 = Math.PI * (0.55 + k * 0.15);
-    const fade = 1 - k;
+    const r = crit ? 22 : 17, cx = x + 6, cy = y + 6;
+    const head = SWING_FROM + (SWING_TO - SWING_FROM) * ease(Math.min(1, k * 1.6));
+    const tail = SWING_FROM + (SWING_TO - SWING_FROM) * ease(clamp01(k * 1.6 - 0.55));
+    const fade = 1 - clamp01((k - 0.5) / 0.5);
     for (const [w, col, al] of [[7, color, 0.35], [4, crit ? '#ffe27a' : '#ffffff', 0.8], [1.5, '#ffffff', 1]]) {
         ctx.globalAlpha = al * fade;
         ctx.strokeStyle = col;
-        ctx.lineWidth = w * (1 - k * 0.5);
+        ctx.lineWidth = w;
         ctx.beginPath();
-        ctx.arc(x + 4, y + 4, r, Math.PI + a0, Math.PI + a1);
+        ctx.arc(cx, cy, r, tail, head, true);
         ctx.stroke();
     }
     ctx.restore();

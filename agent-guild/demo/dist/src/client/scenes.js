@@ -1352,8 +1352,8 @@ function ougiFx(a) {
         ctx.save();
         const cx = a.body.x + 4, cy = a.body.y - 10, L = 90;
         ctx.globalAlpha = 1 - win(k, 0.6, 1);
-        for (const [dx, dy] of [[1, 1], [1, -1]]) {
-            const t = dx === dy ? s : clamp01(s * 1.4 - 0.4);
+        for (const [dx, dy, first] of [[-1, 1, true], [-1, -1, false]]) { // 冒険者は右から左を向いて斬る: 右上→左下、右下→左上
+            const t = first ? s : clamp01(s * 1.4 - 0.4);
             ctx.strokeStyle = '#ffb000';
             ctx.lineWidth = 7;
             ctx.beginPath();
@@ -2624,8 +2624,9 @@ function ougiUlt(a, hero) {
             }
             else if (variant === 'katana') { // 月の弧を描く、斜めの一閃
                 const w = 12 * (1 - ease(ik)) + 2;
-                glowLine(ctx, sx - 96, ground - 210, sx + 64, ground + 12, w, '#e8f4ff', 1 - ik * ik);
-                glowArc(ctx, sx - 6, a.body.y - 10, 66, 66, -2.6, -2.6 + 1.9 * ease(clamp01(ik * 2)), 5 * (1 - ik) + 1, '#9fe8ff', 1 - ik);
+                glowLine(ctx, sx + 96, ground - 210, sx - 64, ground + 12, w, '#e8f4ff', 1 - ik * ik); // 冒険者は左を向いて斬る: 右上 → 左下
+                const arcHead = -0.54 - 1.9 * ease(clamp01(ik * 2)); // 月の弧は右（うしろ）から頭上を通って左（前）へ
+                glowArc(ctx, sx + 6, a.body.y - 10, 66, 66, arcHead, -0.54, 5 * (1 - ik) + 1, '#9fe8ff', 1 - ik);
             }
             else { // 五連の突き: 縦の細い斬撃が時間差で並ぶ
                 for (let i = 0; i < 5; i++) {
