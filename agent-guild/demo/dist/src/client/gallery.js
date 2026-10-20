@@ -8,6 +8,7 @@ import { ULT_SCENES, ultName } from './scenes.js';
 import { play, setSfx } from './sfx.js';
 import { WEAPON_KINDS, WEAPON_LABELS } from '../shared/catalog.js';
 import { reducedMotion } from './motion.js';
+import { FX_LOOK_BEFORE, FX_LOOK_DEFAULT, setFxLook } from './fxlook.js';
 import { h } from './ui.js';
 import { tl } from '../shared/i18n.js';
 const SCENE_JA = { ougi: tl('奥義（跳躍）'), rush: tl('乱舞'), summon: tl('召喚'), parry: tl('返し技'), seal: tl('封印'), awaken: tl('覚醒') };
@@ -236,7 +237,38 @@ async function main() {
         }
         requestAnimationFrame(loop);
     };
-    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
+    // ---- 見た目の調整: 光の強さ・くっきり度（このページのすべての再生に効く） ----
+    const GLOWS = [[1, 'いまのまま'], [0.7, '少し控えめ'], [0.45, '控えめ'], [0.2, 'ほぼなし']];
+    const CRISPS = [['auto', '場面ごと（必殺技だけ半分くっきり）'], [0, 'なめらか（前の見た目）'], [1, '半分くっきり'], [2, 'くっきり（ドット）']];
+    let chosen = { ...FX_LOOK_DEFAULT };
+    const lookNow = h('p', { class: 'small' });
+    const glowRow = h('div', { class: 'g-row' }), crispRow = h('div', { class: 'g-row' });
+    const syncLook = () => {
+        setFxLook(chosen);
+        for (const b of glowRow.querySelectorAll('button'))
+            b.classList.toggle('on', Number(b.dataset.k) === chosen.glow);
+        for (const b of crispRow.querySelectorAll('button'))
+            b.classList.toggle('on', b.dataset.k === String(chosen.crisp));
+        lookNow.textContent = `いまの組み合わせ: 光「${GLOWS.find((g) => g[0] === chosen.glow)?.[1] ?? chosen.glow}」・くっきり度「${CRISPS.find((c) => c[0] === chosen.crisp)?.[1]}」`;
+    };
+    for (const [k, label] of GLOWS)
+        glowRow.append(h('button', { class: 'btn g-chip', 'data-k': String(k), onclick: () => { chosen = { ...chosen, glow: k }; syncLook(); } }, label));
+    for (const [k, label] of CRISPS)
+        crispRow.append(h('button', { class: 'btn g-chip', 'data-k': String(k), onclick: () => { chosen = { ...chosen, crisp: k }; syncLook(); } }, label));
+    // 押しているあいだだけ、いまの見た目に戻して比べる
+    const holdBtn = h('button', { class: 'btn g-chip' }, '押しているあいだ「前の見た目」で見る');
+    const holdOn = (e) => { e.preventDefault(); setFxLook(FX_LOOK_BEFORE); holdBtn.classList.add('on'); };
+    const holdOff = () => { setFxLook(chosen); holdBtn.classList.remove('on'); };
+    holdBtn.addEventListener('pointerdown', holdOn);
+    holdBtn.addEventListener('pointerup', holdOff);
+    holdBtn.addEventListener('pointerleave', holdOff);
+    holdBtn.addEventListener('pointercancel', holdOff);
+    holdBtn.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter')
+        holdOn(e); });
+    holdBtn.addEventListener('keyup', holdOff);
+    syncLook();
+    const lookPanel = h('section', { class: 'card', style: 'position:sticky;top:0;z-index:5' }, h('h2', { class: 'g-title' }, '見た目の調整（光の強さ・くっきり度）'), h('p', { class: 'small muted' }, 'このページのすべての再生（大技・ボスの動き・連携詠唱）に効きます。光の強さは、明かり・閃光・光のにじみの濃さ。くっきり度は、エフェクトを1ドットの格子にそろえる度合いです（キャラとボスの絵は変わりません）。'), h('h3', {}, '光の強さ'), glowRow, h('h3', {}, 'くっきり度'), crispRow, h('div', { class: 'g-row' }, holdBtn), lookNow);
+    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), lookPanel, h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
         ['win', '貢献1位の発表（ファンファーレ）'], ['bossDown', 'ボス撃破'], ['chantDone', '連携詠唱の完成'], ['shout', '大魔法の名を叫ぶ'],
         ['spellImpact', '大魔法の着弾'], ['fanfare', 'ぬか喜びの小さなファンファーレ'], ['fail', 'ずっこける'],
     ].map(([k, label]) => h('button', { class: 'btn g-chip', onclick: () => { setSfx(true); play(k); } }, label)))), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), h('section', { class: 'card' }, crowdTitle, h('p', { class: 'small muted' }, '唱える人数ごとの立ち位置。あなたは必ず最後の節で、ボスに向いた左の先頭。3人までは魔法陣の中に立ち、4人からは陣のふちを囲みます。'), crowdBox, crowdRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));

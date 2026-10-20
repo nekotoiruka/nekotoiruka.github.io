@@ -17,7 +17,7 @@ import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
 import { bandWave, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
 import { sceneHead } from './bossmoves.js';
-import { applyLighting, foreground, makeBackground } from './arena-scene.js';
+import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
 // 円や楕円の半径が計算の途中で負になっても、描画で例外にしない（0として描く）
@@ -48,6 +48,7 @@ export class ArenaRenderer {
     frame = 0;
     cam = { x: 192, y: 108, z: 1 };
     shakeXY = { x: 0, y: 0 };
+    muzzles = new Map(); // そのコマの、各キャラの武器の先（飛び道具の出発点）
     ui = [];
     uiTop = [];
     deaths = new Map(); // 討伐では、倒れて起き上がって、また倒れることがある
@@ -68,6 +69,8 @@ export class ArenaRenderer {
     // 光源（毎フレーム集める）: 暗がりの中で、松明・火花・魔法陣・自分のキャラのまわりだけ明るくする
     lights = [];
     lightmap = null;
+    fxCanvas = null; // エフェクトを等倍で描く別の画面（fxLayer）
+    fxScene; // いま描いている場面（fxLayer が、必殺技の場面かどうかでくっきり度を変える）
     wall = null;
     constructor(canvas, script) {
         this.canvas = canvas;
@@ -127,6 +130,7 @@ export class ArenaRenderer {
     wave(w) {
         const wv = this.script.waves[w];
         const scene = this.sceneOf(w);
+        this.fxScene = scene;
         if (!wv || !isUltScene(scene))
             return wv;
         const key = `${w}:${[...this.mine].join(',')}`;
@@ -322,6 +326,9 @@ export class ArenaRenderer {
         ctx.fillStyle = '#120e20';
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         ctx.setTransform(SCALE * this.cam.z, 0, 0, SCALE * this.cam.z, SCALE * (AW / 2 + this.shakeXY.x) - SCALE * this.cam.z * this.cam.x, SCALE * (AH / 2 + this.shakeXY.y) - SCALE * this.cam.z * this.cam.y);
+        // 画面が揺れると、背景のふちの外（地の色）がのぞいて黒い線に見える。揺れているあいだは、少し大きくした背景を下に敷いてふさぐ
+        if (this.shakeXY.x || this.shakeXY.y)
+            ctx.drawImage(this.bg, -8, -8, this.bg.width + 16, this.bg.height + 16);
         ctx.drawImage(this.bg, 0, 0);
         if (this.wall) { // 奥の壁は、カメラの動きの 0.35 倍だけずらす
             const px = (this.cam.x - AW / 2) * 0.35, py = (this.cam.y - AH / 2) * 0.2;
@@ -362,7 +369,7 @@ export class ArenaRenderer {
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;
         if (sa)
-            sceneBack(sa);
+            this.fxLayer(ctx, (c) => sceneBack({ ...sa, ctx: c }));
         // --- ボス ---
         // 削りきれなかったとき: ボスはたまらず逃げ出す（よろめいて震え、跳び退いて画面の外へ）。討伐隊の勝ち
         const fleeT = this.escapeAt ? (w - this.escapeAt.wave) + phase - this.escapeAt.t + outro : -1;
@@ -390,7 +397,7 @@ export class ArenaRenderer {
             ctx.restore();
         }
         if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
-            this.attackFxBack(ctx, atk, phase, vis, targeted, scene);
+            this.fxLayer(ctx, (c) => this.attackFxBack(c, atk, phase, vis, targeted, scene));
         // --- 注目シーンの暗転（注目キャラとボスのあいだだけ明るく） ---
         if (spot && !ult) {
             const g = bump(phase, spot.at.t - 0.14, spot.at.t + 0.06);
@@ -434,10 +441,12 @@ export class ArenaRenderer {
         // 決め手: あなたが正しく動けたときだけ、効いた道具（または巻物・結界）を頭上に一瞬掲げ、武器へ吸いこませてから動く
         if (!chain && outro === 0)
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
-        if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
-            this.attackFxFront(ctx, atk, phase, vis, targeted, evaded, items);
-        if (sa)
-            sceneFront(sa);
+        this.fxLayer(ctx, (c) => {
+            if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
+                this.attackFxFront(c, atk, phase, vis, targeted, evaded, items);
+            if (sa)
+                sceneFront({ ...sa, ctx: c });
+        });
         if (scene === 'breath') {
             const g = bump(phase, 0.36, 0.62);
             if (g > 0)
@@ -449,25 +458,27 @@ export class ArenaRenderer {
                 this.lights.push({ x: this.bossBody.x, y: this.bossBody.y - 20, r: 110, a: g * 0.8, col: '#c77dff' });
         }
         // --- 反撃のツール技・飛び道具・ヒット ---
-        for (const v of vis) {
-            const st = strikeOf.get(v.f), at = attackOf.get(v.f);
-            if (!st || !at || !v.alive || ult?.f === v.f)
-                continue; // 大技の主役は、自分の演出で見せる
-            const big = spot?.f === v.f;
-            st.used.tools.filter((id) => !TOOL_BY_ID[id]?.decoy).forEach((id, i) => {
-                const t0 = at.t - 0.1 + i * 0.03;
-                const k = (phase - t0) / 0.14;
-                if (k < 0 || k > 1)
-                    return;
-                toolMove(ctx, id, this.styles[v.f], this.colors[v.f], { x: v.x, y: v.y }, this.bossBody, k, this.frame, `${w}:${v.f}:${id}`, big);
-            });
-            const wk = this.looks[v.f].weapon;
-            const age = phase - at.t;
-            if (!MELEE_WEAPONS.includes(wk) && age >= -0.06 && age < 0)
-                this.projectile(ctx, wk, v, this.bossBody, 1 + age / 0.06, at.crit);
-            if (age >= 0 && age < 0.09)
-                this.hitSpark(ctx, this.bossBody.x + (v.f % 3) * 6 - 6, this.bossBody.y - 8 + (v.f % 4) * 4, age / 0.09, at.crit);
-        }
+        this.fxLayer(ctx, (ctx) => {
+            for (const v of vis) {
+                const st = strikeOf.get(v.f), at = attackOf.get(v.f);
+                if (!st || !at || !v.alive || ult?.f === v.f)
+                    continue; // 大技の主役は、自分の演出で見せる
+                const big = spot?.f === v.f;
+                st.used.tools.filter((id) => !TOOL_BY_ID[id]?.decoy).forEach((id, i) => {
+                    const t0 = at.t - 0.1 + i * 0.03;
+                    const k = (phase - t0) / 0.14;
+                    if (k < 0 || k > 1)
+                        return;
+                    toolMove(ctx, id, this.styles[v.f], this.colors[v.f], { x: v.x, y: v.y }, this.bossBody, k, this.frame, `${w}:${v.f}:${id}`, big);
+                });
+                const wk = this.looks[v.f].weapon;
+                const age = phase - at.t;
+                if (!MELEE_WEAPONS.includes(wk) && age >= -0.06 && age < 0)
+                    this.projectile(ctx, wk, v, this.bossBody, 1 + age / 0.06, at.crit);
+                if (age >= 0 && age < 0.09)
+                    this.hitSpark(ctx, this.bossBody.x + (v.f % 3) * 6 - 6, this.bossBody.y - 8 + (v.f % 4) * 4, age / 0.09, at.crit);
+            }
+        });
         // --- 数字・ラベル ---
         for (const e of outro > 0 ? [] : wv.events) {
             const age = phase - e.t;
@@ -528,7 +539,7 @@ export class ArenaRenderer {
         this.progressBar(w, phase, strikeOf);
         ctx.restore();
         if (sa)
-            sceneTop(sa); // 大技の光・閃光・巨大な数字（明かりの影響を受けない）
+            this.fxLayer(ctx, (c) => sceneTop({ ...sa, ctx: c })); // 大技の光・閃光・巨大な数字（明かりの影響を受けない）
         // --- ここから画面座標 ---
         ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
         for (const fn of this.ui)
@@ -567,6 +578,7 @@ export class ArenaRenderer {
     barrierFx = barrierFx; // arena-fighter.ts
     slashFx = slashFx; // arena-fighter.ts
     applyLighting = applyLighting; // arena-scene.ts
+    fxLayer = fxLayer; // arena-scene.ts（光の強さ・くっきり度）
     foreground = foreground; // arena-scene.ts
     scrollFx = scrollFx; // arena-fighter.ts
     magicCircle = magicCircle; // arena-fighter.ts

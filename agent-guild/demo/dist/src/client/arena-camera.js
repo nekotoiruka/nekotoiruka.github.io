@@ -1,5 +1,5 @@
 import { bump, GAG, IMPACT, lerp, win01 } from './arena-common.js';
-import { ultCam, ultShake } from './scenes.js';
+import { shoutEndT, ultCam, ultShake, verseAt } from './scenes.js';
 import { shakeScale } from './motion.js';
 export function updateCamera(c) {
     const s = this.script;
@@ -104,16 +104,24 @@ export function updateCamera(c) {
     if (ult)
         shake = Math.max(shake, ultShake(ult.scene, phase, ult.f !== undefined, this.ultWeapon(ult.f)));
     if (chain) {
-        shake = phase < chain.view.start + 0.02 && phase > 0.02 ? 0 : shake; // 並ぶあいだは揺らさない
+        // 連携詠唱ではボスはふつうの攻撃をしないので、その揺れ（IMPACT の時刻）は使わない。
+        // （以前はここで揺れが残り、ちょうど5節目に一瞬だけ横揺れと、画面のふちの黒い線が出ていた）
         const c = chain.view;
+        shake = 0;
+        // 地鳴り: 残り3節（5〜7節目）から、力が満ちるにつれて揺れがだんだん強まり、叫び → タメ → 着弾へつながる
+        const r0 = verseAt(c, Math.max(0, c.len - 3));
         if (c.full) {
+            if (phase >= r0 && phase < c.impact) {
+                const build = win01(phase, r0, c.doneT), charge = win01(phase, shoutEndT(c), c.impact);
+                shake = 1 + build * 0.6 + charge * 1.4;
+            }
             const age = phase - c.impact;
             if (age >= 0 && age < 0.12)
                 shake = Math.max(shake, 7 * (1 - age / 0.12));
-            if (phase > c.doneT && phase < c.impact)
-                shake = Math.max(shake, 1);
         }
         else {
+            if (phase >= r0 && phase < c.breakT)
+                shake = 1 + 0.6 * win01(phase, r0, c.breakT); // 途切れる節まで高まって、ぷつりと止む
             const age = phase - c.breakT;
             if (age >= 0 && age < 0.05)
                 shake = Math.max(shake, 2);

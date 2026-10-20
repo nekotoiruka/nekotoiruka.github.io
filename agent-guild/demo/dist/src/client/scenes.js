@@ -1,6 +1,7 @@
 // 課題の種類（scene）ごとの、派手な場面演出。arena.ts から呼ばれる。
 // 時間はウェーブ内の進行度 phase（0..1）だけで決まる（シークしても同じ絵になる）。
 //   0.00〜0.26 予兆（何が起きそうか） / 0.26〜0.42 溜め / 0.42 着弾 / 0.44〜0.56 かわす・受ける / 0.52〜0.84 反撃
+import { deferText } from './fxlook.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
@@ -66,6 +67,8 @@ const alive = (a) => a.fighters.filter((v) => v.alive);
 function text(ctx, s, x, y, size, color, alpha = 1, outline = '#1a1c2c') {
     if (alpha <= 0)
         return;
+    if (deferText(ctx, (c) => text(c, s, x, y, size, color, alpha, outline)))
+        return; // くっきり化の画面には描かず、あとで元の細かさで
     ctx.save();
     ctx.globalAlpha = clamp01(alpha);
     ctx.font = `${size}px ${PIXEL_FONT}`;

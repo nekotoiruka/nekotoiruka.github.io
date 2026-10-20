@@ -79,6 +79,12 @@ const GRIP = {
 };
 // 振らずに構えるもの（盾・本・銃・弓・ギター）
 const HELD = ['shield', 'book', 'blaster', 'bow', 'guitar'];
+// 飛び道具・魔法が出る所（格子の列・行）。弓は矢をつがえる握りの前、光線銃は銃口、杖は宝珠、魔導書は開いたページの前、扇は先。
+// 近接の武器は刃先（使うのは主に飛び道具）
+const MUZZLE = {
+    bow: [7.5, 9], blaster: [11.5, 2.5], wand: [4, 2], book: [8.5, 4], fan: [5, 1],
+    spear: [3, 0], dagger: [2, 0], shield: [4, 4], axe: [5, 0], hammer: [4, 2], sword: [3, 0], katana: [4, 0], scythe: [12, 4], pan: [3, 3], umbrella: [5, 0], guitar: [3, 0],
+};
 // 先が光るもの（格子の列・行と、光の半径）
 const GLOW = { wand: [4, 2, 3.2], book: [4, 4, 2.5], blaster: [11, 2.5, 2] };
 const WEAPON_BASE = {
@@ -257,6 +263,44 @@ export function familiarHome(i, flip, frame) {
     const side = flip ? 1 : -1;
     return { x: side * (14 + i * 6) - 5 + Math.sin((frame + i * 13) / 9) * 1.5, y: -24 + i * 5 + Math.cos((frame + i * 7) / 7) * 2 };
 }
+// 手の武器の傾き（ラジアン。右向きのとき）
+function swingOf(act, t) {
+    if (act === 'attack')
+        return t < 0.4 ? -0.6 * (t / 0.4) : t < 0.65 ? 1.5 : 1.5 * (1 - (t - 0.65) / 0.35);
+    if (act === 'cast')
+        return -0.5;
+    if (act === 'guard')
+        return -0.2;
+    if (act === 'victory')
+        return -0.4; // 武器を高く掲げる（大きく倒すと顔にかかる）
+    if (act === 'dash')
+        return 0.9;
+    if (act === 'ko')
+        return 1.4;
+    return 0;
+}
+/** drawHero と同じポーズのときの、武器の先（飛び道具・魔法が出る所）の位置。描く処理と同じ計算をたどる */
+export function muzzleOf(look, cx, fy, d) {
+    const flip = !!d.flip, dir = flip ? -1 : 1, kind = look.weapon;
+    const act = d.action ?? 'idle';
+    const pose = { ...poseFor(act, d.t ?? 0, d.frame), side: flip };
+    const ox = cx - CW / 2, oy = fy - CH + 1;
+    const hp = handPos(pose);
+    const held = HELD.includes(kind);
+    const hx = (flip ? ox + CW - 1 - hp.x : ox + hp.x) + (held ? dir : 0), hy = oy + hp.y;
+    const ws = weaponSprite(kind, undefined, flip);
+    const [gx0, gy] = GRIP[kind], [mc, mr] = MUZZLE[kind];
+    const x0 = -(flip ? ws.width - 1 - (gx0 + 1) : gx0 + 1), y0 = -(gy + 1);
+    const px = x0 + (flip ? ws.width - 1 - (mc + 1) : mc + 1) + 0.5, py = y0 + mr + 1 + 0.5;
+    const a = dir * swingOf(act, d.t ?? 0) * (held ? 0.3 : 1);
+    let x = hx + px * Math.cos(a) - py * Math.sin(a), y = hy + px * Math.sin(a) + py * Math.cos(a);
+    if (d.rot) {
+        const r = d.rot * (flip ? -1 : 1), dx = x - cx, dy = y - fy;
+        x = cx + dx * Math.cos(r) - dy * Math.sin(r);
+        y = fy + dx * Math.sin(r) + dy * Math.cos(r);
+    }
+    return { x, y };
+}
 // 足元中心 (cx, fy) に描く。頭のてっぺんはおよそ fy-22、帽子込みで fy-26
 export function drawHero(ctx, look, gear, cx, fy, d) {
     const flip = !!d.flip;
@@ -304,21 +348,7 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
     const hp = handPos(pose);
     const hx = flip ? ox + CW - 1 - hp.x : ox + hp.x, hy = oy + hp.y;
     const act = d.action ?? 'idle';
-    let swing = 0;
-    if (act === 'attack') {
-        const t = d.t ?? 0;
-        swing = t < 0.4 ? -0.6 * (t / 0.4) : t < 0.65 ? 1.5 : 1.5 * (1 - (t - 0.65) / 0.35);
-    }
-    else if (act === 'cast')
-        swing = -0.5;
-    else if (act === 'guard')
-        swing = -0.2;
-    else if (act === 'victory')
-        swing = -0.4; // 武器を高く掲げる（大きく倒すと顔にかかる）
-    else if (act === 'dash')
-        swing = 0.9;
-    else if (act === 'ko')
-        swing = 1.4;
+    const swing = swingOf(act, d.t ?? 0);
     ctx.save();
     ctx.translate(hx, hy);
     const held = HELD.includes(look.weapon);

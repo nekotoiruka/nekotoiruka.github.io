@@ -3,7 +3,7 @@ import { CHAIN_T } from '../shared/simulate.js';
 import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
-import { drawHero, familiarHome, weaponSprite } from './hero.js';
+import { drawHero, familiarHome, weaponSprite, muzzleOf } from './hero.js';
 import { ultPose, verseAt } from './scenes.js';
 import { counterFor, isBaseScene } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
@@ -293,6 +293,8 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         this.motes(ctx, x, y, v.f);
     if (st && v.alive && outro === 0 && !this.chainOf(w))
         this.aura(ctx, x, y, v.f, st, phase);
+    // 武器の先の位置（飛び道具はここから出す。このあと同じコマで描く projectile が使う）
+    this.muzzles.set(v.f, muzzleOf(look, x, y + 1, { frame: this.frame + v.f * 7, flip, action, t: act01, rot }));
     drawHero(ctx, look, gear, x, y + 1, {
         frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
         ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
@@ -576,7 +578,10 @@ export function smearFx(ctx, x, y, k, crit, color) {
 }
 export function projectile(ctx, weapon, a, b, k, crit) {
     const arc = weapon === 'bow' ? 12 : 4;
-    const at = (kk) => ({ x: lerp(a.x, b.x, kk), y: lerp(a.y - 10, b.y - 8, kk) - Math.sin(kk * Math.PI) * arc });
+    // 出発点は武器の先（このコマで描いたキャラの、弓の前・銃口・杖の宝珠など）。わからないときは胸の高さ
+    const m = a.f !== undefined ? this.muzzles.get(a.f) : undefined;
+    const s0 = m ?? { x: a.x, y: a.y - 10 };
+    const at = (kk) => ({ x: lerp(s0.x, b.x, kk), y: lerp(s0.y, b.y - 8, kk) - Math.sin(kk * Math.PI) * arc });
     ctx.save();
     for (let i = 1; i <= 4; i++) {
         const p = at(Math.max(0, k - i * 0.06));

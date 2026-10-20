@@ -1,4 +1,6 @@
 import { Rng } from '../shared/rng.js';
+import { isUltScene } from './scenes.js';
+import { beginDefer, crispen, endDefer, fxLook, ULT_CRISP } from './fxlook.js';
 // --- 背景: 城の大広間（上に壁と旗と松明、下に石畳） ---
 export function makeBackground() {
     const { w, h } = this.script.arena;
@@ -77,12 +79,14 @@ export function applyLighting(ctx, scene, chain = false, extra = 0) {
     lm.fillStyle = `rgba(6,4,18,${dark})`;
     lm.fillRect(0, 0, AW, AH);
     lm.globalCompositeOperation = 'destination-out';
+    const glow = fxLook().glow; // 光の強さ（演出ギャラリーで選ぶ）
     for (const l of this.lights) {
         if (l.a <= 0 || l.r <= 0)
             continue;
+        const la = Math.min(1, l.a * glow);
         const g = lm.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
-        g.addColorStop(0, `rgba(0,0,0,${Math.min(1, l.a)})`);
-        g.addColorStop(0.5, `rgba(0,0,0,${Math.min(1, l.a) * 0.55})`);
+        g.addColorStop(0, `rgba(0,0,0,${la})`);
+        g.addColorStop(0.5, `rgba(0,0,0,${la * 0.55})`);
         g.addColorStop(1, 'rgba(0,0,0,0)');
         lm.fillStyle = g;
         lm.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
@@ -97,7 +101,7 @@ export function applyLighting(ctx, scene, chain = false, extra = 0) {
         const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 0.7);
         const hex = l.col.replace('#', '');
         const r = parseInt(hex.slice(0, 2), 16), gg = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-        g.addColorStop(0, `rgba(${r},${gg},${b},${0.16 * Math.min(1, l.a)})`);
+        g.addColorStop(0, `rgba(${r},${gg},${b},${0.16 * Math.min(1.5, l.a * glow)})`);
         g.addColorStop(1, `rgba(${r},${gg},${b},0)`);
         ctx.fillStyle = g;
         ctx.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
@@ -126,5 +130,55 @@ export function foreground(ctx) {
         ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
     }
     ctx.restore();
+}
+// エフェクトを、いったん等倍（1ドット）の別の画面に描いてから重ねる。光の強さ・くっきり度が既定のときは、そのまま描く。
+//   光を弱めると、薄いにじみ（濃さが 6 割未満の所）がそのぶん薄くなる。くっきり度を上げると、半透明が段に分かれる
+export function fxLayer(ctx, draw) {
+    const { glow, crisp: c0 } = fxLook();
+    const crisp = c0 === 'auto' ? (isUltScene(this.fxScene) ? ULT_CRISP : 0) : c0; // 場面ごと: 必殺技だけ半分くっきり
+    if (glow === 1 && crisp === 0) {
+        draw(ctx);
+        return;
+    }
+    const { w: AW, h: AH } = this.script.arena;
+    if (!this.fxCanvas) {
+        this.fxCanvas = document.createElement('canvas');
+        this.fxCanvas.width = AW;
+        this.fxCanvas.height = AH;
+    }
+    const lc = this.fxCanvas.getContext('2d', { willReadFrequently: true });
+    lc.setTransform(1, 0, 0, 1, 0, 0);
+    lc.clearRect(0, 0, AW, AH);
+    // いまのカメラ（ズーム・揺れ）を、等倍の画面に写す
+    const m = ctx.getTransform(), sc = ctx.canvas.width / AW;
+    lc.setTransform(m.a / sc, m.b / sc, m.c / sc, m.d / sc, m.e / sc, m.f / sc);
+    lc.imageSmoothingEnabled = false;
+    beginDefer(lc, sc);
+    let later = [];
+    try {
+        draw(lc);
+    }
+    finally {
+        later = endDefer();
+    }
+    lc.setTransform(1, 0, 0, 1, 0, 0);
+    const img = lc.getImageData(0, 0, AW, AH);
+    if (glow !== 1) {
+        const d = img.data;
+        for (let i = 3; i < d.length; i += 4)
+            if (d[i] && d[i] < 153)
+                d[i] = Math.min(152, Math.round(d[i] * glow));
+    }
+    crispen(img, crisp);
+    lc.putImageData(img, 0, 0);
+    ctx.save();
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(this.fxCanvas, 0, 0);
+    ctx.restore();
+    for (const f of later)
+        f(ctx); // 文字は、重ねたあとに元の細かさで
 }
 //# sourceMappingURL=arena-scene.js.map
