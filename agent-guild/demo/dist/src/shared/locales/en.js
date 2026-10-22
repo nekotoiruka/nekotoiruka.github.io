@@ -35,7 +35,6 @@ const d = {
     "結界": "Ward",
     "よけた！": "Dodged!",
     "打ち消した！": "Countered!",
-    "見破った！": "Saw through it!",
     "ガード！": "Blocked!",
     "はじいた！": "Deflected!",
     "撃ち落とした！": "Shot down!",

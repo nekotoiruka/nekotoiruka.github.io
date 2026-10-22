@@ -4,6 +4,13 @@
 // 竜（シーズン1）の対応技は、今までどおり。
 import { tl } from '../shared/i18n.js';
 export const isBaseScene = (s) => s === 'breath' || s === 'claw' || s === 'dive' || s === 'tail';
+// ---- 弱点の属性（隙の反撃と、奥義の色） ----
+// 竜（シーズン1）だけは、属性そのものが課題: 弱点は戦いの流れで変わり、隙では属性の名前を、逆鱗では「属性・逆鱗穿ち」を答える。
+//   提出ごとに属性の違う問題が出る（場面の element）。演出はその属性の色で当てる。
+// ほかのボスは属性を答えさせない。見るからに弱点の属性があるボスだけ、隙の反撃をその属性で固定して見せる。
+//   吸血鬼伯爵は日の光、氷の巨人は炎。弱点の属性がはっきりしないボス（大蜘蛛・ゴブリン・クラーケン・石の巨人）は属性なし（白い会心の一撃）
+const WEAKNESS = { vampire: '光', giant: '炎' };
+export const bossWeakness = (kind) => WEAKNESS[kindOf(kind)];
 const NAMES = {
     dragon: {
         atk: { claw: tl('ひっかき'), breath: tl('火炎ブレス'), tail: tl('尾のなぎはらい'), meteor: tl('隕石落とし'), nova: tl('全体爆発') },

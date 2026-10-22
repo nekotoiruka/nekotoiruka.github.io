@@ -127,7 +127,7 @@ export function evadeOf(w, f) {
     if (sc === 'spell')
         return 'chant'; // 呪文は、打ち消しの詠唱で跳ね返す（よけない）
     if (sc === 'illusion')
-        return 'resist'; // 幻術は、偽の声を見破ってその場で踏みとどまる（よけない）
+        return 'resist'; // 幻術は、結界が偽の声を弾き、その場で踏みとどまる（よけない）
     return counterFor(this.script.theme?.kind, sc)?.evade ?? this.evades[f];
 }
 export function cues(w) {

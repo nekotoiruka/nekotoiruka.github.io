@@ -715,7 +715,7 @@ function clawFx(a, boss = true) {
         flash(a, bump(p, 0.4, 0.44), '#ff3050', 0.3);
     }
 }
-// ---- 隙: よろめく竜 → 看破のモノクルで弱点の紋章 → 属性の大技 ----
+// ---- 隙: よろめくボス → （竜は）看破のモノクルで弱点の紋章 → 弱点の属性の大技（属性のないボスは白い会心の一撃） ----
 function openingFx(a) {
     const { ctx, phase: p } = a;
     const el = ELEMENT_COLOR[a.element ?? ''] ?? ELEMENT_COLOR['光'];
@@ -764,7 +764,7 @@ function openingFx(a) {
             ctx.lineTo(cx + r * 1.2, cy + r * 1.5);
             ctx.stroke();
         }
-        // 紋章（属性の文字）
+        // 紋章（属性の文字）: 属性を答える課題（竜）のときだけ
         ctx.restore();
         if (a.element)
             text(ctx, elementLabel(a.element), cx, cy, R(10 + lk * 10), el.main, lk, el.dark);
@@ -802,8 +802,9 @@ function openingFx(a) {
     const k = win(p, t0, t0 + 0.22);
     if (k <= 0 || k >= 1)
         return;
-    elementStrike(a, a.element ?? '光', k);
+    elementStrike(a, a.element ?? a.weakness ?? '', k);
 }
+// element が空なら属性なし: 白い会心の一撃（光の筋が放射状に走る）。属性の名前も叫ばない
 export function elementStrike(a, element, k) {
     const { ctx } = a;
     const el = ELEMENT_COLOR[element] ?? ELEMENT_COLOR['光'];
@@ -902,6 +903,25 @@ export function elementStrike(a, element, k) {
             ctx.arc(bx, by, 14 * (1 - k), 0, TAU);
             ctx.fill();
             break;
+        default: { // 属性なし: 体の中心から、白い光の筋が放射状に走る
+            const s = ease(clamp01(k * 2.2));
+            ctx.globalAlpha = 1 - win(k, 0.5, 1);
+            for (let i = 0; i < 8; i++) {
+                const t = (i / 8) * TAU + 0.2, L = (i % 2 ? 46 : 70) * s, w = i % 2 ? 2 : 3;
+                ctx.strokeStyle = i % 2 ? '#ffe9a0' : '#ffffff';
+                ctx.lineWidth = w;
+                ctx.beginPath();
+                ctx.moveTo(R(bx + Math.cos(t) * 8), R(by + Math.sin(t) * 8));
+                ctx.lineTo(R(bx + Math.cos(t) * (8 + L)), R(by + Math.sin(t) * (8 + L)));
+                ctx.stroke();
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(bx, by, R(10 * (1 - k * 0.7)), 0, TAU);
+            ctx.fill();
+            ctx.restore();
+            return;
+        }
     }
     ctx.restore();
     text(ctx, tl(`{0}！`, elementLabel(element)), bx + 30, by - 40, R(12 + 6 * bump(k, 0, 0.5)), el.main, 1 - win(k, 0.7, 1), el.dark);
@@ -1370,7 +1390,8 @@ function ougiFx(a) {
     // 技名（正解したキャラの答え）
     const own = hitters.find((v) => v.mine);
     const name = own ? own.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : tl('奥義');
-    const el = /^([炎氷雷風光闇])・/.exec(name)?.[1];
+    // 竜の逆鱗穿ち: 叫んだ属性の大技を重ねる。属性は提出ごとに変わるので、自分の答え（「炎・逆鱗穿ち」）を優先し、なければ場面の属性
+    const el = /^([炎氷雷風光闇])・/.exec(name)?.[1] ?? a.element;
     if (el)
         elementStrike(a, el, win(k, 0.3, 0.9));
     text(ctx, name, a.W / 2 + 20, a.H / 2 - 50, R(18 + 6 * bump(k, 0.15, 0.45)), '#ffd166', Math.min(1, k * 5, (1 - k) * 4), '#5a2a00');

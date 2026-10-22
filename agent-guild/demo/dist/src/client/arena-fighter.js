@@ -3,6 +3,7 @@ import { CHAIN_T } from '../shared/simulate.js';
 import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
+import { drawInArena } from './motionlab.js';
 import { drawHero, familiarHome, weaponSprite, muzzleOf } from './hero.js';
 import { SPELL_T, ultPose, verseAt } from './scenes.js';
 import { counterFor, isBaseScene } from './bossmoves.js';
@@ -70,7 +71,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
             oy -= 2;
         }
     }
-    // 呪文と幻術: 身をかわさず、その場で構えたまま（呪文は打ち消しの詠唱、幻術は偽の声を見破って踏みとどまる）
+    // 呪文と幻術: 身をかわさず、その場で構えたまま（呪文は打ち消しの詠唱、幻術は結界が偽の声を弾いて踏みとどまる）
     const holdSc = this.sceneOf(w);
     if (evaded && !uHero && holdSc === 'spell') {
         // 魔法弾が放たれてから押し返し終えるまで、両手を上げて唱え続ける（光の柱と魔法陣は scenes.ts の spellFx）
@@ -91,7 +92,12 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 ox += Math.sin(this.frame * 1.7) * 1;
         }
     }
-    else if (evaded && !uHero) {
+    // 見本帳で武器ごとに選んだ動き（見本帳は 0.40 で当たる。本番は IMPACT＝0.42 ＋ 届くまでの遅れ）
+    const proto = evaded && !uHero && v.alive ? this.protoOf(w, v.f) : null;
+    const protoT = phase - lag - 0.02;
+    const protoOn = !!proto && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
+    if (protoOn) { /* 動きは drawInArena が描く */ }
+    else if (evaded && !uHero && holdSc !== 'spell' && holdSc !== 'illusion') {
         const co = counterFor(this.script.theme?.kind, this.sceneOf(w)); // ボスごとの対応技（基本の4場面だけ）
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
         if (u > 0 && u < 1) {
@@ -316,11 +322,14 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         this.aura(ctx, x, y, v.f, st, phase);
     // 武器の先の位置（飛び道具はここから出す。このあと同じコマで描く projectile が使う）
     this.muzzles.set(v.f, muzzleOf(look, x, y + 1, { frame: this.frame + v.f * 7, flip, action, t: act01, rot }));
-    drawHero(ctx, look, gear, x, y + 1, {
-        frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
-        ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
-        famPos: fam, skillGlow,
-    });
+    if (protoOn)
+        drawInArena(ctx, { pattern: proto.pattern, resp: proto.resp, t: protoT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
+    else
+        drawHero(ctx, look, gear, x, y + 1, {
+            frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
+            ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
+            famPos: fam, skillGlow,
+        });
     if (v.alive) {
         this.hpBar(ctx, v);
         if (v.shield > 0)

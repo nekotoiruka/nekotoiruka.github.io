@@ -35,7 +35,6 @@ const d = {
     "結界": "Schutzbann",
     "よけた！": "Ausgewichen!",
     "打ち消した！": "Aufgehoben!",
-    "見破った！": "Durchschaut!",
     "ガード！": "Geblockt!",
     "はじいた！": "Abgewehrt!",
     "撃ち落とした！": "Abgeschossen!",

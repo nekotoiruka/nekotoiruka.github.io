@@ -16,7 +16,8 @@ import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark,
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
 import { bandWave, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
-import { sceneHead } from './bossmoves.js';
+import { bossWeakness, counterFor, sceneHead } from './bossmoves.js';
+import { protoPattern, respOf } from './motionlab.js';
 import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
@@ -275,12 +276,22 @@ export class ArenaRenderer {
     hitStop = hitStop; // arena-timing.ts
     lagOf = lagOf; // arena-timing.ts
     evadeOf = evadeOf; // arena-timing.ts
-    /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。属性が決まっていない課題は光 */
+    /** ボスの攻撃への対応（ガード・回避・ジャンプ・反撃）を、モーション見本帳で武器ごとに選んだ動きで見せる。false で以前の動き（演出ギャラリーで見比べる） */
+    motionProto = true;
+    protoOf(w, f) {
+        if (!this.motionProto)
+            return null;
+        const co = counterFor(this.script.theme?.kind, this.sceneOf(w));
+        const resp = co ? respOf(co.evade, co.fx) : null;
+        const pattern = resp ? protoPattern(resp, this.looks[f].weapon) : null;
+        return pattern && resp ? { pattern, resp } : null;
+    }
+    /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。竜は場面の属性、ほかのボスは決まった弱点（bossmoves.ts）。弱点の属性がないボスは undefined（ふだんの色） */
     elementTint(w) {
         if (this.sceneOf(w) !== 'opening')
             return undefined;
-        const e = this.script.cases[this.script.waves[w].caseIndex]?.element ?? '光';
-        return ELEMENT_COLOR[e] ?? ELEMENT_COLOR['光'];
+        const e = this.script.cases[this.script.waves[w].caseIndex]?.element ?? bossWeakness(this.script.theme?.kind);
+        return e ? ELEMENT_COLOR[e] : undefined;
     }
     // 効果音のきっかけ（ウェーブごとに1度だけ作る）。自分・注目キャラ・ボス・会心だけ鳴らす
     cueCache = new Map();
@@ -363,11 +374,11 @@ export class ArenaRenderer {
         const scene = this.sceneOf(w);
         const cm = s.cases[wv.caseIndex];
         const sa = scene && outro === 0 ? {
-            ctx, phase, frame: this.frame, scene, element: cm?.element, title: cm ? this.caseTitle(cm) : '',
+            ctx, phase, frame: this.frame, scene, element: cm?.element, weakness: bossWeakness(s.theme?.kind), title: cm ? this.caseTitle(cm) : '',
             foot: this.bossFoot, body: this.bossBody, W: AW, H: AH, seed: `${s.seed}:${w}`, theme: s.theme,
             fighters: vis.map((v) => {
                 const st = strikeOf.get(v.f), at = attackOf.get(v.f);
-                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), evaded: evaded.has(v.f), lag: this.lagOf(w, v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
+                return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), evaded: evaded.has(v.f), lag: this.lagOf(w, v.f), proto: evaded.has(v.f) && !!this.protoOf(w, v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
             }),
             ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,
@@ -498,8 +509,8 @@ export class ArenaRenderer {
             else if (e.type === 'hit' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
             else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f)
-                && !(this.evadeOf(w, e.f) === 'resist' && strikeOf.get(e.f)?.used.tools.includes('guardrail')))
-                this.floatText(// 結界で弾いた人は、場面の「弾いた！」だけ（重ねない）
+                && this.evadeOf(w, e.f) !== 'resist')
+                this.floatText(// 幻術は結界で弾いたかどうかだけ。弾いた人には場面が「弾いた！」を出す（ここでは重ねない）
                 ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
             else if (e.type === 'attack' && ult?.f !== e.f) {
                 const bx = this.bossBody.x + ((e.f * 37) % 40) - 20, by = this.bossBody.y - 20 - ((e.f * 13) % 16);

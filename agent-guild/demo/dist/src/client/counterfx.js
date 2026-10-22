@@ -13,7 +13,7 @@ export function counterFx(a) {
     const { ctx, phase: p } = a;
     // 対応技の動きをした（かわした）人だけ。動き（arena-fighter.ts）と同じく、技が届くのが遅れる分だけずらす
     for (const v of a.fighters)
-        if (v.alive && v.evaded)
+        if (v.alive && v.evaded && !v.proto)
             DRAW[co.fx](ctx, v, p - (v.lag ?? 0), a, co);
     const [l0, l1] = co.fx === 'mirror' ? [0.42, 0.58] : co.fx === 'trail' ? [0.42, 0.6] : [0.44, 0.6];
     partyLabel(a, co.color, bump(p, l0, l1)); // 正しく動けた自分の答え（ほかの人は「かわした」）
