@@ -123,7 +123,12 @@ export function lagOf(w, f) {
 }
 // 正しく動けたときの身のこなし: 基本の4場面は、ボスごとの対応技の動き。それ以外は、キャラごとの得意な動き
 export function evadeOf(w, f) {
-    return counterFor(this.script.theme?.kind, this.sceneOf(w))?.evade ?? this.evades[f];
+    const sc = this.sceneOf(w);
+    if (sc === 'spell')
+        return 'chant'; // 呪文は、打ち消しの詠唱で跳ね返す（よけない）
+    if (sc === 'illusion')
+        return 'resist'; // 幻術は、偽の声を見破ってその場で踏みとどまる（よけない）
+    return counterFor(this.script.theme?.kind, sc)?.evade ?? this.evades[f];
 }
 export function cues(w) {
     let c = this.cueCache.get(w);
@@ -159,7 +164,7 @@ export function cues(w) {
             c.push({ t: e.t, s: 'tool' });
         if (e.type === 'evade' && focus.has(e.f)) {
             const ev = this.evadeOf(w, e.f), co = counterFor(this.script.theme?.kind, sc);
-            c.push({ t: IMPACT + this.lagOf(w, e.f), s: co ? co.sfx : ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
+            c.push({ t: IMPACT + this.lagOf(w, e.f), s: co ? co.sfx : ev === 'chant' ? 'barrier' : ev === 'resist' ? 'shatter' : ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
         }
         if (e.type === 'hit' && focus.has(e.f))
             c.push({ t: IMPACT + this.lagOf(w, e.f), s: 'hurt' });

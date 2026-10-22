@@ -4,7 +4,7 @@ import { crownSprite, potionSprite, shieldIcon } from './sprites.js';
 import { drawHero, gearOf, lookOf, portrait } from './hero.js';
 import './bosses/index.js';
 import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
-import { isUltScene, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
+import { ELEMENT_COLOR, isUltScene, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
 import { AGILE, EVADE_LABEL, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, bump, clamp01, ease, lerp } from './arena-common.js';
 import { bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
@@ -275,6 +275,13 @@ export class ArenaRenderer {
     hitStop = hitStop; // arena-timing.ts
     lagOf = lagOf; // arena-timing.ts
     evadeOf = evadeOf; // arena-timing.ts
+    /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。属性が決まっていない課題は光 */
+    elementTint(w) {
+        if (this.sceneOf(w) !== 'opening')
+            return undefined;
+        const e = this.script.cases[this.script.waves[w].caseIndex]?.element ?? '光';
+        return ELEMENT_COLOR[e] ?? ELEMENT_COLOR['光'];
+    }
     // 効果音のきっかけ（ウェーブごとに1度だけ作る）。自分・注目キャラ・ボス・会心だけ鳴らす
     cueCache = new Map();
     cues = cues; // arena-timing.ts
@@ -473,10 +480,11 @@ export class ArenaRenderer {
                 });
                 const wk = this.looks[v.f].weapon;
                 const age = phase - at.t;
+                const tint = this.elementTint(w); // 隙の場面: 弱点の属性の色で当てる
                 if (!MELEE_WEAPONS.includes(wk) && age >= -0.06 && age < 0)
-                    this.projectile(ctx, wk, v, this.bossBody, 1 + age / 0.06, at.crit);
+                    this.projectile(ctx, wk, v, this.bossBody, 1 + age / 0.06, at.crit, tint?.main);
                 if (age >= 0 && age < 0.09)
-                    this.hitSpark(ctx, this.bossBody.x + (v.f % 3) * 6 - 6, this.bossBody.y - 8 + (v.f % 4) * 4, age / 0.09, at.crit);
+                    this.hitSpark(ctx, this.bossBody.x + (v.f % 3) * 6 - 6, this.bossBody.y - 8 + (v.f % 4) * 4, age / 0.09, at.crit, tint);
             }
         });
         // --- 数字・ラベル ---
@@ -489,8 +497,10 @@ export class ArenaRenderer {
             if (e.type === 'strike') { /* 正否は体のまわりのオーラで見せる（auras） */ }
             else if (e.type === 'hit' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
-            else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f))
-                this.floatText(ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
+            else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f)
+                && !(this.evadeOf(w, e.f) === 'resist' && strikeOf.get(e.f)?.used.tools.includes('guardrail')))
+                this.floatText(// 結界で弾いた人は、場面の「弾いた！」だけ（重ねない）
+                ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
             else if (e.type === 'attack' && ult?.f !== e.f) {
                 const bx = this.bossBody.x + ((e.f * 37) % 40) - 20, by = this.bossBody.y - 20 - ((e.f * 13) % 16);
                 this.damageNum(bx, by, e.dmg, fl, e.crit, 'boss');

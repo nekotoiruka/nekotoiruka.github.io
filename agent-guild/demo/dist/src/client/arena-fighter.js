@@ -4,7 +4,7 @@ import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
 import { drawHero, familiarHome, weaponSprite, muzzleOf } from './hero.js';
-import { ultPose, verseAt } from './scenes.js';
+import { SPELL_T, ultPose, verseAt } from './scenes.js';
 import { counterFor, isBaseScene } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 import { reducedMotion } from './motion.js';
@@ -70,7 +70,28 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
             oy -= 2;
         }
     }
-    if (evaded && !uHero) {
+    // 呪文と幻術: 身をかわさず、その場で構えたまま（呪文は打ち消しの詠唱、幻術は偽の声を見破って踏みとどまる）
+    const holdSc = this.sceneOf(w);
+    if (evaded && !uHero && holdSc === 'spell') {
+        // 魔法弾が放たれてから押し返し終えるまで、両手を上げて唱え続ける（光の柱と魔法陣は scenes.ts の spellFx）
+        const k = win(SPELL_T.launch - 0.06, SPELL_T.back + 0.04);
+        if (k > 0 && k < 1) {
+            set('cast', 0.5);
+            oy -= 1 + Math.sin(this.frame / 5) * 0.8;
+            if (phase > SPELL_T.caught && phase < SPELL_T.push)
+                ox += Math.sin(this.frame * 1.3) * 0.6;
+        }
+    }
+    else if (evaded && !uHero && holdSc === 'illusion') {
+        // 偽の声が届くあいだ、身構えて耳を貸さない。声の文字が砕ける瞬間に、ぐっと踏みとどまる
+        const k = win(0.14, 0.52);
+        if (k > 0 && k < 1) {
+            set('guard', 1);
+            if (phase > 0.36 && phase < 0.44)
+                ox += Math.sin(this.frame * 1.7) * 1;
+        }
+    }
+    else if (evaded && !uHero) {
         const co = counterFor(this.script.theme?.kind, this.sceneOf(w)); // ボスごとの対応技（基本の4場面だけ）
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
         if (u > 0 && u < 1) {
@@ -201,7 +222,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 else
                     set('walk', 0);
                 if (phase >= at.t - 0.02 && phase < at.t + 0.06)
-                    this.smearFx(ctx, v.x + ox - 8, v.y + oy - 14, win(at.t - 0.02, at.t + 0.06), at.crit, this.colors[v.f]?.main ?? '#ffffff');
+                    this.smearFx(ctx, v.x + ox - 8, v.y + oy - 14, win(at.t - 0.02, at.t + 0.06), at.crit, this.elementTint(w)?.main ?? this.colors[v.f]?.main ?? '#ffffff'); // 隙の場面は弱点の属性の色
             }
         }
         else if (phase > at.t - 0.14 && phase < at.t + 0.06) {
@@ -581,7 +602,7 @@ export function smearFx(ctx, x, y, k, crit, color) {
     }
     ctx.restore();
 }
-export function projectile(ctx, weapon, a, b, k, crit) {
+export function projectile(ctx, weapon, a, b, k, crit, tint) {
     const arc = weapon === 'bow' ? 12 : 4;
     // 出発点は武器の先（このコマで描いたキャラの、弓の前・銃口・杖の宝珠など）。わからないときは胸の高さ
     const m = a.f !== undefined ? this.muzzles.get(a.f) : undefined;
@@ -604,7 +625,7 @@ export function projectile(ctx, weapon, a, b, k, crit) {
     }
     else {
         const r = crit ? 3 : 2;
-        ctx.fillStyle = weapon === 'blaster' ? '#63d471' : weapon === 'wand' ? '#c77dff' : '#5fcde4';
+        ctx.fillStyle = tint ?? (weapon === 'blaster' ? '#63d471' : weapon === 'wand' ? '#c77dff' : '#5fcde4');
         ctx.fillRect(rx - r, ry - r, r * 2 + 1, r * 2 + 1);
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(rx - 1, ry - 1, 2, 2);
@@ -612,17 +633,18 @@ export function projectile(ctx, weapon, a, b, k, crit) {
     ctx.restore();
 }
 // 当たりの火花: 中心の白い閃光 → 放射状の光の筋 → 広がる輪 → 飛び散る粒
-export function hitSpark(ctx, x, y, k, crit) {
-    this.lights.push({ x, y, r: (crit ? 60 : 40) * (1 - k * 0.5), a: 1 - k, col: crit ? '#ffcf3a' : '#9fe0ff' });
+// tint: 属性の色（隙の場面で、弱点の属性を突いたとき）。{ main, light } を渡すと、火花と光の色がその属性になる
+export function hitSpark(ctx, x, y, k, crit, tint) {
+    this.lights.push({ x, y, r: (crit ? 60 : 40) * (1 - k * 0.5), a: 1 - k, col: tint ? tint.main : crit ? '#ffcf3a' : '#9fe0ff' });
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const rng = new Rng(`spark:${Math.round(x)}:${Math.round(y)}`);
-    const col = crit ? '#ffcf3a' : '#9fe0ff';
+    const col = tint ? (crit ? tint.light : tint.main) : crit ? '#ffcf3a' : '#9fe0ff';
     if (k < 0.35) {
         const r = (crit ? 14 : 9) * (1 - k / 0.35);
         const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.6);
         g.addColorStop(0, 'rgba(255,255,255,1)');
-        g.addColorStop(0.4, crit ? 'rgba(255,220,90,0.8)' : 'rgba(160,220,255,0.7)');
+        g.addColorStop(0.4, tint ? `${tint.main}cc` : crit ? 'rgba(255,220,90,0.8)' : 'rgba(160,220,255,0.7)');
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g;
         ctx.beginPath();

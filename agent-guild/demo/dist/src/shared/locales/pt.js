@@ -34,6 +34,8 @@ const d = {
     "気配の鈴": "Sino da presença",
     "結界": "Barreira",
     "よけた！": "Desviou!",
+    "打ち消した！": "Anulado!",
+    "見破った！": "Desmascarou!",
     "ガード！": "Bloqueou!",
     "はじいた！": "Rebateu!",
     "撃ち落とした！": "Abateu!",

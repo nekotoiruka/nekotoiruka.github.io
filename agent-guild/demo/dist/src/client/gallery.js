@@ -92,7 +92,9 @@ async function main() {
     };
     // ---- ボスのモーション: ボス × 場面。見本の討伐のふつうの場面の上で、ボスの種類と場面を差し替えて再生する ----
     const normW = Math.max(0, full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.kind === 'normal'));
-    let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false;
+    let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false, mElement = '炎';
+    const ELEMENTS = ['炎', '氷', '雷', '風', '光', '闇'];
+    const mElementRow = h('div', { class: 'g-row' });
     const mWrap = h('div', { class: 'canvas-wrap' });
     const mTitle = h('h2', { class: 'g-title' });
     const mCounter = h('p', { class: 'small' });
@@ -105,7 +107,9 @@ async function main() {
         // 正しく動けた冒険者の答えを、この組み合わせの対応技の説明に差し替える（技名の表示と吹き出しが、動きと一致するように）
         const counter = COUNTER_NAMES[mKind][mScene] ?? '（共通の動き）'; // （ で始まる答えは、技名・呪文名として出さない
         const waves = full.waves.map((wv, i) => (i !== normW ? wv : { ...wv, events: wv.events.map((e) => (e.type === 'strike' && e.success ? { ...e, excerpt: counter } : e)) }));
-        const sc = { ...full, waves, theme, boss: { ...full.boss, name: b.name } };
+        // 隙の場面: 弱点の属性を差し替える（属性の大技と、冒険者の当たりの色が変わる）
+        const cases = full.cases.map((c, i) => (i === full.waves[normW].caseIndex ? { ...c, element: mElement } : c));
+        const sc = { ...full, waves, cases, theme, boss: { ...full.boss, name: b.name } };
         const cv = h('canvas', { class: 'arena-canvas pixel' });
         mr = new ArenaRenderer(cv, sc);
         mr.muted = true;
@@ -121,9 +125,14 @@ async function main() {
             x.classList.toggle('on', x.dataset.k === mKind);
         for (const x of mSceneRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === mScene);
+        for (const x of mElementRow.querySelectorAll('button'))
+            x.classList.toggle('on', x.dataset.k === mElement);
+        mElementRow.hidden = mScene !== 'opening';
     };
     for (const b of BOSSES)
         mKindRow.append(h('button', { class: 'btn g-chip', 'data-k': b.kind, onclick: () => { mKind = b.kind; makeMotion(); } }, b.name));
+    for (const e of ELEMENTS)
+        mElementRow.append(h('button', { class: 'btn g-chip', 'data-k': e, onclick: () => { mElement = e; makeMotion(); } }, `弱点：${e}`));
     for (const m of MOTION_SCENES)
         mSceneRow.append(h('button', { class: 'btn g-chip', 'data-k': m.scene, onclick: () => { mScene = m.scene; makeMotion(); } }, m.name));
     const mAutoBtn = h('button', { class: 'btn', onclick: () => { mAuto = !mAuto; mAutoBtn.textContent = mAuto ? '順番に見る：オン' : '順番に見る：オフ'; } }, '順番に見る：オフ');
@@ -268,7 +277,7 @@ async function main() {
     holdBtn.addEventListener('keyup', holdOff);
     syncLook();
     const lookPanel = h('section', { class: 'card', style: 'position:sticky;top:0;z-index:5' }, h('h2', { class: 'g-title' }, '見た目の調整（光の強さ・くっきり度）'), h('p', { class: 'small muted' }, 'このページのすべての再生（大技・ボスの動き・連携詠唱）に効きます。光の強さは、明かり・閃光・光のにじみの濃さ。くっきり度は、エフェクトを1ドットの格子にそろえる度合いです（キャラとボスの絵は変わりません）。'), h('h3', {}, '光の強さ'), glowRow, h('h3', {}, 'くっきり度'), crispRow, h('div', { class: 'g-row' }, holdBtn), lookNow);
-    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), lookPanel, h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
+    root.replaceChildren(h('div', { class: 'gallery' }, h('h1', {}, tl('演出ギャラリー')), h('p', { class: 'small muted' }, tl(`見本の討伐（{0}）の上で、主役の場面と武器を差し替えて再生しています。`, data.task.title)), lookPanel, h('section', { class: 'card' }, title, sub, h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'g-row' }, playBtn, autoBtn, soundBtn), h('h3', {}, tl('場面')), sceneRow, h('h3', {}, tl('武器')), weaponRow), h('section', { class: 'card' }, mTitle, h('p', { class: 'small muted' }, `ボスの攻撃の準備（予兆・溜め）と攻撃のモーション。ボスの種類ごとに、場面の予兆に合わせて動きます。${reducedMotion() ? 'いまは「視差効果を減らす」設定なので、震えと残像は出していません。' : '「視差効果を減らす」設定のときは、震えと残像を出しません。'}`), mCounter, mWrap, h('div', { class: 'g-row' }, mAutoBtn), h('h3', {}, 'ボス'), mKindRow, h('h3', {}, '場面'), mSceneRow, mElementRow), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '効果音（討伐の山場と最後）'), h('p', { class: 'small muted' }, 'ボタンを押すと、その音だけを鳴らします（音量に注意）。'), h('div', { class: 'g-row' }, ...[
         ['win', '貢献1位の発表（ファンファーレ）'], ['bossDown', 'ボス撃破'], ['chantDone', '連携詠唱の完成'], ['shout', '大魔法の名を叫ぶ'],
         ['spellImpact', '大魔法の着弾'], ['fanfare', 'ぬか喜びの小さなファンファーレ'], ['fail', 'ずっこける'],
     ].map(([k, label]) => h('button', { class: 'btn g-chip', onclick: () => { setSfx(true); play(k); } }, label)))), h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱のテンポ'), h('p', { class: 'small muted' }, '節の詠唱・大魔法の名の叫び・光の柱までのタメ・着弾とそのあとを、どのくらいゆっくり見せるか。下の2つに同時に効きます。'), tempoRow), h('section', { class: 'card' }, crowdTitle, h('p', { class: 'small muted' }, '唱える人数ごとの立ち位置。あなたは必ず最後の節で、ボスに向いた左の先頭。3人までは魔法陣の中に立ち、4人からは陣のふちを囲みます。'), crowdBox, crowdRow), ...(chains[0] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（成功・あなたが最後の第7節）'), chains[0].box)] : []), ...(chains[1] ? [h('section', { class: 'card' }, h('h2', { class: 'g-title' }, '連携詠唱（失敗・あなたが第7節で詰まる）'), chains[1].box)] : [])));
