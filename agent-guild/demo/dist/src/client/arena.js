@@ -380,7 +380,7 @@ export class ArenaRenderer {
                 const st = strikeOf.get(v.f), at = attackOf.get(v.f);
                 return { f: v.f, x: v.x, y: v.y, alive: v.alive, ok: !!st?.success, hit: hits.has(v.f), evaded: evaded.has(v.f), lag: this.lagOf(w, v.f), proto: evaded.has(v.f) && !!this.protoOf(w, v.f), tools: st?.used.tools ?? [], skills: st?.used.skills ?? [], charmed: !!st?.charmed, haunted: !!st?.haunted, atT: at?.t, excerpt: st?.excerpt ?? '', mine: this.mine.has(v.f) };
             }),
-            ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
+            ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, look: ult.f !== undefined ? this.looks[ult.f] : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,
             partyX: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)),
             bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),

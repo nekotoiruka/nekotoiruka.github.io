@@ -12,6 +12,7 @@ import { FX_LOOK_BEFORE, FX_LOOK_DEFAULT, setFxLook } from './fxlook.js';
 import { h } from './ui.js';
 import { tl } from '../shared/i18n.js';
 import { bossWeakness } from './bossmoves.js';
+import { MOVE_LABEL, ultMove } from './ultmoves.js';
 const SCENE_JA = { ougi: tl('奥義（跳躍）'), rush: tl('乱舞'), summon: tl('召喚'), parry: tl('返し技'), seal: tl('封印'), awaken: tl('覚醒') };
 const SECONDS_PER_WAVE = 3.4;
 // ボスのモーション: ボスの種類（と、そのボスのブレスの種類）と、見せる場面（bossmotion.ts の moveFor で動きが決まる）
@@ -68,7 +69,7 @@ async function main() {
         for (const b of ultElRow.querySelectorAll('button'))
             b.classList.toggle('on', b.dataset.k === ultEl);
         title.textContent = tl(`{0}：「{1}」`, SCENE_JA[scene] ?? scene, ultName(scene, weapon));
-        sub.textContent = tl(`武器: {0}`, WEAPON_LABELS[weapon]);
+        sub.textContent = `${tl(`武器: {0}`, WEAPON_LABELS[weapon])} ／ 型: ${MOVE_LABEL[ultMove(scene, weapon)] ?? ''}（モーション見本帳で選んだ案）`;
         for (const b of sceneRow.querySelectorAll('button'))
             b.classList.toggle('on', b.dataset.k === scene);
         for (const b of weaponRow.querySelectorAll('button'))
