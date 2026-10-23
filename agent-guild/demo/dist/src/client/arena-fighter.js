@@ -4,7 +4,7 @@ import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
 import { drawInArena } from './motionlab.js';
-import { drawHero, familiarHome, weaponSprite, muzzleOf } from './hero.js';
+import { drawHero, familiarHome, familiarSprite, weaponSprite, muzzleOf } from './hero.js';
 import { SPELL_T, ultPose, verseAt } from './scenes.js';
 import { counterFor, isBaseScene } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
@@ -203,12 +203,17 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         if (phase - IMPACT - lag < 0.025)
             flash = true;
     }
-    // 反撃: 近づく武器は、助走 → 一撃 → 余韻 → 戻る を別々のイージングで
-    if (at && !uHero) {
+    // 反撃: 近づく武器は、助走 → 一撃 → 余韻 → 戻る を別々のイージングで。
+    // 詠唱合戦では、跳ね返した魔法弾が反撃なので、斬りかからない・撃たない
+    if (at && !uHero && this.sceneOf(w) !== 'spell') {
         const melee = MELEE_WEAPONS.includes(this.looks[v.f].weapon);
         if (melee) {
             // ため（後ろへ沈む）→ 一瞬で踏み込む → 一撃（振りの軌跡）→ 余韻で止まる → ゆっくり戻る
-            const tx = this.bossFoot.x + 46, ty = Math.max(this.bossFoot.y - 30, Math.min(this.bossFoot.y + 10, v.y));
+            // 踏みこむ先: 並びの上下（98〜194）を、ボスの前の高さ（足元の34上〜12下）に縮めて写す。下の列ほど少し手前（右）。
+            // どの列も別の高さで斬りかかるので、技の動きとエフェクトが重ならない（以前は下の2列が同じ高さにそろっていた）
+            // 同じ段の前・中・後ろの列は、高さと奥行きを少しずつずらす
+            const row = clamp01((v.y - 98) / 96), col = Math.max(-1, Math.min(1, (v.x - 248) / 70));
+            const tx = this.bossFoot.x + 42 + row * 12 + col * 8, ty = this.bossFoot.y - 34 + row * 46 + col * 5;
             const wind = win(at.t - 0.2, at.t - 0.12), go = win(at.t - 0.12, at.t - 0.02), back = win(at.t + 0.08, at.t + 0.2);
             if (wind > 0 && back < 1) {
                 const g = go * go * go * (1 - ease(back)); // 加速しながら一気に（イーズイン）
@@ -290,15 +295,6 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         const p = this.proj(v.x, v.y - 46);
         this.uiTop.push(() => this.labelAt(tl('！'), p.x, p.y, '#ff5a6e', 10));
     }
-    // お供: 反撃のときいっしょにボスへ飛んでいく
-    const fam = [null];
-    if (at && !uHero) {
-        const g = ease(bump(phase, at.t - 0.1, at.t + 0.06));
-        if (g > 0) {
-            const home = familiarHome(0, true, this.frame);
-            fam[0] = { x: lerp(home.x, this.bossBody.x - v.x - 5, g), y: lerp(home.y, this.bossBody.y - v.y - 10, g) - Math.sin(g * Math.PI) * 14 };
-        }
-    }
     for (const gh of ghosts)
         drawHero(ctx, this.looks[v.f], NO_GEAR, v.x + gh.x, v.y + 1 + gh.y, { frame: this.frame, flip, alpha: gh.a, action: gh.act ?? 'dash', ring: false });
     const skillGlow = uHero ? bump(phase, 0.28, 0.66) : st?.used.skills.length && at && this.skillWave(w) ? bump(phase, at.t - 0.12, at.t) : 0;
@@ -315,7 +311,8 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         }
     }
     // 巻物の飾り（頭上を回る）は自分の冒険者だけ。ほかの人は、巻物を持っていれば本数の分からない燐光だけ
-    const own = this.mine.has(v.f), gear = own ? this.gears[v.f] : { ...this.gears[v.f], charms: [] };
+    // お供は冒険者の絵に含めず、あとで別に描く（回避の残像・回転・色ぬりに巻きこまない）
+    const own = this.mine.has(v.f), gear = { ...this.gears[v.f], fams: [], ...(own ? {} : { charms: [] }) };
     if (!own && this.gears[v.f].charms.length && v.alive && (alpha ?? 1) > 0.5)
         this.motes(ctx, x, y, v.f);
     if (st && v.alive && outro === 0 && !this.chainOf(w))
@@ -328,8 +325,11 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         drawHero(ctx, look, gear, x, y + 1, {
             frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
             ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
-            famPos: fam, skillGlow,
+            skillGlow,
         });
+    const pet = this.gears[v.f].fams[0];
+    if (pet)
+        this.petFx(ctx, v, pet, chain ? x : v.x, chain ? y : v.y, st, phase, { alpha, own, busy: !!chain || outro > 0 || uHero });
     if (v.alive) {
         this.hpBar(ctx, v);
         if (v.shield > 0)
@@ -732,5 +732,16 @@ export function aura(ctx, x, y, f, st, phase) {
     }
     ctx.restore();
     this.lights.push({ x, y: y - 12, r: 20, a: 0.45 * k, col: ok ? '#7bed9f' : '#ff5a6e' });
+}
+// お供: いまは主の立ち位置のそばで待つだけ（ボスへは飛んでいかない。主の回避の動きにも巻きこまない）。
+// 役割（AIエージェントならではの見せ方）は検討中。ふわふわの揺れは、冒険者ごとにずらす
+export function petFx(ctx, v, pet, ax, ay, _st, _phase, o) {
+    const fr = this.frame + v.f * 17;
+    const home = familiarHome(0, true, fr);
+    const sp = familiarSprite(pet.kind, pet.color, Math.floor(fr / 9), true);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, o.alpha));
+    ctx.drawImage(sp, Math.round(ax + home.x + 5 - sp.width / 2), Math.round(ay + 1 + home.y));
+    ctx.restore();
 }
 //# sourceMappingURL=arena-fighter.js.map

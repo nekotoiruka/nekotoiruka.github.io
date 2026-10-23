@@ -10,6 +10,7 @@ import { demoMode, getBattle, getMe, getSeason, scriptFor } from '../api.js';
 import { avatarCanvas, fmtMs, h, loadoutChips, nodes, radar } from '../ui.js';
 import { setSfx, sfxEnabled } from '../sfx.js';
 import { loadRange, nextIncluded, saveRange, waveFilter } from '../playback.js';
+import { gmSays } from '../guildmaster.js';
 import { tl } from '../../shared/i18n.js';
 import { userGet, userSet } from '../userStore.js';
 const KIND_LABEL = { normal: tl('通常'), trap: tl('ひっかけ'), bonus: tl('宝箱'), boss: tl('ボス') };
@@ -355,7 +356,7 @@ function showResults(el, s, select) {
         return h('td', { class: 'mk' }, '');
     };
     const sheet = h('details', { class: 'answer-sheet' }, h('summary', {}, tl('答え合わせ表（ウェーブごとの正誤）')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact sheet' }, h('thead', {}, h('tr', {}, h('th', {}, ''), ...s.waves.map((_, i) => h('th', { title: waveTitleFor(s.cases[s.waves[i].caseIndex], s.fighters, mineOf(s)) }, `${i + 1}`)))), h('tbody', {}, ...s.standings.map((st) => h('tr', {}, h('td', { class: 'name' }, s.fighters[st.f].name), ...s.waves.map((_, i) => mark(st.f, i))))))));
-    el.replaceChildren(h('div', { class: 'results-inner' }, h('h2', {}, tl('討伐の戦果')), head, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('名前'), tl('戦果（正答率）'), tl('燃費（平均トークン）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP'].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows)), sheet));
+    el.replaceChildren(h('div', { class: 'results-inner' }, h('h2', {}, tl('討伐の戦果')), gmSays(h('p', {}, tl('{0}討伐から、みな戻ってきたぞ。今回の戦果1位は「{1}」だ。', s.boss.name, s.fighters[s.standings[0].f].name)), h('p', {}, h('a', { href: '#/ranking' }, tl('順位とわしの講評は、「戦果」で確かめるがよい。')))), head, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('名前'), tl('戦果（正答率）'), tl('燃費（平均トークン）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP'].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows)), sheet));
     el.classList.remove('hidden');
 }
 export { SCALE };

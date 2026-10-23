@@ -915,3 +915,16 @@ html[dir="rtl"] .editor, html[dir="rtl"] textarea { text-align: left; }
 .gear-box h4 { margin: 6px 0; }
 .gear-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 4px 0; }
 .gear-name { min-width: 8em; }
+
+/* ギルドマスターが語る（戦果・講評） */
+.gm-says { display: flex; gap: 14px; align-items: flex-start; margin: 8px 0 12px; }
+.gm-face { flex: none; display: grid; justify-items: center; gap: 2px; color: var(--accent); font-size: 11px; }
+.gm-canvas { width: 104px; height: 80px; background: var(--panel); box-shadow: 0 0 0 2px var(--line); }
+.gm-says > .gm-bubble { flex: 1; min-width: 0; }
+.gm-says .gm-bubble p { margin: 0 0 6px; line-height: 1.7; }
+.gm-says .gm-bubble p:last-child { margin-bottom: 0; }
+.gm-says-review { margin: 4px 0 0; }
+@media (max-width: 560px) {
+  .gm-canvas { width: 78px; height: 60px; }
+  .gm-says { gap: 10px; }
+}

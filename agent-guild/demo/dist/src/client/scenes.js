@@ -967,10 +967,11 @@ const chantLabels = (a) => CHANT_LABELS[a.theme?.kind ?? 'dragon'] ?? CHANT_LABE
 const RUNE_WORDS = ['ᚨᛚ・ᛞᚱᚨ', 'ᛟᚱ・ᚹᛁᚾ', 'ᛋᛖᛚ・ᚨᚱᚲ', 'ᚦᚢᚱ・ᛖᚾ', 'ᛗᚨᚷ・ᛚᛟᚱ', 'ᚷᚨᛚ・ᛞᚱ'];
 // 詠唱合戦の流れ（場面の進み具合）:
 //   ボスの詠唱と魔法弾の溜め → 放たれて討伐隊へ迫る（来るぞ…！）→ 打ち消しの呪文を知る者だけにスポットライト、詠唱 →
-//   光線が空中の魔法弾をつかまえる → 押し返す（打ち消し！）→ 青く膨れあがった魔法弾がボスに返る（倍返し！）
+//   光線が空中の魔法弾をつかまえる → 打ち消して（打ち消し！）→ そのままボスへ跳ね返す（跳ね返した！）。これが打ち消せた人の反撃（別に斬りかかりはしない）
 export const SPELL_T = { chant0: 0.05, launch: 0.27, caught: 0.35, push: 0.4, back: 0.47, end: 0.66 };
 const IMPACT_SPELL = 0.42; // 外した冒険者に当たる時刻（arena の IMPACT と同じ）
-const spellCasters = (a) => alive(a).filter((v) => v.ok);
+// 打ち消せた人: 正しく答えて、呪いを受けなかった人（正しく答えても MP 切れで受けた人は入れない）
+const spellCasters = (a) => alive(a).filter((v) => v.ok && !v.hit);
 // 打ち消しの呪文を知る者を照らすあいだ、まわりを暗くする（arena の明かりの暗さに足す）
 export function sceneDark(a) {
     if (a.scene !== 'spell' || !spellCasters(a).length)
@@ -1265,7 +1266,7 @@ function spellFx(a) {
         if (spell)
             text(ctx, `― ${spell} ―`, a.W / 2 + 10, 82, 10, '#ffffff', Math.min(1, tk * 2), '#0a2a4a');
     }
-    // 4) 倍返し: 青く膨れた魔法弾がボスに炸裂（破片・衝撃波・閃光）
+    // 4) 跳ね返し: 打ち消した魔法弾がボスに炸裂（破片・衝撃波・閃光）。打ち消せた人の反撃はこれ
     const hit = { x: a.body.x + 6, y: a.body.y - 18 };
     const shatter = win(p, T.back, T.back + 0.16);
     if (shatter > 0 && shatter < 1) {
@@ -1305,7 +1306,7 @@ function spellFx(a) {
     flash(a, bump(p, T.back - 0.005, T.back + 0.04), '#e0f6ff', 0.8);
     const rk = bump(p, T.back, T.end);
     if (rk > 0)
-        text(ctx, tl('倍返し！'), hit.x + 44, hit.y - 30 - 6 * win(p, T.back, T.end), R(20 + 10 * bump(p, T.back, T.back + 0.04)), a.frame % 6 < 3 ? '#ffffff' : '#ffe27a', Math.min(1, rk * 2), '#5a1a00');
+        text(ctx, tl('跳ね返した！'), hit.x + 44, hit.y - 30 - 6 * win(p, T.back, T.end), R(20 + 10 * bump(p, T.back, T.back + 0.04)), a.frame % 6 < 3 ? '#ffffff' : '#ffe27a', Math.min(1, rk * 2), '#5a1a00');
 }
 // ---- 奥義: 綻びが光る → 映画のような帯 → 金の十字斬りと技名 ----
 function ougiFx(a) {

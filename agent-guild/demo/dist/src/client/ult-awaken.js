@@ -1,7 +1,7 @@
 import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
 const T = ULT_T.awaken;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const NO_GEAR = { back: [], fams: [], charms: [] };
@@ -394,7 +394,7 @@ const gold = {
         }
         // カットイン: 画面を横切る帯に、主役の顔（大きく）と金の光の線
         const ck = win(p, CUT0, CUT0 + 0.01) * (1 - win(p, CUT1, CUT1 + 0.01));
-        if (ck > 0) {
+        if (ck > 0 && !ultQuiet()) {
             const cy = hero.y - 40, bh = 40 * ease(ck), slide = (1 - ease(win(p, CUT0, CUT0 + 0.012))) * 200;
             ctx.save();
             ctx.globalAlpha = 0.92 * ck;

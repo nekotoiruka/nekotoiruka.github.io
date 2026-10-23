@@ -1,6 +1,6 @@
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bandArc, heroSilhouette, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { ULT_T, R, TAU, bandArc, heroSilhouette, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
 const T = ULT_T.rush;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const MAGIC = new Set(['wand', 'book', 'fan', 'guitar']);
@@ -591,7 +591,7 @@ const frames = {
         }
         burstCore(a, a.body.x + 2, a.body.y, bk, cols, 1);
         // 黒い帯は一番手前に
-        if (bars > 0) {
+        if (bars > 0 && !ultQuiet()) {
             ctx.save();
             ctx.fillStyle = '#000000';
             const h = 26 * ease(bars);

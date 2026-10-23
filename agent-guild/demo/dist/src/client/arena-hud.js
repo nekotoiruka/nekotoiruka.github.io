@@ -31,46 +31,6 @@ export function comboHud(ctx, w, phase, views) {
     ctx.fillStyle = '#ffffff';
     ctx.fillText(tl('連携！'), Math.round(p.x + wN + 3), Math.round(p.y + 2));
     ctx.restore();
-    // 協力した感じ: 前に撃った仲間から次の仲間へ、光の糸がつながっていく（バトンを渡すように）
-    const hero = this.ultHero(w)?.f;
-    const seq = this.wave(w).events.filter((e) => e.type === 'attack').sort((x, y) => x.t - y.t);
-    const order = [...(hero !== undefined ? [hero] : []), ...seq.map((e) => e.f).filter((f) => f !== hero)];
-    const tOf = new Map(seq.map((e) => [e.f, e.t]));
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 1; i < order.length; i++) {
-        const t = tOf.get(order[i]);
-        if (t === undefined || phase < t - 0.1)
-            break;
-        const k = clamp01((phase - (t - 0.1)) / 0.05); // 糸が伸びる
-        const fadeL = 1 - clamp01((phase - t - 0.03) / 0.05); // 渡し終えた糸は、すぐに消える（いま渡している糸だけが光る）
-        if (fadeL <= 0)
-            continue;
-        const a0 = views[order[i - 1]], a1 = views[order[i]];
-        if (!a0 || !a1)
-            continue;
-        const p0 = this.proj(a0.x, a0.y - 14), p1 = this.proj(a1.x, a1.y - 14);
-        // 弧を描いて渡る光（ベジェ曲線の途中まで）
-        const cx = (p0.x + p1.x) / 2, cy = Math.min(p0.y, p1.y) - 24;
-        const P = (u) => ({ x: (1 - u) * (1 - u) * p0.x + 2 * (1 - u) * u * cx + u * u * p1.x, y: (1 - u) * (1 - u) * p0.y + 2 * (1 - u) * u * cy + u * u * p1.y });
-        for (const [lw, col, al] of [[3, '#ffe27a', 0.7], [1, '#ffffff', 1]]) {
-            ctx.globalAlpha = al * fadeL;
-            ctx.strokeStyle = col;
-            ctx.lineWidth = lw;
-            ctx.beginPath();
-            ctx.moveTo(p0.x, p0.y);
-            for (let u = 0.1; u <= k + 1e-6; u += 0.1) {
-                const q = P(u);
-                ctx.lineTo(q.x, q.y);
-            }
-            ctx.stroke();
-        }
-        const head = P(k);
-        ctx.globalAlpha = fadeL;
-        ctx.fillStyle = '#fff6c8';
-        ctx.fillRect(Math.round(head.x) - 2, Math.round(head.y) - 2, 4, 4);
-    }
-    ctx.restore();
 }
 // 画面下の進み具合: 仕掛けの数だけのブロック（巻物が要る場面は重いので幅が広い）。
 // 自分の答えが出るたびに、正解の度合いで塗られ、右の数字（戦果）が積み上がる。

@@ -41,8 +41,12 @@ export function text(ctx, s, x, y, size, color, alpha = 1, outline = '#1a1c2c') 
     ctx.fillText(s, R(x), R(y));
     ctx.restore();
 }
+// ほかの人の大技を控えめに見せるあいだは、画面全体の閃光・暗転を出さない（自分が巻物を使えなかった場面）
+let QUIET = false;
+export function setUltQuiet(v) { QUIET = v; }
+export const ultQuiet = () => QUIET;
 export function flash(a, k, color = '#ffffff', max = 0.7) {
-    if (k <= 0)
+    if (k <= 0 || QUIET)
         return;
     const { ctx } = a;
     ctx.save();
@@ -319,7 +323,7 @@ export const SWORD_PAL = {
 };
 // 画面全体を暗くする（大技の静寂・時間停止）
 export function dim(a, k, col = '#04030a') {
-    if (k <= 0)
+    if (k <= 0 || QUIET)
         return;
     const { ctx } = a;
     ctx.save();

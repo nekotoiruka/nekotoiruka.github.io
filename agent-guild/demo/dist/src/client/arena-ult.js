@@ -50,6 +50,9 @@ export function ultimate(ctx, w, phase) {
     // 必殺技（巻物）の見せ場は、巻物が要る場面（ボスの大技）でだけ。連携詠唱の場面は詠唱そのものが見せ場なので出さない
     if (!sp || !sp.st.used.skills.length || !this.skillWave(w) || this.chainOf(w))
         return;
+    // 自分が巻物を使えなかった場面では、ほかの人のカットインは出さない（控えめに見せる）
+    if (this.ultQuiet(w))
+        return;
     // 詠唱合戦は、知る者へのスポットライトと詠唱そのものが見せ場なので、カットインで隠さない
     if (this.sceneOf(w) === 'spell')
         return;

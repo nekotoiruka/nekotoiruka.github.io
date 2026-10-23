@@ -4,6 +4,7 @@ import { crownSprite, potionSprite, shieldIcon } from './sprites.js';
 import { drawHero, gearOf, lookOf, portrait } from './hero.js';
 import './bosses/index.js';
 import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
+import { setUltQuiet } from './ultkit.js';
 import { ELEMENT_COLOR, isUltScene, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
 import { AGILE, EVADE_LABEL, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, bump, clamp01, ease, lerp } from './arena-common.js';
@@ -12,7 +13,7 @@ import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
 import { bossSilhouette } from './boss.js';
 import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
-import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
+import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
 import { bandWave, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
@@ -386,8 +387,14 @@ export class ArenaRenderer {
             bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;
+        const quietUlt = this.ultQuiet(w);
         if (sa)
-            this.fxLayer(ctx, (c) => sceneBack({ ...sa, ctx: c }));
+            this.fxLayer(ctx, (c) => (quietUlt ? this.faded(c, 0.45, (c2) => { setUltQuiet(true); try {
+                sceneBack({ ...sa, ctx: c2 });
+            }
+            finally {
+                setUltQuiet(false);
+            } }) : sceneBack({ ...sa, ctx: c })));
         // --- ボス ---
         // 削りきれなかったとき: ボスはたまらず逃げ出す（よろめいて震え、跳び退いて画面の外へ）。討伐隊の勝ち
         const fleeT = this.escapeAt ? (w - this.escapeAt.wave) + phase - this.escapeAt.t + outro : -1;
@@ -481,6 +488,8 @@ export class ArenaRenderer {
                 const st = strikeOf.get(v.f), at = attackOf.get(v.f);
                 if (!st || !at || !v.alive || ult?.f === v.f)
                     continue; // 大技の主役は、自分の演出で見せる
+                if (scene === 'spell')
+                    continue; // 詠唱合戦は、跳ね返した魔法弾が反撃（道具の技・飛び道具・個別の火花は出さない）
                 const big = spot?.f === v.f;
                 st.used.tools.filter((id) => !TOOL_BY_ID[id]?.decoy).forEach((id, i) => {
                     const t0 = at.t - 0.1 + i * 0.03;
@@ -545,7 +554,7 @@ export class ArenaRenderer {
             if (st && at) {
                 const g = clamp01((phase - (at.t - 0.12)) / 0.03) * clamp01((at.t + 0.08 - phase) / 0.03);
                 if (g > 0) {
-                    [...st.used.skills.map((x) => ({ t: x, c: '#ff9ce6' })), ...st.used.tools.map((x) => ({ t: TOOL_SHORT[x] ?? TOOL_BY_ID[x]?.name ?? x, c: TOOL_BY_ID[x]?.decoy ? '#b8b8c8' : '#8fd3ff' }))]
+                    [...st.used.skills.map((x) => ({ t: x, c: '#ff9ce6' })), ...st.used.tools.map((x) => ({ t: TOOL_SHORT[x] ?? TOOL_BY_ID[x]?.name ?? x, c: '#8fd3ff' }))] // 役に立たない道具も同じ色（色で答えが分からないように）
                         .slice(0, 4).forEach((l, i) => this.tag(ctx, l.t, l.c, v.x, v.y - 40, g, i + 1));
                 }
             }
@@ -559,8 +568,14 @@ export class ArenaRenderer {
         ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
         this.progressBar(w, phase, strikeOf);
         ctx.restore();
+        // 大技の光・閃光・巨大な数字（明かりの影響を受けない）。ほかの人の大技を控えめに見せるときは、半透明で閃光・暗転なし
         if (sa)
-            this.fxLayer(ctx, (c) => sceneTop({ ...sa, ctx: c })); // 大技の光・閃光・巨大な数字（明かりの影響を受けない）
+            this.fxLayer(ctx, (c) => (quietUlt ? this.faded(c, 0.45, (c2) => { setUltQuiet(true); try {
+                sceneTop({ ...sa, ctx: c2 });
+            }
+            finally {
+                setUltQuiet(false);
+            } }) : sceneTop({ ...sa, ctx: c })));
         // --- ここから画面座標 ---
         ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
         for (const fn of this.ui)
@@ -594,6 +609,7 @@ export class ArenaRenderer {
     boom = boom; // arena-boss.ts
     drawFighter = drawFighter; // arena-fighter.ts
     motes = motes; // arena-fighter.ts
+    petFx = petFx; // arena-fighter.ts
     hpBar = hpBar; // arena-hud.ts
     guardFx = guardFx; // arena-fighter.ts
     barrierFx = barrierFx; // arena-fighter.ts
@@ -629,6 +645,36 @@ export class ArenaRenderer {
     skillWave = skillWave; // arena-ult.ts
     ultWindow = ultWindow; // arena-ult.ts
     ultOf = ultOf; // arena-ult.ts
+    /** 自分の冒険者が舞台にいて、ほかの人が大技の主役のとき（自分が巻物を使えなかった場面）。その大技は控えめに見せる */
+    ultQuiet(w) {
+        const u = this.ultHero(w);
+        if (u?.f === undefined || this.mine.has(u.f))
+            return false;
+        return [...this.mine].some((f) => !this.script.fighters[f]?.off);
+    }
+    fadeCanvas = null;
+    /** 別の画面に描いてから、半透明で重ねる（中の描画が globalAlpha を上書きしても薄くなる） */
+    faded(ctx, alpha, draw) {
+        const cv = ctx.canvas;
+        if (!this.fadeCanvas)
+            this.fadeCanvas = document.createElement('canvas');
+        const fc = this.fadeCanvas;
+        if (fc.width !== cv.width || fc.height !== cv.height) {
+            fc.width = cv.width;
+            fc.height = cv.height;
+        }
+        const lc = fc.getContext('2d');
+        lc.setTransform(1, 0, 0, 1, 0, 0);
+        lc.clearRect(0, 0, fc.width, fc.height);
+        lc.setTransform(ctx.getTransform());
+        lc.imageSmoothingEnabled = false;
+        draw(lc);
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(fc, 0, 0);
+        ctx.restore();
+    }
     ultHero = ultHero; // arena-ult.ts
     // 連携詠唱（scene 'chain'）の、見る人ごとの並び。あなたがいれば必ず最後の節を唱える（chainOrder）。
     // 成否とダメージは台本（chain の出来事）のまま。全員正解のときだけ最後までつながる

@@ -3,6 +3,7 @@ import { demoMode, getBattle, getMe, getPastSeasons, mySubmissions, scriptFor } 
 import { avatarCanvas, fmtMs, h, nodes } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 import { SWAY_NOTE } from '../account.js';
+import { gmSays } from '../guildmaster.js';
 export async function renderRanking(root) {
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
     const script = scriptFor(await getBattle());
@@ -19,12 +20,16 @@ export async function renderRanking(root) {
         const xs = script.standings.slice().sort((a, b) => (low ? a[key] - b[key] : b[key] - a[key]));
         return script.fighters[xs[0].f].name;
     };
-    // ロマン賞: 役に立たない道具を持ったまま、いちばん上にいる人（standings は順位順）
-    const romanSt = script.standings.find((st) => script.fighters[st.f].loadout.tools.some((t) => TOOL_BY_ID[t]?.decoy));
-    const roman = romanSt ? tl(`{0}（{1}）`, script.fighters[romanSt.f].name, script.fighters[romanSt.f].loadout.tools.filter((t) => TOOL_BY_ID[t]?.decoy).map((t) => TOOL_BY_ID[t].name).join(tl('・'))) : null;
+    // 役に立たない道具は、賞にはしない（要らない道具を持たせること自体が、AIエージェントとしては不正解なので）。
+    // その代わり、自分の冒険者が戦場で振り回していたら、ギルドマスターがひとこと（どの道具かは言わない）
+    const swung = (f) => script.waves.some((wv) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.used.tools.some((t) => TOOL_BY_ID[t]?.decoy)));
     const mine = script.standings.find((st) => me && script.fighters[st.f].owner === me.name);
     const history = me && !demoMode ? (await mySubmissions().catch(() => ({ items: [] }))).items.filter((x) => x.status === 'done').reverse() : [];
-    root.replaceChildren(...nodes(h('h2', {}, tl('戦果')), h('p', { class: 'muted' }, tl(`送り出した冒険者の、今シーズン（{0}討伐）の戦果です。順位は「戦果（ボスの仕掛けに正しく動けた割合）」で決まり、同じなら燃費（使ったトークンが少ない）→ 速さの順です。各参加者の最新の送り出しで決まります。`, script.boss.name)), mine ? h('p', { class: 'notice' }, tl(`あなたは {0} 位 / {1} 人（{2}・正答率 {3}%）。順位は最新の提出で決まります。`, mine.rank, script.fighters.length, script.fighters[mine.f].name, mine.accuracy)) : null, history.length ? h('section', { class: 'history' }, h('h3', {}, tl('あなたの提出の推移')), h('p', { class: 'small muted sway-note' }, SWAY_NOTE()), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('提出日時'), tl('キャラ'), tl('正答率'), '', tl('コスト'), tl('採点費用')].map((x) => h('th', {}, x)))), h('tbody', {}, ...history.map((x, i) => h('tr', {}, h('td', { class: 'small' }, new Date(x.createdAt).toLocaleString(localeOf())), h('td', {}, h('a', { href: `#/build/${x.id}` }, x.name), i === history.length - 1 ? h('span', { class: 'chip' }, tl('最新')) : null), h('td', { class: 'num' }, x.accuracy !== undefined ? `${x.accuracy}%` : '-'), h('td', {}, h('span', { class: 'history-bar', style: { width: `${Math.round((x.accuracy ?? 0) * 1.2)}px` } })), h('td', { class: 'num' }, x.buildCost), h('td', { class: 'num' }, x.costUsd !== undefined ? `$${x.costUsd.toFixed(3)}` : '-'))))))) : null, h('div', { class: 'awards' }, award(tl('アタッカー賞'), best('damageDealt')), award(tl('MVP王'), best('mvp')), award(tl('精度賞'), best('accuracy')), award(tl('省エネ賞'), best('avgTokens', true)), award(tl('最速賞'), best('avgLatencyMs', true)), roman ? award(tl('ロマン賞'), roman) : null), h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('冒険者'), tl('戦果'), tl('燃費（平均トークン）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP', tl('コスト')].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows))), await pastSeasonsSection()));
+    root.replaceChildren(...nodes(h('h2', {}, tl('戦果')), 
+    // 戦果は、ギルドマスターが伝える
+    gmSays(h('p', {}, tl('{0}討伐から、みな戻ってきたぞ。今回の戦果1位は「{1}」だ。', script.boss.name, script.fighters[script.standings[0].f].name)), mine ? h('p', {}, tl('お主の「{0}」は、{1}人中{2}位（戦果 {3}%）。', script.fighters[mine.f].name, script.fighters.length, mine.rank, mine.accuracy)) : null, mine && swung(mine.f) ? h('p', {}, tl('それにしても、お主の冒険者は、戦場で妙な物を振り回しておったな。何も起きなんだが……まあ、度胸だけは認めてやろう。')) : null, h('p', {}, mine
+        ? h('a', { href: `#/build/${encodeURIComponent(script.fighters[mine.f].id)}` }, tl('わしの講評は、ここに書いておいた。次の手を考える手がかりにするのだぞ。'))
+        : tl('冒険者の名前を押せば、わしの講評が読める。'))), h('p', { class: 'muted small' }, tl(`順位は「戦果（ボスの仕掛けに正しく動けた割合）」で決まり、同じなら燃費（使ったトークンが少ない）→ 速さの順です。各参加者の最新の送り出しで決まります。`)), history.length ? h('section', { class: 'history' }, h('h3', {}, tl('あなたの提出の推移')), h('p', { class: 'small muted sway-note' }, SWAY_NOTE()), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('提出日時'), tl('キャラ'), tl('正答率'), '', tl('コスト'), tl('採点費用')].map((x) => h('th', {}, x)))), h('tbody', {}, ...history.map((x, i) => h('tr', {}, h('td', { class: 'small' }, new Date(x.createdAt).toLocaleString(localeOf())), h('td', {}, h('a', { href: `#/build/${x.id}` }, x.name), i === history.length - 1 ? h('span', { class: 'chip' }, tl('最新')) : null), h('td', { class: 'num' }, x.accuracy !== undefined ? `${x.accuracy}%` : '-'), h('td', {}, h('span', { class: 'history-bar', style: { width: `${Math.round((x.accuracy ?? 0) * 1.2)}px` } })), h('td', { class: 'num' }, x.buildCost), h('td', { class: 'num' }, x.costUsd !== undefined ? `$${x.costUsd.toFixed(3)}` : '-'))))))) : null, h('div', { class: 'awards' }, award(tl('アタッカー賞'), best('damageDealt')), award(tl('MVP王'), best('mvp')), award(tl('精度賞'), best('accuracy')), award(tl('省エネ賞'), best('avgTokens', true)), award(tl('最速賞'), best('avgLatencyMs', true))), h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('冒険者'), tl('戦果'), tl('燃費（平均トークン）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP', tl('コスト')].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows))), await pastSeasonsSection()));
 }
 // 過去のシーズンの戦果: シーズンを選んで、そのときの順位表を見る（シーズンを切り替えたときに残した記録）
 const PAST_ROWS = 20;

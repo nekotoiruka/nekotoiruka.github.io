@@ -396,6 +396,12 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
     });
     ctx.restore();
 }
+// お供だけを、主の立ち位置（足元の中心 cx, fy）の横に描く（主が跳んでも、お供はその場で待つ）
+export function drawFamiliarAt(ctx, f, cx, fy, frame, flip = true) {
+    const p = familiarHome(0, flip, frame);
+    const sp = familiarSprite(f.kind, f.color, Math.floor(frame / 9), flip);
+    ctx.drawImage(sp, Math.round(cx + p.x - sp.width / 2 + 5), Math.round(fy + p.y));
+}
 // 一覧やプレビュー用の全身画（武器・装備・仲間・飾り込み）。44x40 ドット × scale
 export const PORTRAIT_W = 52, PORTRAIT_H = 40;
 export function portrait(look, gear, opts = {}) {

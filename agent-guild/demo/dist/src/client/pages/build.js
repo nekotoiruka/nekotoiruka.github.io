@@ -3,6 +3,7 @@ import { COST_RULES } from '../../shared/catalog.js';
 import { avatarCanvas, fmtMs, h, loadoutChips, nodes, radar } from '../ui.js';
 import { traceGuide, traceView } from '../trace.js';
 import { tl } from '../../shared/i18n.js';
+import { gmPortrait } from '../guildmaster.js';
 const KIND = { normal: tl('通常'), trap: tl('ひっかけ'), bonus: tl('宝箱'), boss: tl('ボス') };
 export async function renderBuild(root, id) {
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
@@ -21,7 +22,7 @@ export async function renderBuild(root, id) {
 }
 // ギルドマスターの講評（総合評価 S〜D と、AIエージェントの仕組みごとの評価）
 function reviewCard(r) {
-    return h('section', { class: `card review grade-${r.grade}` }, h('div', { class: 'review-head' }, h('div', { class: 'grade-badge' }, h('span', { class: 'grade-letter' }, r.grade), h('span', { class: 'grade-label' }, tl('総合評価'))), h('div', { class: 'review-says' }, h('div', { class: 'small muted' }, tl(`ギルドマスターの講評　戦果 {0}%`, r.accuracy)), h('h3', {}, tl(`称号「{0}」`, r.title)), h('p', { class: 'gm-bubble' }, r.comment))), h('div', { class: 'review-parts' }, ...r.parts.map((p) => h('div', { class: 'review-part' }, h('div', { class: 'rp-head' }, h('span', { class: `rp-mark m-${p.mark}` }, p.mark), h('b', {}, p.name), h('span', { class: 'ai-term' }, p.ai), p.score ? h('span', { class: 'rp-score small muted', title: p.unit ?? '' }, `${p.score.got} / ${p.score.total}`) : null), 
+    return h('section', { class: `card review grade-${r.grade}` }, h('div', { class: 'review-head' }, h('div', { class: 'grade-badge' }, h('span', { class: 'grade-letter' }, r.grade), h('span', { class: 'grade-label' }, tl('総合評価'))), h('div', { class: 'review-says' }, h('div', { class: 'small muted' }, tl(`ギルドマスターの講評　戦果 {0}%`, r.accuracy)), h('h3', {}, tl(`称号「{0}」`, r.title)), h('div', { class: 'gm-says gm-says-review' }, h('div', { class: 'gm-face' }, gmPortrait(), h('span', {}, tl('ギルドマスター'))), h('p', { class: 'gm-bubble' }, r.comment)))), h('div', { class: 'review-parts' }, ...r.parts.map((p) => h('div', { class: 'review-part' }, h('div', { class: 'rp-head' }, h('span', { class: `rp-mark m-${p.mark}` }, p.mark), h('b', {}, p.name), h('span', { class: 'ai-term' }, p.ai), p.score ? h('span', { class: 'rp-score small muted', title: p.unit ?? '' }, `${p.score.got} / ${p.score.total}`) : null), 
     // 数が何を数えているか（分母は場面の数。持たせた道具などの数ではない）
     p.score && p.unit ? h('p', { class: 'rp-unit small muted' }, p.unit) : null, p.note ? h('p', { class: 'rp-note small muted' }, p.note) : null, p.good.length ? h('div', { class: 'rp-good' }, h('div', { class: 'rp-k' }, tl('できていたこと')), h('ul', {}, ...p.good.map((x) => h('li', {}, x)))) : null, p.better.length ? h('div', { class: 'rp-better' }, h('div', { class: 'rp-k' }, tl('もっとこうすれば')), h('ul', {}, ...p.better.map((x) => h('li', {}, x)))) : null, h('details', { class: 'rp-lesson' }, h('summary', {}, tl(`{0}って何のため？`, p.ai)), h('p', { class: 'small' }, p.lesson))))), h('div', { class: 'review-next' }, h('b', {}, tl('次の一手: ')), r.next), h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: '#/make' }, tl('準備を直して、もう一度送り出す')), h('a', { class: 'btn', href: '#/arena/me' }, tl('討伐で活躍を見る'))));
 }

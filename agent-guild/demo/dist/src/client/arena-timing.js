@@ -39,7 +39,7 @@ export function slowFactor(time) {
                 return 3;
         }
     }
-    // 詠唱合戦: ボスの詠唱 → 迫る魔法弾 → 打ち消しの詠唱 → 倍返し、の流れが追えるようにゆっくり
+    // 詠唱合戦: ボスの詠唱 → 迫る魔法弾 → 打ち消しの詠唱 → 跳ね返し、の流れが追えるようにゆっくり
     if (this.sceneOf(w) === 'spell') {
         const known = this.script.waves[w].events.some((e) => e.type === 'strike' && e.success);
         if (known) {
@@ -99,10 +99,10 @@ export function hitStop(w, phase) {
                 list.push([e.t, 0.002, 0.04]);
         }
         const ult = this.ultOf(w);
-        if (ult?.f !== undefined)
+        if (ult?.f !== undefined && !this.ultQuiet(w))
             for (const b of ultBeats(ult.scene, this.ultWeapon(ult.f)))
                 if (b.stop)
-                    list.push([b.t, b.stop, 0.05]);
+                    list.push([b.t, b.stop, 0.05]); // ほかの人の控えめな大技では止めない
         const ch = this.chainOf(w);
         if (ch?.view.full)
             list.push([ch.view.impact, 0.008, 0.04]);

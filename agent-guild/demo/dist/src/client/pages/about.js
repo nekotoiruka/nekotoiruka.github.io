@@ -6,7 +6,8 @@ import { getDemoBattle, scriptFor } from '../api.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from '../boss.js';
 import { BRAND } from '../brand.js';
 import { burst, BODY_STYLE, fxColors } from '../fx.js';
-import { drawHero, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
+import { elderBeard, GM_GEAR, GM_LOOK } from '../guildmaster.js';
+import { drawFamiliarAt, drawHero, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
 import { setSfx } from '../sfx.js';
 import { outlined } from '../sprites.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
@@ -147,28 +148,6 @@ const PARTY = [
     { look: look('bunny', '#5fcde4', '#fbf7f0', 'wand'), gear: { back: [], fams: [{ kind: 'fairy', color: '#ffd166' }], charms: [{ kind: 'scroll', color: '#c77dff' }] } },
     { look: look('witch', '#7e57c2', '#63c74d', 'book'), gear: { back: [], fams: [{ kind: 'bat', color: '#c77dff' }], charms: [{ kind: 'moon', color: '#ffd23f' }, { kind: 'flame', color: '#ff7a3a' }] } },
 ];
-// 魔法使いのおじいさんの白いひげと眉（drawHero の本体 24x28 の上に、正面向きの顔の位置に合わせて描き足す）
-function elderBeard(ctx, cx, fy, bob) {
-    const ox = Math.round(cx - 12), oy = Math.round(fy - 28 + 1);
-    const hx = ox + 12, hy = oy + 14 + bob; // 頭の中心（目の高さ）
-    const W = '#f4f1ea', S = '#c9c3d6', O = '#5a5470';
-    const px = (x, y, w, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, 1); };
-    // ふさふさの眉
-    px(hx - 4, hy - 2, 3, W);
-    px(hx + 2, hy - 2, 3, W);
-    // 口ひげ（口の両わき）と、あごから垂れるひげ
-    const rows = [[-4, 9], [-5, 11], [-5, 11], [-4, 9], [-3, 7], [-2, 5], [-1, 3]];
-    rows.forEach(([x0, w], i) => {
-        const y = hy + 2 + i;
-        px(hx + x0 - 1, y, 1, O);
-        px(hx + x0 + w, y, 1, O);
-        px(hx + x0, y, w, i > 3 ? S : W);
-        if (i > 0 && i < 4)
-            px(hx + x0 + 1, y, 1, S);
-    });
-    px(hx - 1, hy + 2 + rows.length, 3, O);
-    px(hx - 1, hy + 2, 3, '#9b3b4f'); // 口（ひげの間から少し見える）
-}
 // ---------------------------------------------------------------------------
 // ヒーロー: ボスが入れ替わりながら、討伐隊がかわるがわる跳びかかる
 // ---------------------------------------------------------------------------
@@ -286,7 +265,10 @@ function heroStage(ticker) {
                 action = 'victory';
                 at = (local * 1.4 + i * 0.2) % 1;
             }
-            drawHero(ctx, p.look, p.gear, x, y, { frame: Math.floor(t * 60) + i * 23, flip: true, action, t: at, skillGlow: glow });
+            // お供は跳びかからず、主の立ち位置で待つ（お供は戦わない。考える時間と道具の受け渡しを見せる係）
+            drawHero(ctx, p.look, { ...p.gear, fams: [] }, x, y, { frame: Math.floor(t * 60) + i * 23, flip: true, action, t: at, skillGlow: glow });
+            if (p.gear.fams[0])
+                drawFamiliarAt(ctx, p.gear.fams[0], home.x, home.y, Math.floor(t * 60) + i * 23);
         });
         hitAt.forEach((x0, k) => {
             const q = (local - x0) / 0.5;
@@ -777,7 +759,7 @@ export async function renderAbout(root, opts = {}) {
     const fx = [];
     const spellW = sceneWave('spell');
     if (spellW >= 0)
-        fx.push({ title: tl('詠唱合戦'), body: tl('ボスが呪文を唱えはじめると、こちらも負けじと詠唱で応じる。光の文字が飛び交い、呪文と呪文が空中でぶつかり合う。'), w: spellW, mine: [best] });
+        fx.push({ title: tl('詠唱合戦'), body: tl('ボスが呪文を唱えはじめると、打ち消しの呪文を知る者が詠唱で応じる。光線で魔法弾をつかまえて打ち消し、そのままボスへ跳ね返す。'), w: spellW, mine: [best] });
     // 必殺技: 巻物の大技（奥義・乱舞・召喚）で、あなたが主役になれる場面を優先
     const ultScenes = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
     const heroOk = (wv, f) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.success && e.used.skills.length > 0);
@@ -961,12 +943,10 @@ export async function renderAbout(root, opts = {}) {
     const gm = pixelCanvas(PORTRAIT_W, PORTRAIT_H, 'lp-gm-canvas', tl('ギルドマスター'));
     const gmCtx = ctx2d(gm);
     // ギルドマスターは、白いひげの魔法使いのおじいさん（紺のローブ・紫の帽子・杖）。ひげと眉は本体の上に描き足す
-    const gmLook = look('mage', '#3b3f8f', '#f4f1ea', 'wand');
-    const gmGear = { back: [], fams: [{ kind: 'spirit', color: '#ffd166' }], charms: [{ kind: 'scroll', color: '#feae34' }] };
     ticker.add(gm, (t) => {
         gmCtx.clearRect(0, 0, PORTRAIT_W, PORTRAIT_H);
         const frame = Math.floor(t * 60), cx = PORTRAIT_W / 2 + 2, fy = PORTRAIT_H - 3;
-        drawHero(gmCtx, gmLook, gmGear, cx, fy, { frame, action: 'idle' });
+        drawHero(gmCtx, GM_LOOK, GM_GEAR, cx, fy, { frame, action: 'idle' });
         elderBeard(gmCtx, cx, fy, poseFor('idle', 0, frame).bob);
     });
     const mech = [

@@ -42,7 +42,7 @@ export function updateCamera(c) {
     }
     // 巻物の大技カウンター: カメラが主役を追う（溜め → 跳躍 → 着弾）
     let camK = 0.07;
-    if (ult?.f !== undefined && views[ult.f]?.alive) {
+    if (ult?.f !== undefined && views[ult.f]?.alive && !this.ultQuiet(w)) { // ほかの人の控えめな大技では、カメラは寄らない
         const c = ultCam(ult.scene, phase, { x: views[ult.f].x, y: views[ult.f].y }, this.bossFoot, this.bossBody, AW, AH, this.ultWeapon(ult.f));
         if (c) {
             tz = lerp(tz, c[1], c[0]);
@@ -101,7 +101,7 @@ export function updateCamera(c) {
         if (age >= 0 && age < 0.05 && ((e.type === 'attack' && e.crit) || e.type === 'death' || e.type === 'bossDown'))
             shake = Math.max(shake, e.type === 'bossDown' ? 4 : 2);
     }
-    if (ult)
+    if (ult && !this.ultQuiet(w))
         shake = Math.max(shake, ultShake(ult.scene, phase, ult.f !== undefined, this.ultWeapon(ult.f)));
     if (chain) {
         // 連携詠唱ではボスはふつうの攻撃をしないので、その揺れ（IMPACT の時刻）は使わない。
