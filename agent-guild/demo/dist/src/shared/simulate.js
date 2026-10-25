@@ -3,7 +3,7 @@
 //   1. ボスが問題（＝攻撃）を出す。討伐では攻撃は全員に向かう（チーム対抗・1対1では、攻撃の種類で狙われる隊列が決まる）
 //   2. 各キャラが回答する（速い順に ○ / ×）。狙われたキャラは、正解なら回避、不正解なら被弾
 //   3. 正解したキャラはボスに反撃する（チーム対抗・1対1では前衛ほど大ダメージ）。ツール・スキル・仲間の演出はここで出る
-//   4. 後半はボスが怒り、燃費（MP）の悪いキャラほど余波で削られる
+//   4. 後半はボスが怒り、燃費（行動力）の悪いキャラほど余波で削られる
 // 最後まで立っていた人が勝ち。ボスを倒した場合は、生き残りの中で与ダメージが多い順。
 import { Rng } from './rng.js';
 import { computeStats, MP_BUDGET_PER_CASE, weightedAccuracy } from './stats.js';
@@ -221,8 +221,8 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             events.push({ type: 'strike', t, f, success, score: round2(s), excerpt: r.excerpt.slice(0, 60), used: usedOf(f, r), targeted, ...(r.charmed ? { charmed: true } : {}), ...(r.haunted ? { haunted: true } : {}) });
             if (success)
                 ok.add(f);
-            if (r.mpOut || r.tokensIn + r.tokensOut > MP_BUDGET_PER_CASE) {
-                over.add(f);
+            if (r.mpOut || r.tokensIn + r.tokensOut - (r.companionTokens ?? 0) > MP_BUDGET_PER_CASE) {
+                over.add(f); // お供（サブエージェント）の分は、冒険者の 行動力 に数えない
                 events.push({ type: 'mpOut', t: round2(t + 0.02), f });
             }
         });

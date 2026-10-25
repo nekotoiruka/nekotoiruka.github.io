@@ -14,10 +14,12 @@ export function endgame(ctx, w, phase, outro, views, down) {
     }
     // 削りきれなかったときも討伐成功: ボスは逃げ出す
     const esc = this.escapeAt && w === this.escapeAt.wave ? phase - this.escapeAt.t + outro : this.escapeAt && w > this.escapeAt.wave ? 1 + outro : -1;
+    // 小さい行は、シーズンの最期の一文（captions の down / escape）。なければ共通の文
+    const cap = s.theme?.captions;
     if (this.escapeAt && esc >= 0)
-        this.bigBanner(ctx, esc - 0.15, tl('討伐成功！'), tl('{0}はたまらず逃げ出した！ 戦果1位は…', s.boss.name), '#ffd166');
+        this.bigBanner(ctx, esc - 0.15, tl('討伐成功！'), cap?.escape ?? tl('{0}はたまらず逃げ出した！ 戦果1位は…', s.boss.name), '#ffd166');
     if (down >= 0)
-        this.bigBanner(ctx, down, tl('討伐成功！'), tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
+        this.bigBanner(ctx, down, tl('討伐成功！'), cap?.down ?? tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
     const winT = this.winner !== null ? t - (s.waves.length - 1 + ((s.waves[s.waves.length - 1].events.find((e) => e.type === 'winner')?.t) ?? 1)) : -1;
     if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75) && (esc < 0 || esc > 0.9)) {
         const v = views[this.winner];

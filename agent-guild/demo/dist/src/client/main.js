@@ -46,8 +46,9 @@ async function route() {
         return;
     }
     const hash = location.hash || '#/';
-    // 討伐と戦果は、自分の冒険者を送り出して戦いが終わってから（終わったシーズンの記録はネタバレにならないので、いつでも見られる）
-    if (/^#\/(arena|ranking)/.test(hash) && !/^#\/arena\/past\//.test(hash) && !(await canWatch())) {
+    // 討伐と戦果は、まだ送り出していない人にも見せる（2026-10-25）。ほかの人の名前や討伐を見て「自分も参加しよう」と思ってもらうため。
+    // 答えの言葉は字幕・名簿に出さない（かわし方の動きは見えてもよい）。以前は送り出して戦いが終わるまで閉じていた
+    if (WATCH_GATE && /^#\/(arena|ranking)/.test(hash) && !/^#\/arena\/past\//.test(hash) && !(await canWatch())) {
         lastHash = hash;
         setNav(hash);
         root.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, tl('まだ見られません')), h('p', {}, tl('討伐と戦果は、あなたの冒険者を送り出して、戦いが終わってから見られます（ネタバレ防止のためでもあります）。')), h('a', { class: 'btn btn-primary', href: '#/make' }, tl('冒険者の準備へ'))));
@@ -74,6 +75,7 @@ async function route() {
 function setNav(hash) {
     document.querySelectorAll('nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === '#/' ? /^#?\/?$/.test(hash) : hash.startsWith(a.getAttribute('href'))));
 }
+const WATCH_GATE = false; // true にすると、送り出して戦いが終わるまで討伐と戦果を閉じる（以前の決まり）
 // 自分の送り出しで、戦いが終わったものがあるか（デモ版はいつでも見られる）
 async function canWatch() {
     if (demoMode)
@@ -100,7 +102,7 @@ if (!demoMode)
     setUser((await getMe().catch(() => null))?.name ?? null);
 else
     setUser(null);
-if (!demoMode)
+if (!demoMode && WATCH_GATE)
     canWatch();
 if (demoMode)
     document.body.classList.add('demo');

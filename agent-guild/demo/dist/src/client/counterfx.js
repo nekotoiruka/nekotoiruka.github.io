@@ -4,7 +4,6 @@
 import { Rng } from '../shared/rng.js';
 import { counterFor } from './bossmoves.js';
 import { arrow, bat, bump, dustRing, ease, glowAt, hash, puffs, R, rock, shard, sparkle, TAU, win } from './fxkit.js';
-import { partyLabel } from './scenes.js';
 /** 対応技の演出。基本の4場面でなければ何もしない */
 export function counterFx(a) {
     const co = counterFor(a.theme?.kind, a.scene);
@@ -15,8 +14,7 @@ export function counterFx(a) {
     for (const v of a.fighters)
         if (v.alive && v.evaded && !v.proto)
             DRAW[co.fx](ctx, v, p - (v.lag ?? 0), a, co);
-    const [l0, l1] = co.fx === 'mirror' ? [0.42, 0.58] : co.fx === 'trail' ? [0.42, 0.6] : [0.44, 0.6];
-    partyLabel(a, co.color, bump(p, l0, l1)); // 正しく動けた自分の答え（ほかの人は「かわした」）
+    // 技の名前（「かわした」）は出さない。自分の行動は青い帯の一文で見せる（arena-hud.ts の mineBand）
 }
 const DRAW = {
     // 鏡で受ける: 正しく動けたキャラの前に青い鏡。炎が上下に割れる（竜）

@@ -8,6 +8,25 @@ export const WEAPON_LABELS = perLang(() => ({
 }));
 // 近づいて殴る武器（それ以外は飛び道具）
 export const MELEE_WEAPONS = ['spear', 'dagger', 'axe', 'hammer', 'shield', 'sword', 'katana', 'scythe', 'pan', 'umbrella', 'guitar'];
+// 道具の結果を読むのに使う行動力の目安（トークン）。準備の画面で「行動力の消費」として見せる。
+// 分厚い書物は archive.tokens（既定 11,000）。日誌は戦いが進むほど長くなるので少し多め。ほかの道具の結果は短い
+export const ARCHIVE_AP = 11000;
+export function toolAp(t) {
+    if (t.ap !== undefined)
+        return t.ap;
+    if (t.source === 'archive')
+        return ARCHIVE_AP;
+    if (t.id === 'memory')
+        return 400;
+    if (t.decoy)
+        return 60;
+    return 150;
+}
+// 行動力の消費の段階（冒険者の1場面の行動力に対する割合）。1: 少ない 2: ふつう 3: 多い 4: とても多い
+export function apLevel(ap, cap) {
+    const r = ap / cap;
+    return r < 0.03 ? 1 : r < 0.15 ? 2 : r < 0.4 ? 3 : 4;
+}
 export const TOOL_CATALOG = perLang(() => ([
     {
         id: 'kb_search',
@@ -220,6 +239,9 @@ export const TOOL_CATALOG = perLang(() => ([
     { id: 'pickaxe', name: tl('つるはし'), cost: 5, weapon: 'axe', description: tl('岩でも掘れる頑丈なつるはし。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('力いっぱい叩いた！ …石の巨人には傷ひとつない') },
     { id: 'silver_mirror', effect: tl('目に見えない呪いの紋が映った'), name: tl('銀の手鏡'), cost: 10, weapon: 'shield', description: tl('目に見えない呪いや、化けたものの本当の姿を映し出す。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
     { id: 'blessed_candle', effect: tl('霧の中の影が見えた'), name: tl('聖別の燭台'), cost: 10, weapon: 'wand', description: tl('魔の霧の中でも消えない灯り。霧に隠れたものの影を照らす。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
+    // 分厚い書物（城の書庫）: 読むと、結果がとても長い（1万トークンほど）。冒険者が自分で読むと、その場面の 行動力 が尽きる。
+    // お供（サブエージェント）に持たせて読ませると、冒険者には要点だけが返る
+    { id: 'family_tree', effect: tl('分厚い系譜から、眷属の退け方が分かった'), name: tl('伯爵家の系譜'), cost: 10, weapon: 'book', description: tl('城の書庫にある、伯爵の眷属たちの分厚い系譜。眷属の名と、退け方が載っている。とても長く、読むだけで行動力をひどく使う。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
     { id: 'garlic', name: tl('にんにくの首飾り'), cost: 5, weapon: 'fan', description: tl('吸血鬼よけの定番、と言われている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('にんにくを掲げた！ …伯爵は少し顔をしかめただけだった') },
     { id: 'snow_compass', effect: tl('いま立っている斜面の名前が分かった'), name: tl('雪原の羅針盤'), cost: 10, weapon: 'book', description: tl('吹雪で何も見えなくても、いま立っている斜面の名前を指し示す。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
     { id: 'frost_rod', effect: tl('吹雪の向こうの身ぶりが分かった'), name: tl('霜読みの杖'), cost: 10, weapon: 'spear', description: tl('氷に突き立てると、吹雪の向こうで動く巨人の身ぶりが、氷の震えで分かる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
@@ -251,6 +273,12 @@ export const DEFAULT_COST_RULES = {
     mainMaxChars: 0,
     guardrailCost: 5,
     guardrailMaxWords: 5,
+    companionCost: 10,
+    companionMaxChars: 200,
+    companionMaxTools: 2,
+    companionCallsPerCase: 2,
+    companionCallsPerRun: 8,
+    companionTokenCap: 20000,
 };
 // 課題ごとにコストの厳しさを変えられる。毎回「既定値に戻してから」上書きする（同じプロセスで複数の課題を扱うため）
 // 言語ごと（＝サーバーでは言語ごとのシーズン）に別のルールを持つ
@@ -272,6 +300,8 @@ export function applyCostRules(over) {
     Object.assign(r, DEFAULT_COST_RULES, over ?? {});
     if (r.mainMaxChars)
         r.mainMaxChars = Math.round(r.mainMaxChars * (MAIN_CHAR_FACTOR[getLang()] ?? 1) / 50) * 50;
+    if (r.companionMaxChars)
+        r.companionMaxChars = Math.round(r.companionMaxChars * (MAIN_CHAR_FACTOR[getLang()] ?? 1) / 50) * 50;
     return COST_RULES;
 }
 //# sourceMappingURL=catalog.js.map

@@ -1,9 +1,11 @@
 import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND, clamp01 } from './arena-common.js';
 import { bossCue, counterFor } from './bossmoves.js';
 import { MELEE_WEAPONS } from '../shared/catalog.js';
-import { shoutEndT, SPELL_T, ultBeats, ultHitT, verseAt } from './scenes.js';
+import { isUltScene, shoutEndT, SPELL_T, ultBeats, ultHitT, verseAt } from './scenes.js';
 import { play } from './sfx.js';
 export function slowFactor(time) {
+    if (time < 0)
+        return 1; // 幕開け
     const { w, phase } = this.split(time);
     if (time > this.script.waves.length)
         return 0.8;
@@ -12,7 +14,11 @@ export function slowFactor(time) {
     if (stop)
         return stop;
     // あなたの青い帯が読めるよう、帯のあいだは少しゆっくり
-    if (phase > MINE_BAND[0] && phase < MINE_BAND[1] && this.bandWave(w))
+    // 赤い帯（ボスの行動の一文）が読めるよう、場面のはじめも少しゆっくり（連携詠唱は前置きの速さで別に決める）
+    if (phase < 0.25 && !this.chainOf(w) && this.sceneOf(w))
+        return 0.7;
+    const band = this.bandWindow(w);
+    if (band && phase > band[0] && phase < band[1])
         return 0.6;
     // 連携詠唱: 詠唱のあいだはゆっくり（字幕が読める速さ）。大魔法の着弾はさらにゆっくり。途切れたあとの間は早送り
     const ch = this.chainOf(w);
@@ -21,7 +27,7 @@ export function slowFactor(time) {
         // 一節ずつ、みんなで唱えている感じが伝わるよう、詠唱はじっくり。テンポは chainTempo で選べる（演出ギャラリー）
         const tp = CHAIN_TEMPOS[this.chainTempo];
         if (phase < c.start - 0.02)
-            return 0.5;
+            return 0.22; // 前置きの字幕（ボスの構え → 倒しきるには → いくぞ）が読める速さ
         if (c.full) {
             if (Math.abs(phase - c.impact) < 0.025)
                 return 0.3 / tp.impact;
@@ -70,11 +76,6 @@ export function slowFactor(time) {
     const sp = this.spotlight(w);
     if (!sp)
         return 1;
-    if (sp.st.used.skills.length && this.skillWave(w)) {
-        const [u0, u1] = this.ultWindow(sp.st, w);
-        if (phase > u0 - 0.02 && phase < u1 + 0.01)
-            return 0.35;
-    }
     const a = sp.at.t - 0.14, b = sp.at.t + 0.06;
     if (phase < a - 0.03 || phase > b + 0.03)
         return 1;
@@ -128,7 +129,7 @@ export function evadeOf(w, f) {
         return 'chant'; // 呪文は、打ち消しの詠唱で跳ね返す（よけない）
     if (sc === 'illusion')
         return 'resist'; // 幻術は、結界が偽の声を弾き、その場で踏みとどまる（よけない）
-    return counterFor(this.script.theme?.kind, sc)?.evade ?? this.evades[f];
+    return counterFor(this.script.theme?.kind, this.respScene(w))?.evade ?? this.evades[f];
 }
 export function cues(w) {
     let c = this.cueCache.get(w);
@@ -163,7 +164,7 @@ export function cues(w) {
         if (e.type === 'strike' && focus.has(e.f) && e.used.tools.length && !ch)
             c.push({ t: e.t, s: 'tool' });
         if (e.type === 'evade' && focus.has(e.f)) {
-            const ev = this.evadeOf(w, e.f), co = counterFor(this.script.theme?.kind, sc);
+            const ev = this.evadeOf(w, e.f), co = counterFor(this.script.theme?.kind, this.respScene(w));
             c.push({ t: IMPACT + this.lagOf(w, e.f), s: co ? co.sfx : ev === 'chant' ? 'barrier' : ev === 'resist' ? 'shatter' : ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
         }
         if (e.type === 'hit' && focus.has(e.f))
@@ -217,11 +218,22 @@ export function finisher(w) {
     return ds.length ? ds[ds.length - 1].t : null;
 }
 // 再生速度の倍率（注目キャラの反撃・決着の瞬間はスロー）
-export function bandWave(w) {
+export function bandWave(w) { return !!this.bandWindow(w); }
+/** あなたの青い帯（自分の行動の一文）を出す区間。ふつうは技が届いた直後。詠唱合戦は跳ね返したあと、大技は当たったあと。連携詠唱は出さない（節ごとの字幕がある） */
+export function bandWindow(w) {
     const s = this.script, wv = s.waves[w];
-    if (!wv || this.chainOf(w) || this.ultOf(w) || this.sceneOf(w) === 'spell')
-        return false;
+    if (!wv || this.chainOf(w))
+        return null;
     const mine = [...this.mine].find((f) => !s.fighters[f].off);
-    return mine !== undefined && wv.events.some((e) => e.type === 'strike' && e.f === mine);
+    if (mine === undefined || !wv.events.some((e) => e.type === 'strike' && e.f === mine))
+        return null;
+    const sc = this.sceneOf(w);
+    if (sc === 'spell')
+        return [SPELL_T.back, SPELL_T.back + 0.15];
+    if (isUltScene(sc)) {
+        const hit = ultHitT(sc);
+        return [hit + 0.04, hit + 0.19];
+    }
+    return MINE_BAND;
 }
 //# sourceMappingURL=arena-timing.js.map

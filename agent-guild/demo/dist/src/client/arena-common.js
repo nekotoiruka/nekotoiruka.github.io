@@ -14,7 +14,7 @@ export const CHAIN_TEMPOS = {
     calm: { label: 'ゆったり', verse: 1.2, shout: 1.5, charge: 1.8, impact: 1.8, after: 1.5 },
     grand: { label: 'じっくり', verse: 1.5, shout: 2, charge: 2.4, impact: 2.4, after: 2 },
 };
-export const MINE_BAND = [0.27, 0.41]; // あなたの青い帯（赤い帯が消えてから、回避・反撃の前まで）
+export const MINE_BAND = [0.43, 0.58]; // あなたの青い帯（自分の行動の一文）。ボスの技が届いて、かわした・くらったのを見せた直後
 // 詠唱の文を、同じ長さの古代文字に置きかえる（見る人に答えを見せないとき）
 export const RUNES = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
 export const runeLine = (s0, k) => [...s0].map((ch, j) => (/\s/.test(ch) ? tl('　') : RUNES[(ch.charCodeAt(0) * 7 + j * 3 + k * 5) % RUNES.length])).join('');
@@ -24,7 +24,9 @@ export const TOOL_SHORT = {
     kb_search: tl('ナレッジ検索'), customer_lookup: tl('顧客台帳'), history_lookup: tl('履歴照会'),
     regex_matcher: tl('正規表現'), calculator: tl('計算機'), clock: tl('時計'), json_validator: tl('形式チェック'), scan: tl('看破'), memory: tl('冒険日誌'), bell: tl('気配の鈴'), guardrail: tl('結界'),
 };
-export const EVADE_LABEL = { dodge: tl('よけた！'), block: tl('ガード！'), barrier: tl('はじいた！'), shoot: tl('撃ち落とした！'), slash: tl('斬った！'), jump: tl('跳んだ！'), crawl: tl('伏せた！'), step: tl('すり抜けた！'), turn: tl('受け止めた！'), chant: tl('打ち消した！'), resist: tl('弾いた！') };
+export const EVADE_LABEL = { dodge: tl('よけた！'), block: tl('ガード！'), barrier: tl('はじいた！'), shoot: tl('撃ち落とした！'), slash: tl('斬った！'), jump: tl('跳んだ！'), crawl: tl('伏せた！'), step: tl('すり抜けた！'), turn: tl('受け止めた！'), turnCut: tl('斬り返した！'), chant: tl('打ち消した！'), resist: tl('弾いた！') };
 export const AGILE = new Set(['ninja', 'rogue', 'cat', 'bunny', 'frog', 'ghostie']);
 export const NO_GEAR = { back: [], fams: [], charms: [] };
+/** 討伐の1場面にかける秒数（再生の画面と同じ） */
+export const WAVE_SECONDS = 6;
 //# sourceMappingURL=arena-common.js.map

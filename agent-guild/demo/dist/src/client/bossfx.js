@@ -36,11 +36,13 @@ const vampire = {
             }
             const rel = win(p, 0.38, 0.6);
             if (rel > 0) { // 群れが飛び出して、列ごとに横ぎる
+                // 群れは、冒険者の頭のすぐ上の高さを横ぎる（床に伏せた人の上を通りすぎる）
+                const lanes = [...new Set(heroes(a).map((v) => Math.round(v.y)))];
                 for (let i = 0; i < 24; i++) {
                     const t = clamp01((rel - hash(i, 1) * 0.3) / 0.7);
                     if (t <= 0 || t >= 1)
                         continue;
-                    const ty = 92 + hash(i, 2) * 112, x = lerp(c.x + 14, a.W + 40, ease(t)), y = lerp(c.y - 10, ty, ease(t)) + Math.sin(t * 11 + i) * 5;
+                    const ty = lanes.length ? lanes[Math.floor(hash(i, 2) * lanes.length)] - 34 + (hash(i, 3) - 0.5) * 8 : 92 + hash(i, 2) * 112, x = lerp(c.x + 14, a.W + 40, ease(t)), y = lerp(c.y - 10, ty, ease(t)) + Math.sin(t * 11 + i) * 5;
                     ctx.globalAlpha = 1 - Math.max(0, t - 0.88) * 8;
                     bat(ctx, x, y, ((a.frame >> 1) + i) % 2, '#1a0a24', 1.6 + t * 0.6);
                     ctx.fillStyle = 'rgba(110,40,150,0.45)';

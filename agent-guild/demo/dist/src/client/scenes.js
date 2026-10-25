@@ -970,7 +970,7 @@ const RUNE_WORDS = ['ᚨᛚ・ᛞᚱᚨ', 'ᛟᚱ・ᚹᛁᚾ', 'ᛋᛖᛚ・ᚨ
 //   光線が空中の魔法弾をつかまえる → 打ち消して（打ち消し！）→ そのままボスへ跳ね返す（跳ね返した！）。これが打ち消せた人の反撃（別に斬りかかりはしない）
 export const SPELL_T = { chant0: 0.05, launch: 0.27, caught: 0.35, push: 0.4, back: 0.47, end: 0.66 };
 const IMPACT_SPELL = 0.42; // 外した冒険者に当たる時刻（arena の IMPACT と同じ）
-// 打ち消せた人: 正しく答えて、呪いを受けなかった人（正しく答えても MP 切れで受けた人は入れない）
+// 打ち消せた人: 正しく答えて、呪いを受けなかった人（正しく答えても 行動力 切れで受けた人は入れない）
 const spellCasters = (a) => alive(a).filter((v) => v.ok && !v.hit);
 // 打ち消しの呪文を知る者を照らすあいだ、まわりを暗くする（arena の明かりの暗さに足す）
 export function sceneDark(a) {
@@ -1175,7 +1175,9 @@ function spellFx(a) {
         ctx.stroke();
         ctx.restore();
     }
-    // 2) 知る者たちの詠唱。ほかの人の答えはネタバレになるので、中身が見えない人は古代文字で唱える
+    // 2) 知る者たちの詠唱。ほかの人の詠唱は、いつも古代文字で唱える（呪文の名前は出さない）。
+    //    場面の中身（たとえば刻まれた紋）は冒険者ごとに違うことがあり、正しい聖句も人ごとに違う。名前を並べると「どれが正解？」に見えるうえ、
+    //    ネタバレにもなるので、名前を出すのは自分の冒険者だけにする
     const [, ourLabel] = chantLabels(a);
     const chantEnd = T.push + 0.02;
     const others = cancel.filter((v) => !v.mine).slice(0, 8);
@@ -1184,8 +1186,7 @@ function spellFx(a) {
         const kk = win(p, st, st + 0.08);
         if (kk <= 0 || p >= chantEnd)
             return;
-        const real = !/^[（(]/.test(v.excerpt) && v.excerpt ? v.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : '';
-        const words = real || RUNE_WORDS[(v.f + i) % RUNE_WORDS.length];
+        const words = RUNE_WORDS[(v.f + i) % RUNE_WORDS.length];
         const n = Math.max(1, Math.ceil(kk * [...words].length));
         const al = Math.min(1, kk * 4) * (1 - win(p, chantEnd - 0.03, chantEnd)) * 0.9;
         const yo = (i % 2) * 9; // となり同士で重ならないよう、高さを少しずらす
@@ -1243,21 +1244,57 @@ function spellFx(a) {
         }
         ctx.restore();
     }
-    // 押し合いの余波: 呪文を知らなかった冒険者には、こぼれた火の粉が降りかかる
-    for (const v of alive(a).filter((x) => !x.ok)) {
-        const k = win(p, IMPACT_SPELL - 0.04, IMPACT_SPELL);
-        if (k <= 0 || k >= 1)
-            continue;
-        const from = spellOrb({ ...a, phase: IMPACT_SPELL - 0.04 });
-        const hx = lerp(from.x, v.x, k), hy = lerp(from.y, v.y - 12, k) - Math.sin(k * Math.PI) * 10;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = sc.main;
-        ctx.beginPath();
-        ctx.arc(hx, hy, 2.5, 0, TAU);
-        ctx.fill();
-        ctx.restore();
-    }
+    // 打ち消し失敗: 違う呪文を唱えた冒険者（または唱えられなかった冒険者）。
+    //   詠唱は赤く崩れ、光線は魔法弾に届かずに途中で砕ける。押し合いからこぼれた呪いのかけらが、その人にだけ跳ね返って当たる（これが被弾のダメージ）。
+    //   反撃（ボスへの跳ね返し）には加わらない
+    const failed = alive(a).filter((x) => !x.ok || x.hit);
+    failed.forEach((v, i) => {
+        // 唱えた（つもりの）呪文。名前は出さず、崩れた古代文字で
+        const kk = win(p, 0.25 + (i % 4) * 0.012, 0.33);
+        if (kk > 0 && p < chantEnd) {
+            const words = RUNE_WORDS[(v.f + i + 3) % RUNE_WORDS.length];
+            const n = Math.max(1, Math.ceil(kk * [...words].length));
+            const al = Math.min(1, kk * 4) * (1 - win(p, chantEnd - 0.03, chantEnd)) * 0.85;
+            text(ctx, tl(`「{0}」`, [...words].slice(0, n).join('')), v.x - 2, v.y - 34 - (i % 2) * 9, 9, a.frame % 10 < 5 ? '#ff9aa4' : '#c8a0a8', al, '#3a0a1e');
+        }
+        // 届かない光線（途中で砕ける）
+        const bk2 = win(p, T.caught - 0.02, T.caught + 0.02) * (1 - win(p, T.push, T.push + 0.03));
+        if (bk2 > 0) {
+            const reach = 0.45;
+            const ex = lerp(v.x, orb.x, reach), ey = lerp(v.y - 18, orb.y, reach);
+            ctx.save();
+            ctx.globalAlpha = bk2 * 0.8;
+            ctx.strokeStyle = '#ff7a86';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(v.x, v.y - 18);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+            ctx.restore();
+            text(ctx, '✕', ex, ey + 3, 9, '#ff5a6e', bk2, '#3a0a1e');
+        }
+        // 跳ね返ったかけらが当たる
+        const k = win(p, IMPACT_SPELL - 0.05, IMPACT_SPELL);
+        if (k > 0 && k < 1) {
+            const from = spellOrb({ ...a, phase: IMPACT_SPELL - 0.05 });
+            const hx = lerp(from.x, v.x, k), hy = lerp(from.y, v.y - 12, k) - Math.sin(k * Math.PI) * 12;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = sc.main;
+            ctx.beginPath();
+            ctx.arc(hx, hy, 4, 0, TAU);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(hx, hy, 1.5, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        }
+        const fk = bump(p, IMPACT_SPELL, IMPACT_SPELL + 0.12);
+        if (fk > 0)
+            text(ctx, tl('打ち消し失敗'), v.x, v.y - 48, 8, '#ff9aa4', Math.min(1, fk * 2), '#3a0a1e');
+    });
     // 打ち消し！（押し返しはじめ）
     const spell = mineV && !/^[（(]/.test(mineV.excerpt) ? mineV.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 12) : '';
     const tk = bump(p, T.push, T.back + 0.02);
@@ -1745,9 +1782,11 @@ export function sceneBanner(ctx, scene, title, phase, W, head, color) {
         return;
     const L = { ...SCENE_LABEL[scene], ...(color ? { color } : {}) };
     const slide = ease(clamp01(phase / 0.05));
+    // 一文の字幕（ボスの行動・自分の行動）: 12px の1行に収まらない文は、区切りのよい所で2行に分ける（字を小さくして詰めこまない）
+    const lines = !title ? fitCaption(ctx, head ?? L.head, W * 0.88) : null;
+    const h = lines ? (lines.rows.length > 1 ? 38 : 26) : 26, y = 27; // ボスの体力の下。冒険者の頭上（決め手の道具が浮かぶ高さ）にかからない
     ctx.save();
     ctx.globalAlpha = k;
-    const h = 26, y = 27; // ボスの体力の下。冒険者の頭上（決め手の道具が浮かぶ高さ）にかからない
     const x = lerp(-W, 0, slide);
     const g = ctx.createLinearGradient(0, 0, W, 0);
     g.addColorStop(0, 'rgba(10,8,20,0)');
@@ -1760,8 +1799,43 @@ export function sceneBanner(ctx, scene, title, phase, W, head, color) {
     ctx.fillRect(x + W * 0.15, y, W * 0.7, 1);
     ctx.fillRect(x + W * 0.15, y + h - 1, W * 0.7, 1);
     ctx.restore();
+    if (lines) {
+        const n = lines.rows.length, lh = lines.size + 3;
+        lines.rows.forEach((r, i) => text(ctx, r, x + W / 2, y + h / 2 + (i - (n - 1) / 2) * lh, lines.size, L.color, k));
+        return;
+    }
     text(ctx, head ?? L.head, x + W / 2, y + 9, 12, L.color, k);
     text(ctx, title, x + W / 2, y + 20, 7, '#ffffff', k);
+}
+// 字幕の文を、帯の幅に収まる行に分ける。まず 12px の1行。入らなければ、真ん中に近い区切り（——・読点・空白・感嘆符のあと）で2行。
+// それでも入らない長い文だけ、2行のまま字を少しずつ小さくする（10px まで）
+const CAP_BREAK = /(——|―|、|，|,|！|!|？|\?|。|：|:|\s)/g;
+export function fitCaption(ctx, s, maxW) {
+    const width = (t, size) => { ctx.font = `${size}px ${PIXEL_FONT}`; return ctx.measureText(t).width; };
+    ctx.save();
+    try {
+        if (width(s, 12) <= maxW)
+            return { rows: [s], size: 12 };
+        // 区切りの候補（区切りの直後で切る）。なければ文字数の真ん中
+        const cuts = [];
+        for (const m of s.matchAll(CAP_BREAK)) {
+            const at = (m.index ?? 0) + m[0].length;
+            if (at > 0 && at < s.length)
+                cuts.push(at);
+        }
+        if (!cuts.length)
+            cuts.push(Math.ceil(s.length / 2));
+        const mid = s.length / 2;
+        const cut = cuts.reduce((b, c) => (Math.abs(c - mid) < Math.abs(b - mid) ? c : b), cuts[0]);
+        const rows = [s.slice(0, cut).trim(), s.slice(cut).trim()];
+        for (let size = 11; size >= 10; size--)
+            if (Math.max(...rows.map((r) => width(r, size))) <= maxW)
+                return { rows, size };
+        return { rows, size: 10 };
+    }
+    finally {
+        ctx.restore();
+    }
 }
 // ======================================================================
 // 巻物の大技カウンター（ougi 跳躍落下斬り / rush 乱舞 / summon 召喚）
@@ -2706,7 +2780,7 @@ function rushLightFx(a) {
         ctx.restore();
         flash(a, bump(p, 0.41, 0.45), '#ffffff', 0.25);
     }
-    partyLabel(a, '#ffe0c8', bump(p, 0.44, 0.6));
+    // 「かわした」の札は出さない（自分の行動は青い帯の一文で見せる）
 }
 export const verseAt = (c, i) => c.start + i * c.verse;
 // その節のうち、文字を打ち出す区間の割合・輪が描き足される瞬間・外す人が詰まる瞬間

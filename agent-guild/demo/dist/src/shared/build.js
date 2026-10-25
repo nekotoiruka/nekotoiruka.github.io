@@ -92,7 +92,7 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
     const err = (path, message) => errors.push({ path, message });
     if (!isObj(raw))
         return { errors: [{ path: '', message: tl('ビルドは「キー: 値」のマップで書いてください') }] };
-    const known = ['name', 'team', 'position', 'personality', 'gear', 'avatar', 'kodawari', 'main', 'subagents', 'skills', 'tools', 'guardrail'];
+    const known = ['name', 'team', 'position', 'personality', 'gear', 'avatar', 'kodawari', 'main', 'subagents', 'skills', 'tools', 'guardrail', 'companion'];
     for (const k of Object.keys(raw))
         if (!known.includes(k))
             err(k, tl(`不明な項目「{0}」です`, k));
@@ -168,7 +168,37 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
                 guardrail = { words };
         }
     }
-    // subagents は廃止（古い YAML に書かれていても無視する）
+    // subagents は廃止（古い YAML に書かれていても無視する）。いまのサブエージェントは companion（お供）ひとり
+    let companion;
+    if (raw.companion !== undefined && raw.companion !== null) {
+        const c = raw.companion;
+        if (!isObj(c))
+            err('companion', tl('companion は { prompt: お供の心得, tools: [道具, …] } の形で書いてください'));
+        else {
+            const prompt = str(c.prompt) ?? '';
+            if (!prompt.trim())
+                err('companion.prompt', tl('companion.prompt（お供の心得）は必須です'));
+            if (COST_RULES.companionMaxChars && [...prompt].length > COST_RULES.companionMaxChars)
+                err('companion.prompt', tl(`お供の心得は{0}字までです（いま{1}字）`, COST_RULES.companionMaxChars, [...prompt].length));
+            const ctools = [];
+            if (c.tools !== undefined && c.tools !== null && !Array.isArray(c.tools))
+                err('companion.tools', tl('companion.tools はリストで書いてください'));
+            for (const t of Array.isArray(c.tools) ? c.tools : []) {
+                const id = str(t);
+                if (!id || !byId[id])
+                    err('companion.tools', TOOL_BY_ID[id ?? ''] ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
+                else if (ctools.includes(id))
+                    err('companion.tools', tl(`ツール「{0}」が重複しています`, id));
+                else if (tools.includes(id))
+                    err('companion.tools', tl(`道具「{0}」は、冒険者とお供の両方には持たせられません（どちらかひとりに）`, byId[id].name));
+                else
+                    ctools.push(id);
+            }
+            if (ctools.length > COST_RULES.companionMaxTools)
+                err('companion.tools', tl(`お供に持たせられる道具は{0}つまでです`, COST_RULES.companionMaxTools));
+            companion = { prompt, tools: ctools };
+        }
+    }
     const skills = [];
     const skRaw = raw.skills;
     if (skRaw !== undefined && skRaw !== null && !Array.isArray(skRaw))
@@ -226,6 +256,7 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
             main: { prompt: mainPrompt },
             skills, tools, gear,
             ...(guardrail ? { guardrail } : {}),
+            ...(companion ? { companion } : {}),
         },
     };
 }
@@ -256,6 +287,14 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
     }
     if (b.guardrail?.words.length)
         items.push({ kind: 'guard', label: tl('結界（ガードレール）'), cost: R.guardrailCost, note: tl(`言葉{0}つ`, b.guardrail.words.length) });
+    if (b.companion) {
+        const ct = estimateTokens(b.companion.prompt);
+        items.push({ kind: 'companion', label: tl('お供（サブエージェント）'), cost: R.companionCost + mainWeight(ct), note: tl(`心得 約{0}トークン`, ct) });
+        for (const id of b.companion.tools) {
+            const t = byId[id] ?? TOOL_BY_ID[id];
+            items.push({ kind: 'tool', label: tl(`お供の道具: {0}`, t.name), cost: t.cost });
+        }
+    }
     const total = items.reduce((a, x) => a + x.cost, 0);
     return { items, total, limit: R.limit, over: total > R.limit };
 }
@@ -321,10 +360,10 @@ export function toLoadout(b, catalog = TOOL_CATALOG) {
         tools: [...b.tools],
         mainTokens: estimateTokens(b.main.prompt),
         cost: computeCost(b, catalog).total,
-        ...(b.avatar.pet ? { pet: b.avatar.pet } : {}),
         skillLooks: b.skills.map((s, i) => ({ kind: s.look?.kind ?? 'gem', color: s.look?.color || DEFAULT_CHARM_COLORS[i % 4] })),
         ...(Object.keys(b.gear).length ? { gear: b.gear } : {}),
         ...(b.guardrail?.words.length ? { guardrail: b.guardrail.words.length } : {}),
+        ...(b.companion ? { companionTools: [...b.companion.tools], pet: b.avatar.pet ?? { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] } } : {}),
     };
 }
 // 画面で組んだビルドを YAML にする（提出・保存・上級者向けの編集用）
@@ -355,6 +394,8 @@ export function buildToYaml(b) {
         o.tools = [...b.tools];
     if (b.guardrail?.words.length)
         o.guardrail = { words: [...b.guardrail.words] };
+    if (b.companion)
+        o.companion = { prompt: b.companion.prompt, tools: [...b.companion.tools] };
     const gear = Object.entries(b.gear ?? {}).filter(([id, g]) => b.tools.includes(id) && (g.weapon || g.color));
     if (gear.length)
         o.gear = Object.fromEntries(gear.map(([id, g]) => {
@@ -383,6 +424,18 @@ export const MAIN_PROMPT_TEMPLATE = tl(`# 役割
 # 答え方
 - {"answer": "行動名"} の形で、説明は書かない
 `);
+// お供（サブエージェント）の心得の初期値と、お供を連れていくときに冒険者の心得に足す一節（〇〇・△△は自分で書き換える場所）
+export const COMPANION_PROMPT_TEMPLATE = tl(`# 役割
+あなたは冒険者のお供。頼まれたことだけを調べる。
+# 調べ方
+- 〇〇を頼まれたら → △△（道具名）で調べる
+# 答え方
+- 調べた要点だけを、短く答える
+`);
+export const MAIN_COMPANION_SNIPPET = tl(`# お供への頼み方
+- 〇〇のときだけ、お供に頼む
+- 頼むときは、△△（名前や様子）をそのまま伝える
+`);
 // 以前の初期値（この中身のままの下書きは、新しい型に置き換えてよい）
 // 守ることに幻術よけを書いていた版（幻術は結界の役目なので、心得に書くのは誤解のもと）
 const PREV_TEMPLATE_1 = tl(`# 役割
@@ -406,7 +459,6 @@ avatar:
   palette: "#3a7bd5"
   hair: "#f2c14e"
   weapon: auto
-  pet: { kind: bird, color: "#5ab4ff" }   # お供（見た目だけ・任意）
 kodawari: ""
 
 main:

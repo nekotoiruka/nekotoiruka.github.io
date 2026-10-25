@@ -44,10 +44,11 @@ const WEAPONS = {
         '...h...', '..hmn..', '..hmn..', '..hln..', '..hln..', '..hln..', '..hln..', '..hln..', '..hmn..', '..hmn..',
         'g.hmn.g', 'gGgfgGg', '...y...', '...x...', '...y...', '..gGg..',
     ],
-    // 刀: ゆるく反った刃・金のはばき・丸いつば・菱模様の柄巻き
+    // 刀: ゆるく反った刃・金のはばき・丸いつば・菱模様の柄巻き。
+    //   反りのふくらむ側（右＝前）が刃（きらめき h）。前へ振り下ろすと刃から当たる（以前は左右が逆で、峰打ちに見えた）
     katana: [
-        '....h', '...hn', '...hn', '..hn.', '..hn.', '..hn.', '..hn.', '.hn..', '.hn..', '.hn..', '.hn..', '.Gg..', 'GgggG',
-        '.fk..', '.kf..', '.fk..', '.kf..', '.gg..',
+        'h....', 'nh...', 'nh...', '.nh..', '.nh..', '.nh..', '.nh..', '..nh.', '..nh.', '..nh.', '..nh.', '..gG.', 'GgggG',
+        '..kf.', '..fk.', '..kf.', '..fk.', '..gg.',
     ],
     // 大鎌: 前へ大きく弧を描く刃（背は暗く、刃先はきらめく）・金の口金・主色の柄
     scythe: [
@@ -75,7 +76,7 @@ const WEAPONS = {
 // 手で握る位置（格子の列・行）。長物は柄の途中を握り、柄じりが手の下へ少し伸びる
 const GRIP = {
     bow: [3, 9], spear: [3, 17], dagger: [2, 8], wand: [4, 14], shield: [4, 4], axe: [5, 12], hammer: [4, 11], book: [4, 4],
-    sword: [3, 13], katana: [1, 15], scythe: [2, 15], fan: [5, 8], blaster: [4, 6], pan: [3, 11], umbrella: [5, 10], guitar: [3, 12],
+    sword: [3, 13], katana: [3, 15], scythe: [2, 15], fan: [5, 8], blaster: [4, 6], pan: [3, 11], umbrella: [5, 10], guitar: [3, 12],
 };
 // 振らずに構えるもの（盾・本・銃・弓・ギター）
 const HELD = ['shield', 'book', 'blaster', 'bow', 'guitar'];
@@ -83,7 +84,7 @@ const HELD = ['shield', 'book', 'blaster', 'bow', 'guitar'];
 // 近接の武器は刃先（使うのは主に飛び道具）
 const MUZZLE = {
     bow: [7.5, 9], blaster: [11.5, 2.5], wand: [4, 2], book: [8.5, 4], fan: [5, 1],
-    spear: [3, 0], dagger: [2, 0], shield: [4, 4], axe: [5, 0], hammer: [4, 2], sword: [3, 0], katana: [4, 0], scythe: [12, 4], pan: [3, 3], umbrella: [5, 0], guitar: [3, 0],
+    spear: [3, 0], dagger: [2, 0], shield: [4, 4], axe: [5, 0], hammer: [4, 2], sword: [3, 0], katana: [0, 0], scythe: [12, 4], pan: [3, 3], umbrella: [5, 0], guitar: [3, 0],
 };
 // 先が光るもの（格子の列・行と、光の半径）
 const GLOW = { wand: [4, 2, 3.2], book: [4, 4, 2.5], blaster: [11, 2.5, 2] };
@@ -259,9 +260,22 @@ export function gearOf(l) {
     };
 }
 // 仲間の定位置（足元中心からの相対）
-export function familiarHome(i, flip, frame) {
+// 地面を歩くお供（足元で、ちょこちょこ跳ねる）。ほかは宙に浮く（種類ごとに高さと揺れの速さを変える）
+const GROUND_FAMILIARS = new Set(['slime', 'mushroom', 'penguin', 'kitten', 'octopus']);
+const FLOAT_STYLE = {
+    bird: { h: -26, amp: 2.5, per: 5 }, bat: { h: -28, amp: 3, per: 4 }, fairy: { h: -25, amp: 2, per: 8 }, dragon: { h: -27, amp: 2, per: 6 },
+    drone: { h: -29, amp: 0.8, per: 10 }, ufo: { h: -30, amp: 1, per: 9 }, ghost: { h: -22, amp: 2.5, per: 11 }, spirit: { h: -23, amp: 2, per: 9 }, jelly: { h: -21, amp: 3, per: 12 },
+};
+// お供の位置（足元の中心からの相対。y は絵の上端）
+export function familiarHome(i, flip, frame, kind) {
     const side = flip ? 1 : -1;
-    return { x: side * (14 + i * 6) - 5 + Math.sin((frame + i * 13) / 9) * 1.5, y: -24 + i * 5 + Math.cos((frame + i * 7) / 7) * 2 };
+    if (kind && GROUND_FAMILIARS.has(kind)) {
+        const gh = FAMILIARS[kind][0].length;
+        const hop = Math.abs(Math.sin((frame + i * 11) / 6)) * 2.5; // 足元で、ちょこちょこ跳ねる
+        return { x: side * (16 + i * 6) - 5 + Math.sin((frame + i * 13) / 14) * 1, y: -gh + 1 - hop };
+    }
+    const st = (kind && FLOAT_STYLE[kind]) ?? { h: -24, amp: 2, per: 7 };
+    return { x: side * (14 + i * 6) - 5 + Math.sin((frame + i * 13) / 9) * 1.5, y: st.h + i * 5 + Math.cos((frame + i * 7) / st.per) * st.amp };
 }
 // 手の武器の傾き（ラジアン。右向きのとき）
 function swingOf(act, t) {
@@ -292,7 +306,7 @@ export function muzzleOf(look, cx, fy, d) {
     const [gx0, gy] = GRIP[kind], [mc, mr] = MUZZLE[kind];
     const x0 = -(flip ? ws.width - 1 - (gx0 + 1) : gx0 + 1), y0 = -(gy + 1);
     const px = x0 + (flip ? ws.width - 1 - (mc + 1) : mc + 1) + 0.5, py = y0 + mr + 1 + 0.5;
-    const a = dir * swingOf(act, d.t ?? 0) * (held ? 0.3 : 1);
+    const a = dir * swingOf(act, d.t ?? 0) * (held ? 0.3 : 1) + dir * (d.wRot ?? 0);
     let x = hx + px * Math.cos(a) - py * Math.sin(a), y = hy + px * Math.sin(a) + py * Math.cos(a);
     if (d.rot) {
         const r = d.rot * (flip ? -1 : 1), dx = x - cx, dy = y - fy;
@@ -354,7 +368,7 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
     const held = HELD.includes(look.weapon);
     if (held)
         ctx.translate(dir, 0); // 構えるものは少し前に出す
-    ctx.rotate(dir * swing * (held ? 0.3 : 1));
+    ctx.rotate(dir * swing * (held ? 0.3 : 1) + dir * (d.wRot ?? 0));
     drawWeaponAt(ctx, look.weapon, gear.weaponColor, flip, d.frame, act === 'cast' ? 1 : (d.skillGlow ?? 0));
     if (!held && look.weapon !== 'bow') {
         // 柄を握る手（武器の上に重ねて、握っているように見せる）
@@ -390,7 +404,7 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
     });
     // 仲間
     gear.fams.forEach((f, i) => {
-        const p = d.famPos?.[i] ?? familiarHome(i, flip, d.frame);
+        const p = d.famPos?.[i] ?? familiarHome(i, flip, d.frame, f.kind);
         const sp = familiarSprite(f.kind, f.color, Math.floor((d.frame + i * 5) / 9), flip);
         ctx.drawImage(sp, Math.round(cx + p.x - sp.width / 2 + 5), Math.round(fy + p.y));
     });
@@ -398,7 +412,7 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
 }
 // お供だけを、主の立ち位置（足元の中心 cx, fy）の横に描く（主が跳んでも、お供はその場で待つ）
 export function drawFamiliarAt(ctx, f, cx, fy, frame, flip = true) {
-    const p = familiarHome(0, flip, frame);
+    const p = familiarHome(0, flip, frame, f.kind);
     const sp = familiarSprite(f.kind, f.color, Math.floor(frame / 9), flip);
     ctx.drawImage(sp, Math.round(cx + p.x - sp.width / 2 + 5), Math.round(fy + p.y));
 }

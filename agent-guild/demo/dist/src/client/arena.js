@@ -5,9 +5,9 @@ import { drawHero, gearOf, lookOf, portrait } from './hero.js';
 import './bosses/index.js';
 import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
 import { setUltQuiet } from './ultkit.js';
-import { ELEMENT_COLOR, isUltScene, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
+import { ELEMENT_COLOR, isUltScene, ULT_SCENES, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
-import { AGILE, EVADE_LABEL, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, bump, clamp01, ease, lerp } from './arena-common.js';
+import { AGILE, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
 import { bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
@@ -16,9 +16,12 @@ import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
 import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
-import { bandWave, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
-import { bossWeakness, counterFor, sceneHead } from './bossmoves.js';
-import { protoPattern, respOf } from './motionlab.js';
+import { bandWave, bandWindow, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
+import { bossWeakness, counterFor, respondScene } from './bossmoves.js';
+import { bossLine, chainBeats } from './captions.js';
+import { introBoss, introFighter, introHud, introLen, introPlan } from './arena-intro.js';
+const BOSS_RED = '#ff6b7a';
+import { attackPattern, protoPattern, respOf } from './motionlab.js';
 import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
@@ -116,9 +119,39 @@ export class ArenaRenderer {
     caseTitle(cm) {
         return waveTitleFor(cm, this.script.fighters, this.mine);
     }
-    sceneOf(w) {
+    /** 正しく動けた人の身のこなしに使う基本の場面（bossmoves.ts の respondScene） */
+    respScene(w) {
+        const wv = this.script.waves[w], cm = wv ? this.script.cases[wv.caseIndex] : undefined;
+        return respondScene(this.caseSceneOf(w), cm?.respond, wv?.attack);
+    }
+    /** 課題の場面（字幕・ボスの行動の言い方に使う） */
+    caseSceneOf(w) {
         const wv = this.script.waves[w];
         return wv ? this.script.cases[wv.caseIndex]?.scene : undefined;
+    }
+    /** 演出の場面。大技の場面（奥義・乱舞・召喚…）は、シーズンの中で必殺技の6種類（奥義・乱舞・召喚・返し技・封印・覚醒）を順に回す。
+     *  同じ型ばかりにならず、1シーズンで武器ごとの6つの必殺技がひととおり見られる。最初の大技の回は課題の場面のまま */
+    ultCycle = null;
+    // 幕開け（arena-intro.ts）: 時刻 0 より前。intro は描いているあいだだけ { s: 幕開けの中の秒 }
+    intro = null;
+    introLayer = null;
+    introGlow = null;
+    introCache = null;
+    introPlan = introPlan;
+    introBoss = introBoss;
+    introFighter = introFighter;
+    introHud = introHud;
+    get introLen() { return introLen.call(this); }
+    sceneOf(w) {
+        const sc = this.caseSceneOf(w);
+        if (!isUltScene(sc))
+            return sc;
+        if (!this.ultCycle) {
+            const ults = this.script.waves.map((_, i) => i).filter((i) => isUltScene(this.caseSceneOf(i)));
+            const first = ULT_SCENES.indexOf(this.caseSceneOf(ults[0]));
+            this.ultCycle = this.script.waves.map((_, i) => { const k = ults.indexOf(i); return k < 0 ? -1 : (first + k) % ULT_SCENES.length; });
+        }
+        return ULT_SCENES[this.ultCycle[w]] ?? sc;
     }
     get totalWaves() { return this.script.waves.length; }
     get totalTime() { return this.script.waves.length + OUTRO; }
@@ -272,6 +305,7 @@ export class ArenaRenderer {
         return out;
     }
     bandWave = bandWave; // arena-timing.ts
+    bandWindow = bandWindow; // arena-timing.ts
     slowFactor = slowFactor; // arena-timing.ts
     stopCache = new Map();
     hitStop = hitStop; // arena-timing.ts
@@ -282,10 +316,16 @@ export class ArenaRenderer {
     protoOf(w, f) {
         if (!this.motionProto)
             return null;
-        const co = counterFor(this.script.theme?.kind, this.sceneOf(w));
+        const co = counterFor(this.script.theme?.kind, this.respScene(w));
         const resp = co ? respOf(co.evade, co.fx) : null;
-        const pattern = resp ? protoPattern(resp, this.looks[f].weapon) : null;
+        const pattern = resp ? protoPattern(resp, this.looks[f].weapon, w) : null; // 候補が2つある武器は、回ごとに交互に
         return pattern && resp ? { pattern, resp } : null;
+    }
+    /** ボスへの反撃を、見本帳で武器ごとに選んだ通常攻撃の型で見せる（null なら以前の共通の動き） */
+    attackProtoOf(w, f) {
+        if (!this.motionProto)
+            return null;
+        return attackPattern(this.looks[f].weapon, w + f);
     }
     /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。竜は場面の属性、ほかのボスは決まった弱点（bossmoves.ts）。弱点の属性がないボスは undefined（ふだんの色） */
     elementTint(w) {
@@ -302,8 +342,22 @@ export class ArenaRenderer {
     updateCamera = updateCamera; // arena-camera.ts
     // ===================== 描画 =====================
     draw(time) {
+        if (time < 0) { // 幕開け: 場面1のはじめの絵に、ボスの登場と討伐隊の参戦を重ねる
+            this.intro = { s: (time + this.introLen) * WAVE_SECONDS };
+            this.lastTime = 0;
+            try {
+                this.drawFrame(0);
+            }
+            finally {
+                this.intro = null;
+            }
+            return;
+        }
+        this.drawFrame(time);
+    }
+    drawFrame(time) {
         this.frame++;
-        if (!this.muted)
+        if (!this.muted && !this.intro)
             this.playCues(this.lastTime, time);
         this.lastTime = time;
         const s = this.script;
@@ -374,7 +428,7 @@ export class ArenaRenderer {
         // --- 場面演出の準備（課題の種類ごと） ---
         const scene = this.sceneOf(w);
         const cm = s.cases[wv.caseIndex];
-        const sa = scene && outro === 0 ? {
+        const sa = scene && outro === 0 && !this.intro ? {
             ctx, phase, frame: this.frame, scene, element: cm?.element, weakness: bossWeakness(s.theme?.kind), title: cm ? this.caseTitle(cm) : '',
             foot: this.bossFoot, body: this.bossBody, W: AW, H: AH, seed: `${s.seed}:${w}`, theme: s.theme,
             fighters: vis.map((v) => {
@@ -404,7 +458,10 @@ export class ArenaRenderer {
             ctx.save();
             ctx.translate(flinch - run * 230, -run * 50 - Math.sin(run * Math.PI) * 30);
             ctx.globalAlpha = 1 - Math.max(0, run - 0.6) / 0.4;
-            this.drawBoss(ctx, phase, atk, down, attackOf, chain, fleeT >= 0, scene);
+            if (this.intro)
+                this.introBoss(ctx, (c) => this.drawBoss(c, 0, atk, -1, new Map(), null, false, scene));
+            else
+                this.drawBoss(ctx, phase, atk, down, attackOf, chain, fleeT >= 0, scene);
             ctx.restore();
         }
         // 逃げ出した跡に、土煙
@@ -461,8 +518,12 @@ export class ArenaRenderer {
         }
         // --- キャラ（奥から順に） ---
         const order = vis.sort((a, b) => a.y - b.y || a.x - b.x);
-        for (const v of order)
-            this.drawFighter(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), evaded.has(v.f), hits.get(v.f), targeted(v.f), atk);
+        if (this.intro)
+            for (const v of order)
+                this.introFighter(ctx, v);
+        else
+            for (const v of order)
+                this.drawFighter(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), evaded.has(v.f), hits.get(v.f), targeted(v.f), atk);
         // 決め手: あなたが正しく動けたときだけ、効いた道具（または巻物・結界）を頭上に一瞬掲げ、武器へ吸いこませてから動く
         if (!chain && outro === 0)
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
@@ -501,7 +562,7 @@ export class ArenaRenderer {
                 const wk = this.looks[v.f].weapon;
                 const age = phase - at.t;
                 const tint = this.elementTint(w); // 隙の場面: 弱点の属性の色で当てる
-                if (!MELEE_WEAPONS.includes(wk) && age >= -0.06 && age < 0)
+                if (!MELEE_WEAPONS.includes(wk) && !this.attackProtoOf(w, v.f) && age >= -0.06 && age < 0)
                     this.projectile(ctx, wk, v, this.bossBody, 1 + age / 0.06, at.crit, tint?.main);
                 if (age >= 0 && age < 0.09)
                     this.hitSpark(ctx, this.bossBody.x + (v.f % 3) * 6 - 6, this.bossBody.y - 8 + (v.f % 4) * 4, age / 0.09, at.crit, tint);
@@ -517,10 +578,7 @@ export class ArenaRenderer {
             if (e.type === 'strike') { /* 正否は体のまわりのオーラで見せる（auras） */ }
             else if (e.type === 'hit' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
-            else if (e.type === 'evade' && v && (this.mine.has(e.f) || this.selected === e.f || this.hovered === e.f || spot?.f === e.f)
-                && this.evadeOf(w, e.f) !== 'resist')
-                this.floatText(// 幻術は結界で弾いたかどうかだけ。弾いた人には場面が「弾いた！」を出す（ここでは重ねない）
-                ctx, EVADE_LABEL[this.evadeOf(w, e.f)], v.x, v.y - 34 - fl * 8, '#8fd3ff', 1 - fl, 8);
+            // かわした人の「よけた！」などは出さない（行動の説明は、自分の青い帯だけ）
             else if (e.type === 'attack' && ult?.f !== e.f) {
                 const bx = this.bossBody.x + ((e.f * 37) % 40) - 20, by = this.bossBody.y - 20 - ((e.f * 13) % 16);
                 this.damageNum(bx, by, e.dmg, fl, e.crit, 'boss');
@@ -531,8 +589,8 @@ export class ArenaRenderer {
                 ctx.globalAlpha = 1;
                 this.floatText(ctx, e.item === 'potion' ? `+${Math.round(e.amount)}` : tl('シールド'), v.x + 8, v.y - 34 - fl * 10, '#7bed9f', 1 - fl);
             }
-            else if (e.type === 'mpOut' && v)
-                this.floatText(ctx, tl('MP切れ'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
+            else if (e.type === 'mpOut' && v && !this.mine.has(e.f))
+                this.floatText(ctx, tl('行動力切れ'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
             else if (e.type === 'endure' && v)
                 this.floatText(ctx, tl('ギリギリ耐えた！'), v.x, v.y - 40 - fl * 6, '#ffd166', 1 - fl, 9);
             else if (e.type === 'revive' && v) {
@@ -554,20 +612,22 @@ export class ArenaRenderer {
             if (st && at) {
                 const g = clamp01((phase - (at.t - 0.12)) / 0.03) * clamp01((at.t + 0.08 - phase) / 0.03);
                 if (g > 0) {
-                    [...st.used.skills.map((x) => ({ t: x, c: '#ff9ce6' })), ...st.used.tools.map((x) => ({ t: TOOL_SHORT[x] ?? TOOL_BY_ID[x]?.name ?? x, c: '#8fd3ff' }))] // 役に立たない道具も同じ色（色で答えが分からないように）
+                    [...(st.used.companion ? [{ t: tl('お供に頼んだ'), c: '#c59bff' }] : []), ...st.used.skills.map((x) => ({ t: x, c: '#ff9ce6' })), ...st.used.tools.map((x) => ({ t: TOOL_SHORT[x] ?? TOOL_BY_ID[x]?.name ?? x, c: '#8fd3ff' }))] // 役に立たない道具も同じ色（色で答えが分からないように）
                         .slice(0, 4).forEach((l, i) => this.tag(ctx, l.t, l.c, v.x, v.y - 40, g, i + 1));
                 }
             }
         }
         // --- 光と影: 全体を暗くして、光源のまわりだけ抜く。光源の色は加算で重ねる ---
-        this.applyLighting(ctx, scene, !!chain, sa ? sceneDark(sa) : 0);
+        this.applyLighting(ctx, scene, !!chain, sa ? sceneDark(sa) : this.intro ? 0.4 * (1 - clamp01((this.intro.s - 0.2) / 2.2)) + 0.22 * clamp01((this.intro.s - this.introPlan().hold) / 0.6) * clamp01(1 - (this.intro.s - this.introPlan().go) / 0.2) : 0); // 幕開けは闇から明けていく
         // --- 手前の柱（カメラより速く動く。奥行き） ---
         this.foreground(ctx);
         // 画面下の進み具合（あなたの戦果が、正解するたびに積み上がる）。技名や「大技を潰した！」などの文字より奥に描く
-        ctx.save();
-        ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
-        this.progressBar(w, phase, strikeOf);
-        ctx.restore();
+        if (!this.intro) {
+            ctx.save();
+            ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+            this.progressBar(w, phase, strikeOf);
+            ctx.restore();
+        }
         // 大技の光・閃光・巨大な数字（明かりの影響を受けない）。ほかの人の大技を控えめに見せるときは、半透明で閃光・暗転なし
         if (sa)
             this.fxLayer(ctx, (c) => (quietUlt ? this.faded(c, 0.45, (c2) => { setUltQuiet(true); try {
@@ -587,12 +647,25 @@ export class ArenaRenderer {
         this.bossBar(time);
         const gagNow = [...this.mine].some((f) => this.gagOf(f)?.w === w) && phase > GAG[0] - 0.02 && phase < GAG[1] + 0.02;
         // 連携詠唱の見出しは、並び終えるまでの短いあいだだけ
-        if (sa && cm && !gagNow)
-            sceneBanner(ctx, scene, this.caseTitle(cm), chain ? phase * 1.8 : phase, AW, ult ? tl('ボスが大技の構え！') : chain ? tl('最後の大技の構え！ みんなで連携詠唱！') : s.theme?.labels?.[scene] ?? sceneHead(s.theme?.kind, scene), ult ? '#ff5a6e' : undefined);
-        // あなたの動き（青い帯）: ボスの赤い帯が消えたあと、動き出す前に、答えた技の名前を見せる
-        if (!gagNow && !ult && !chain && scene !== 'spell')
-            this.mineBand(ctx, w, phase, strikeOf, scene);
-        this.ultimate(ctx, w, phase);
+        // 赤い帯: ボスが何をしたかを一文で（captions.ts）。連携詠唱は前置きの3拍（構え → 倒しきるには → いくぞ）
+        if (sa && cm && !gagNow) {
+            const cap = s.theme?.captions;
+            if (chain) {
+                const beats = chainBeats(cap, cm.id, s.boss.name), L = 0.05, i = Math.min(2, Math.floor(phase / L));
+                if (phase < 3 * L)
+                    sceneBanner(ctx, scene, '', ((phase - i * L) / L) * 0.25, AW, beats[i], i === 2 ? '#ffe9a0' : BOSS_RED);
+            }
+            else
+                sceneBanner(ctx, scene, '', phase, AW, bossLine(cap, this.caseSceneOf(w), cm.id, s.boss.name), scene === 'opening' ? '#ffe27a' : scene === 'illusion' ? '#d9a8ff' : BOSS_RED);
+        }
+        // あなたの動き（青い帯）: 自分の冒険者がどう応じたかを一文で。画面の動きを見せた直後に出す
+        if (this.intro) {
+            this.introHud(ctx);
+            return;
+        }
+        if (!gagNow)
+            this.mineBand(ctx, w, phase, strikeOf, this.caseSceneOf(w)); // 文は課題の場面で引く（区間は演出の場面で決まる）
+        // 巻物のカットイン（「スキル発動」）は出さない（2026-10-25）。見せ場は必殺技そのものにまとめる。巻物は頭上で広がる演出（scrollFx）だけ
         if (outro === 0)
             this.comboHud(ctx, w, phase, views);
         this.reserveStrip(ctx, views);

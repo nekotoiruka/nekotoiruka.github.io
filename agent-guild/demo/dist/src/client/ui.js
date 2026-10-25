@@ -58,7 +58,7 @@ export function radar(stats, size = 140) {
 }
 const swatch = (c) => h('i', { class: 'swatch', style: { background: c } });
 export function loadoutChips(l) {
-    return h('div', { class: 'chips' }, h('span', { class: 'chip chip-body' }, BODY_LABELS[l.body]), l.pet ? h('span', { class: 'chip chip-sub', title: tl('お供（見た目だけ）') }, swatch(l.pet.color || '#5ab4ff'), tl(`お供: {0}`, FAMILIAR_LABELS[l.pet.kind])) : null, ...l.skills.map((s, i) => { const k = skillLook(l, i); return h('span', { class: 'chip chip-skill', title: tl(`巻物（スキル・{0}）`, CHARM_LABELS[k.kind]) }, swatch(k.color), tl(`巻物: {0}`, s)); }), ...l.tools.map((t) => h('span', { class: 'chip chip-tool', title: tl('道具（ツール）') }, TOOL_BY_ID[t]?.name ?? t)));
+    return h('div', { class: 'chips' }, h('span', { class: 'chip chip-body' }, BODY_LABELS[l.body]), l.pet ? h('span', { class: 'chip chip-sub', title: tl('お供（サブエージェント）') }, swatch(l.pet.color || '#5ab4ff'), tl(`お供: {0}`, FAMILIAR_LABELS[l.pet.kind])) : null, ...l.skills.map((s, i) => { const k = skillLook(l, i); return h('span', { class: 'chip chip-skill', title: tl(`巻物（スキル・{0}）`, CHARM_LABELS[k.kind]) }, swatch(k.color), tl(`巻物: {0}`, s)); }), ...l.tools.map((t) => h('span', { class: 'chip chip-tool', title: tl('道具（ツール）') }, TOOL_BY_ID[t]?.name ?? t)));
 }
 export function avatarCanvas(l, scale = 3) {
     // scale 1 は名簿用の小さな胸像

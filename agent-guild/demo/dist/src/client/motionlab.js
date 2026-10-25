@@ -14,6 +14,10 @@ let TX = 26, TY = 46; // 吸血鬼の胸のあたり（腕の少し奥）
 let QUIET = false; // 主役以外: 画面全体の閃光・揺れ・カットインを出さない
 let BOSS_KIND = 'vampire';
 let PAIR_REACH = false; // ボスの攻撃を迎え撃つ（斬りはらう・打ち砕く・撃ち落とす）とき: 当てる先を、目の前の飛んでくるものにする
+let LIFT = null; // 近接の反撃で、元の列から寄せる分（drawInArena）
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const liftAt = (x) => (LIFT ? R(LIFT.dy * (1 - clamp01((LIFT.from - x) / Math.max(1, LIFT.from - LIFT.to)))) : 0);
+let REACH_TO = null; // 討伐画面の反撃: 近接の型が踏みこむ先（ボスの前）。null なら見本帳の位置
 let NO_ATTACK = false; // ボスの攻撃とセットで見るとき: 見本の中の仮の攻撃（赤い玉・赤い弧）を描かない
 const LOOP = 2.0; // 1回の長さ（秒）
 const clamp = (x) => Math.max(0, Math.min(1, x));
@@ -303,6 +307,7 @@ function makeEnv(c, t, f, L, hc = c) {
     const e = {
         c, t, f, L, weapon: L.look.weapon,
         hero(x, y, action = 'idle', at = 0, o = {}) {
+            y += liftAt(x);
             const img = heroSprite(L, action, at, f, o.flip ?? true);
             const src = o.tint ? tinted(img, o.tint, 'tint:' + o.tint) : img;
             const X = R(x) - 20, Y = R(y) - 36;
@@ -320,12 +325,14 @@ function makeEnv(c, t, f, L, hc = c) {
                 drawDither(hc, src, X, Y, o.a ?? 1);
         },
         muzzle(x, y, action = 'cast', at = 0.5) {
+            y += liftAt(x);
             const m = muzzleOf(L.look, 20, 36, { frame: f, flip: true, action, t: at });
             return { x: R(x) - 20 + m.x, y: R(y) - 36 + m.y };
         },
         ghost(x, y, col, a, action = 'dash', at = 0) {
             if (a <= 0.12)
                 return;
+            y += liftAt(x);
             const img = heroSprite(L, action, at, f, true);
             hc.drawImage(outlineOf(img, col), R(x) - 21, R(y) - 37);
             if (a > 0.45)
@@ -367,6 +374,8 @@ function makeEnv(c, t, f, L, hc = c) {
 function approach(t, t0, t1, t2, t3, to = 64) {
     if (PAIR_REACH)
         to = HX - 12; // 迎え撃つとき: ボスまで走らず、目の前で振る
+    else if (REACH_TO !== null)
+        to = REACH_TO;
     if (t < t0)
         return HX;
     if (t < t1)
@@ -3316,17 +3325,17 @@ export const BOSS_LIST = [
 // [ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類]
 export const PAIRS = {
     dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '伏せる', 'crawl'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
-    vampire: { breath: ['蝙蝠の群れ', '聖なる光で蝙蝠を散らす', 'barrier'], claw: ['伸びる爪', '爪をはじく', 'parry'], dive: ['蝙蝠の急降下', '飛びのく', 'dodge'], tail: ['背後の霧からの斬撃', '振り向いて受け止める', 'turn'] },
-    spider: { breath: ['糸の網', '糸を斬りはらう', 'cut'], claw: ['毒牙', '横へ跳ぶ', 'dodge'], dive: ['糸を伝う奇襲', '影を残してすり抜ける', 'step'], tail: ['脚の薙ぎ払い', '脚を跳び越える', 'jump'] },
-    goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '落とし穴を跳び越える', 'jump'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['槍の突撃', '穂先をはらう', 'parry'] },
-    kraken: { breath: ['墨の噴射', '風で墨を吹きはらう', 'barrier'], claw: ['触手の薙ぎ', '伏せて触手をくぐる', 'crawl'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['触手の巻き取り', '触手を斬る', 'cut'] },
-    golem: { breath: ['石礫の嵐', '石礫を打ち砕く', 'smash'], claw: ['岩の拳', '拳から飛びのく', 'dodge'], dive: ['地割れ', '地割れを跳び越える', 'jump'], tail: ['石腕の薙ぎ払い', '伏せてやりすごす', 'crawl'] },
-    giant: { breath: ['凍てつく息', '炎で冷気を溶かす', 'barrier'], claw: ['氷の投げ槍', '氷の槍を撃ち落とす', 'shoot'], dive: ['氷柱の踏みつけ', '踏みつけから飛びのく', 'dodge'], tail: ['棍棒の薙ぎ払い', '棍棒を跳び越える', 'jump'] },
+    vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧からの斬撃', '振り向いて斬る', 'turnCut'] },
+    spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['脚の薙ぎ払い', '低く斬りはらう', 'cut'] },
+    goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['槍の突撃', '穂先をはらう', 'parry'] },
+    kraken: { breath: ['墨の噴射', '物陰に伏せる', 'crawl'], claw: ['触手の薙ぎ', '跳んでかわす', 'jump'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['触手の巻き取り', '触手を斬る', 'cut'] },
+    golem: { breath: ['石礫の嵐', '盾で受ける', 'block'], claw: ['岩の拳', '拳から飛びのく', 'dodge'], dive: ['地割れ', '地割れを跳び越える', 'jump'], tail: ['石腕の薙ぎ払い', '伏せてやりすごす', 'crawl'] },
+    giant: { breath: ['凍てつく息', '物陰に伏せる', 'crawl'], claw: ['氷の投げ槍', '左右に駆けてかわす', 'step'], dive: ['氷柱の踏みつけ', '踏みつけから飛びのく', 'dodge'], tail: ['棍棒の薙ぎ払い', '懐へ踏みこんで斬る', 'cut'] },
 };
 export const SPELL_NAME = { dragon: '呪文', vampire: '呪いの紋', spider: '毒の大技', goblin: '大号令', kraken: '大渦', golem: '刻印の起動', giant: '雪崩' };
 // 対応の種類 → 見本帳のどの項目の案を使うか
 export const RESP_CAT = {
-    block: { cat: 'guard', label: 'ガード' }, barrier: { cat: 'guard', label: 'ガード（結界）', only: 'guard-hex' }, parry: { cat: 'guard', label: 'ガード（はじく）' }, turn: { cat: 'guard', label: '振り向いてガード' },
+    block: { cat: 'guard', label: 'ガード' }, barrier: { cat: 'guard', label: 'ガード（結界）', only: 'guard-hex' }, parry: { cat: 'guard', label: 'ガード（はじく）' }, turn: { cat: 'guard', label: '振り向いてガード' }, turnCut: { cat: 'attack', label: '振り向いて斬る' },
     cut: { cat: 'attack', label: '通常攻撃で斬りはらう' }, smash: { cat: 'attack', label: '通常攻撃で打ち砕く' }, shoot: { cat: 'attack', label: '通常攻撃で撃ち落とす' },
     dodge: { cat: 'evade', label: '回避', avoid: 'evade-duck' }, step: { cat: 'evade', label: '回避（すり抜け）', avoid: 'evade-duck' },
     crawl: { cat: 'evade', label: '回避（伏せる）', only: 'evade-duck' }, jump: { cat: 'jump', label: 'ジャンプ' },
@@ -3433,7 +3442,7 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
         }
         return;
     }
-    if (resp === 'turn') { // 背後（右）の霧から斬りつける
+    if (resp === 'turn' || resp === 'turnCut') { // 背後（右）の霧から斬りつける
         const m = bump(t, 0.1, 0.6);
         if (m > 0)
             for (let i = 0; i < 4; i++)
@@ -3617,7 +3626,7 @@ export function renderPair(c, kind, scene, pick, timeSec, L, allies = []) {
         bossAttack(c, kind, scene, resp, t, f, HX);
         if (pick.pattern) {
             NO_ATTACK = true;
-            const meet = resp === 'cut' || resp === 'smash' || resp === 'shoot';
+            const meet = resp === 'cut' || resp === 'smash' || resp === 'shoot' || resp === 'turnCut';
             const keep = { TX, TY };
             if (meet) {
                 PAIR_REACH = true;
@@ -3628,10 +3637,10 @@ export function renderPair(c, kind, scene, pick, timeSec, L, allies = []) {
             e2.bg = () => { };
             e2.boss = () => { };
             c.save();
-            if (resp === 'turn') {
+            if (resp === 'turn' || resp === 'turnCut') {
                 c.translate(2 * HX, 0);
                 c.scale(-1, 1);
-            } // 背後から来るので、右を向いて受ける
+            } // 背後から来るので、右を向いて受ける（斬り返す）
             try {
                 pick.pattern.draw(e2);
             }
@@ -3656,7 +3665,7 @@ export function respOf(evade, fx) {
     return evade;
 }
 /** 対応の種類と武器から、使う案（伏せる・結界は全員同じ動きなので、本番の動きのまま＝null） */
-export function protoPattern(resp, weapon) {
+export function protoPattern(resp, weapon, variant = 0) {
     if (resp === 'crawl' || resp === 'barrier')
         return null;
     const rc = RESP_CAT[resp];
@@ -3666,27 +3675,45 @@ export function protoPattern(resp, weapon) {
     let ids = MOTION_PICKS[cat.id]?.[weapon] ?? [];
     if (rc.avoid)
         ids = ids.filter((x) => x !== rc.avoid);
-    return cat.patterns.find((x) => x.id === ids[0]) ?? (rc.avoid ? cat.patterns.find((x) => x.id !== rc.avoid) : cat.patterns[0]) ?? null;
+    // 候補が2つ以上あれば、回ごとに順に使う（同じ動きばかりにならないように）
+    return cat.patterns.find((x) => x.id === ids[variant % Math.max(1, ids.length)]) ?? (rc.avoid ? cat.patterns.find((x) => x.id !== rc.avoid) : cat.patterns[0]) ?? null;
+}
+/** 武器ごとの通常攻撃の型（見本帳で選んだ案。候補が2つ以上なら variant で順に） */
+export function attackPattern(weapon, variant = 0) {
+    const cat = CATEGORIES.find((c) => c.group === '通常攻撃' && c.weapons?.includes(weapon));
+    if (!cat)
+        return null;
+    const ids = MOTION_PICKS[cat.id]?.[weapon] ?? [];
+    return cat.patterns.find((x) => x.id === ids[variant % Math.max(1, ids.length)]) ?? cat.patterns[0] ?? null;
 }
 /** 討伐画面の座標のまま、1人ぶんの動きを描く（ボスと背景は描かない。ボスの攻撃は本番の演出が描く） */
 export function drawInArena(c, d) {
-    const keep = { W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH };
+    const keep = { W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO };
     W = d.aw;
     H = d.ah;
     HX = d.hx;
     FY = d.fy;
     QUIET = d.quiet;
     NO_ATTACK = true;
-    const meet = d.resp === 'cut' || d.resp === 'smash' || d.resp === 'shoot';
+    // attack: ボスへの反撃（通常攻撃の型）。近接はボスの前（reach）まで踏みこみ、飛び道具と魔法はボスの体を狙う
+    const meet = !d.attack && (d.resp === 'cut' || d.resp === 'smash' || d.resp === 'shoot' || d.resp === 'turnCut');
     PAIR_REACH = meet;
     TX = meet ? d.hx - 30 : d.boss.x;
     TY = meet ? d.fy - 18 : d.boss.y;
+    REACH_TO = d.attack ? d.reach ?? null : null;
+    // 近接の反撃は、ボスの前へ斜めに踏みこむ（下の列の人がボスの足元より下を斬らないように）。
+    // 型の中の足元（FY）をボスの前の高さに置きかえ、冒険者の絵だけ、踏みこんだ分に応じて元の列から寄せる
+    const lift = d.attack && d.reachY !== undefined && REACH_TO !== null && isMelee(d) ? d.fy - d.reachY : 0;
+    if (lift) {
+        FY = d.reachY;
+        LIFT = { dy: lift, from: d.hx, to: REACH_TO };
+    }
     c.save();
     try {
-        if (d.resp === 'turn') {
+        if (!d.attack && (d.resp === 'turn' || d.resp === 'turnCut')) {
             c.translate(2 * d.hx, 0);
             c.scale(-1, 1);
-        } // 背後から来るので、右を向いて受ける
+        } // 背後から来るので、右を向いて受ける（斬り返す）
         const e = makeEnv(c, d.t, d.frame, d.look);
         e.bg = () => { };
         e.boss = () => { };
@@ -3694,7 +3721,30 @@ export function drawInArena(c, d) {
     }
     finally {
         c.restore();
-        ({ W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH } = keep);
+        ({ W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO } = keep);
+        LIFT = null;
     }
+}
+// 型が前へ踏みこむか（近接か）を、いちど小さな絵に描いて冒険者の位置から確かめる（型ごとに覚えておく）
+const MELEE = new Map();
+function isMelee(d) {
+    let m = MELEE.get(d.pattern.id);
+    if (m === undefined) {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = 1;
+        const c = cv.getContext('2d');
+        let far = 0;
+        for (const t of [0.3, 0.4, 0.5, 0.6]) {
+            const e = makeEnv(c, t, 0, d.look);
+            e.bg = () => { };
+            e.boss = () => { };
+            const hero = e.hero;
+            e.hero = (x, y, ...r) => { far = Math.max(far, Math.abs(x - HX)); hero(x, y, ...r); };
+            d.pattern.draw(e);
+        }
+        m = far > 12;
+        MELEE.set(d.pattern.id, m);
+    }
+    return m;
 }
 //# sourceMappingURL=motionlab.js.map

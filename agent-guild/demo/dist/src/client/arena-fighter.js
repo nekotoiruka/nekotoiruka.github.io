@@ -3,7 +3,9 @@ import { CHAIN_T } from '../shared/simulate.js';
 import { Rng } from '../shared/rng.js';
 import { MELEE_WEAPONS, TOOL_BY_ID } from '../shared/catalog.js';
 import { shieldIcon } from './sprites.js';
-import { drawInArena } from './motionlab.js';
+import { drawInArena, HIT_AT } from './motionlab.js';
+// 通常攻撃の型の進み方（台本の1場面の 1/3 で、型の1回分）
+const ATK_SPEED = 3;
 import { drawHero, familiarHome, familiarSprite, weaponSprite, muzzleOf } from './hero.js';
 import { SPELL_T, ultPose, verseAt } from './scenes.js';
 import { counterFor, isBaseScene } from './bossmoves.js';
@@ -33,6 +35,10 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     const ult = this.ultOf(w);
     const uHero = ult?.f === v.f && v.alive;
     const upose = uHero ? ultPose(ult.scene, phase, { x: v.x, y: v.y }, this.bossFoot, this.bossBody, this.frame, this.looks[v.f].weapon) : null;
+    // 反撃（通常攻撃）: 見本帳で武器ごとに選んだ型で見せる。型の「当たる瞬間」を、台本の反撃の時刻（at.t）にそろえる
+    const aPat = at && !uHero && v.alive && this.sceneOf(w) !== 'spell' ? this.attackProtoOf(w, v.f) : null;
+    const aT = aPat ? (HIT_AT[aPat.id] ?? 0.42) + (phase - at.t) * ATK_SPEED : -1;
+    const atkOn = !!aPat && aT > 0.02 && aT < 0.98;
     let flip = true;
     if (upose) {
         ox += upose.ox;
@@ -95,10 +101,10 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     // 見本帳で武器ごとに選んだ動き（見本帳は 0.40 で当たる。本番は IMPACT＝0.42 ＋ 届くまでの遅れ）
     const proto = evaded && !uHero && v.alive ? this.protoOf(w, v.f) : null;
     const protoT = phase - lag - 0.02;
-    const protoOn = !!proto && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
+    const protoOn = !atkOn && !!proto && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
     if (protoOn) { /* 動きは drawInArena が描く */ }
     else if (evaded && !uHero && holdSc !== 'spell' && holdSc !== 'illusion') {
-        const co = counterFor(this.script.theme?.kind, this.sceneOf(w)); // ボスごとの対応技（基本の4場面だけ）
+        const co = counterFor(this.script.theme?.kind, this.respScene(w)); // ボスごとの対応技（正解の動きに合わせた基本の場面）
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
         if (u > 0 && u < 1) {
             const arc = Math.sin(u * Math.PI); // 0→1→0 のなめらかな山
@@ -153,6 +159,13 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                     this.dust(ctx, v.x + 2, v.y, (u - 0.3) / 0.5); // 押されて足元が滑る
                     break;
                 }
+                case 'turnCut': { // 背後から来る技に、振り向きざまに斬りつける（武器ごとの通常攻撃の案がないときの代わり）
+                    flip = u < 0.1 || u > 0.9;
+                    set('attack', u);
+                    ox += ease(clamp01(u * 2)) * 4 - ease(clamp01((u - 0.5) * 2)) * 4;
+                    this.slashFx(ctx, v.x + 12, v.y - 14, clamp01((u - 0.35) / 0.3));
+                    break;
+                }
                 case 'turn': { // 背後から来る技を、振り向いて受け止める（受けた光は counterfx.ts の backGuard）
                     flip = u < 0.08 || u > 0.92;
                     set('guard', Math.min(1, u * 5));
@@ -205,7 +218,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     }
     // 反撃: 近づく武器は、助走 → 一撃 → 余韻 → 戻る を別々のイージングで。
     // 詠唱合戦では、跳ね返した魔法弾が反撃なので、斬りかからない・撃たない
-    if (at && !uHero && this.sceneOf(w) !== 'spell') {
+    if (at && !uHero && this.sceneOf(w) !== 'spell' && !aPat) {
         const melee = MELEE_WEAPONS.includes(this.looks[v.f].weapon);
         if (melee) {
             // ため（後ろへ沈む）→ 一瞬で踏み込む → 一撃（振りの軌跡）→ 余韻で止まる → ゆっくり戻る
@@ -283,7 +296,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         ctx.stroke();
         ctx.restore();
         if (v.alive && alpha > 0)
-            this.youMarker(upose ? x : v.x, (upose ? y : v.y) + 9); // 足元のすぐ下（上のキャラを指して見えないように）。大技の最中は主役についていく
+            this.youMarker(x, y - 40); // 頭上（スキルの飾りより上）。斬りかかりに駆け寄るときも、大技の最中も、キャラについていく
     }
     if (this.selected === v.f || this.hovered === v.f) {
         ctx.strokeStyle = '#ffffff';
@@ -319,7 +332,12 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         this.aura(ctx, x, y, v.f, st, phase);
     // 武器の先の位置（飛び道具はここから出す。このあと同じコマで描く projectile が使う）
     this.muzzles.set(v.f, muzzleOf(look, x, y + 1, { frame: this.frame + v.f * 7, flip, action, t: act01, rot }));
-    if (protoOn)
+    if (atkOn) {
+        // 近接の型が踏みこむ先: ボスの前。並びの上下・前後で少しずつずらす。高さは、4つの列をボスの体の幅（足元の少し上〜少し下）に詰めて、どの列もボスに当たって見えるように
+        const row = clamp01((v.y - 98) / 96), col = Math.max(-1, Math.min(1, (v.x - 248) / 70));
+        drawInArena(ctx, { pattern: aPat, resp: 'cut', attack: true, reach: this.bossFoot.x + 42 + row * 12 + col * 8, reachY: this.bossFoot.y - 14 + row * 28, t: aT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
+    }
+    else if (protoOn)
         drawInArena(ctx, { pattern: proto.pattern, resp: proto.resp, t: protoT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
     else
         drawHero(ctx, look, gear, x, y + 1, {
@@ -733,15 +751,48 @@ export function aura(ctx, x, y, f, st, phase) {
     ctx.restore();
     this.lights.push({ x, y: y - 12, r: 20, a: 0.45 * k, col: ok ? '#7bed9f' : '#ff5a6e' });
 }
-// お供: いまは主の立ち位置のそばで待つだけ（ボスへは飛んでいかない。主の回避の動きにも巻きこまない）。
-// 役割（AIエージェントならではの見せ方）は検討中。ふわふわの揺れは、冒険者ごとにずらす
-export function petFx(ctx, v, pet, ax, ay, _st, _phase, o) {
+// お供（サブエージェント）: いつもは主のそばで待つ（ボスへは飛んでいかない。主の回避の動きにも巻きこまない）。
+// 主がお供に頼んだ場面（冒険の記録の companion）でだけ、答える前に書庫へ飛んでいき、本を抱えて戻ってくる。
+// ふわふわの揺れは、冒険者ごとにずらす
+const PET_GO = 0.01;
+export function petFx(ctx, v, pet, ax, ay, st, phase, o) {
     const fr = this.frame + v.f * 17;
-    const home = familiarHome(0, true, fr);
+    const home = familiarHome(0, true, fr, pet.kind);
+    let px = home.x, py = home.y, book = 0;
+    if (st && (st.used.companion ?? 0) > 0 && v.alive) {
+        const end = Math.max(PET_GO + 0.06, st.t);
+        const k = (phase - PET_GO) / (end - PET_GO);
+        if (k > 0 && k < 1) {
+            // 書庫へ（右上の画面の外）→ 本を抱えて戻る
+            const out = k < 0.4 ? ease(k / 0.4) : k < 0.6 ? 1 : 1 - ease((k - 0.6) / 0.4);
+            px += out * 70;
+            py += -out * 80 - Math.sin(Math.min(1, k / 0.4) * Math.PI) * 6;
+            book = k >= 0.5 ? 1 : 0;
+        }
+        else if (phase >= end && phase < end + 0.05) {
+            book = 1 - (phase - end) / 0.05;
+            py -= Math.sin(((phase - end) / 0.05) * Math.PI) * 3;
+        }
+    }
     const sp = familiarSprite(pet.kind, pet.color, Math.floor(fr / 9), true);
+    const cx = ax + px + 5, top = ay + 1 + py;
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, o.alpha));
-    ctx.drawImage(sp, Math.round(ax + home.x + 5 - sp.width / 2), Math.round(ay + 1 + home.y));
+    ctx.drawImage(sp, Math.round(cx - sp.width / 2), Math.round(top));
+    if (book > 0) {
+        // 抱えた本（分厚い系譜）
+        ctx.globalAlpha *= Math.min(1, book * 2);
+        const bx = Math.round(cx - 4), by = Math.round(top - 6);
+        ctx.fillStyle = '#2a1830';
+        ctx.fillRect(bx - 1, by - 1, 10, 8);
+        ctx.fillStyle = '#7a3a8a';
+        ctx.fillRect(bx, by, 8, 6);
+        ctx.fillStyle = '#f4ead2';
+        ctx.fillRect(bx + 1, by + 1, 6, 1);
+        ctx.fillRect(bx + 1, by + 4, 6, 1);
+        ctx.fillStyle = '#ffd166';
+        ctx.fillRect(bx + 3, by + 2, 2, 2);
+    }
     ctx.restore();
 }
 //# sourceMappingURL=arena-fighter.js.map

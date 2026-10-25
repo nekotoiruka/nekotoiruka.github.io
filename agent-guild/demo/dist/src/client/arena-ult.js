@@ -35,6 +35,13 @@ export function ultHero(w) {
     const strikes = wv.events.filter((e) => e.type === 'strike' && e.success && prevAlive[e.f] && !s.fighters[e.f].off);
     if (!strikes.length)
         return { scene };
+    // 自分の冒険者が舞台に立っていて外した回は、ほかの人の大技（必殺技）も出さない（行動の見せ場は、いつも自分）。
+    // ボスの大技が放たれて、外した人に当たるところまでを見せる。正しく動けた仲間は、ふつうの攻撃でボスを削る
+    const me = [...this.mine].find((f) => !s.fighters[f].off && prevAlive[f]);
+    if (me !== undefined) {
+        const mine = strikes.find((e) => e.f === me);
+        return mine ? { scene, f: me, st: mine } : { scene };
+    }
     const withSkill = this.skillWave(w) ? strikes.filter((e) => e.used.skills.length) : strikes;
     if (!withSkill.length)
         return null;

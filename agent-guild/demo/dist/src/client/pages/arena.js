@@ -1,5 +1,6 @@
 import { COST_RULES } from '../../shared/catalog.js';
 // アリーナ（バトル再生）画面
+import { WAVE_SECONDS } from '../arena-common.js';
 import { ArenaRenderer, SCALE } from '../arena.js';
 import { waveTitleFor } from '../../shared/simulate.js';
 import { caseTitleOf } from '../../shared/types.js';
@@ -14,7 +15,7 @@ import { gmSays } from '../guildmaster.js';
 import { tl } from '../../shared/i18n.js';
 import { userGet, userSet } from '../userStore.js';
 const KIND_LABEL = { normal: tl('通常'), trap: tl('ひっかけ'), bonus: tl('宝箱'), boss: tl('ボス') };
-const WAVE_SECONDS = 6; // 1回の仕掛けにかける秒数（何が起きたか追えるよう、ゆっくり）
+// 1回の仕掛けにかける秒数（何が起きたか追えるよう、ゆっくり）は arena-common.ts の WAVE_SECONDS
 const MINE_KEY = 'mine'; // 人ごとの情報なので、ユーザーごとに分けて保存する（userStore.ts）
 // 自分のキャラ: サーバーで遊ぶときは、ログイン中の人が送り出した冒険者だけ（ほかの人のキャラを「自分のキャラ」にはできない）。
 // アカウントのない静的デモ版だけは、見る人が「自分のキャラ」を選べる（このブラウザに覚える）
@@ -80,10 +81,13 @@ export async function renderArena(root, initialView, past) {
         const staged = restage(sc, pickStage(sc, mineIdx, view));
         const off = staged.fighters.filter((f) => f.off).length;
         stageNote.textContent = off ? tl(`舞台に立つのは {0} 人（残り {1} 人は画面下の「控え」。順位は全員で決まります）`, staged.fighters.length - off, off)
-            : partyOnly ? tl('討伐隊は、あなた・同じチームの人・順位の近い人の{0}人です（順位はシーズンの参加者全員で決まります）。', sc.fighters.length) : '';
+            : partyOnly ? (hasMine ? tl('討伐隊は、あなた・同じチームの人・順位の近い人の{0}人です（順位はシーズンの参加者全員で決まります）。', sc.fighters.length)
+                : tl('いまの戦果の上位{0}人の討伐です。冒険者を送り出すと、あなたの討伐隊の討伐になります。', sc.fighters.length)) : '';
         stopCurrent = mountPlayer(host, staged);
     };
-    root.replaceChildren(...nodes(pastBar), h('div', { class: 'mode-bar' }, viewBar), desc, stageNote, host);
+    // まだ送り出していない人に: 見ているのは上位の討伐。自分も加わる入口
+    const join = !hasMine && !past && !demoMode ? h('p', { class: 'join-cta' }, h('a', { class: 'btn btn-primary btn-small', href: '#/make' }, tl('冒険者を準備して、討伐に加わる'))) : null;
+    root.replaceChildren(...nodes(pastBar, h('div', { class: 'mode-bar' }, viewBar), desc, stageNote, join, host));
     refresh();
 }
 function mountPlayer(root, script) {
@@ -93,7 +97,7 @@ function mountPlayer(root, script) {
     window.__arena = r; // 動作確認・録画用
     const total = r.totalTime;
     const waves = r.totalWaves;
-    let time = 0, playing = true, speed = 1, last = performance.now(), raf = 0, ended = false, slowOn = true;
+    let time = -r.introLen, playing = true, speed = 1, last = performance.now(), raf = 0, ended = false, slowOn = true;
     const syncMine = () => { r.mine = new Set(script.fighters.map((f, i) => (mineIds.has(f.id) ? i : -1)).filter((i) => i >= 0)); };
     syncMine();
     const waveLabel = h('span', { class: 'hud-wave' });
@@ -102,7 +106,7 @@ function mountPlayer(root, script) {
     const aliveLabel = h('span', { class: 'hud-alive' });
     const feed = h('ul', { class: 'killfeed', 'aria-live': 'polite' });
     const playBtn = h('button', { class: 'btn btn-icon', title: tl('再生 / 一時停止'), 'aria-label': tl('再生 / 一時停止') }, '❚❚');
-    const seek = h('input', { type: 'range', min: 0, max: total, step: 0.01, value: 0, 'aria-label': tl('シーク') });
+    const seek = h('input', { type: 'range', min: -r.introLen, max: total, step: 0.01, value: 0, 'aria-label': tl('シーク') });
     const speeds = [1, 2, 4].map((s) => h('button', { class: 'btn btn-speed' + (s === 1 ? ' on' : ''), 'data-speed': s }, `${s}x`));
     const roster = h('ol', { class: 'roster-list' });
     const card = h('div', { class: 'fighter-card' }, h('p', { class: 'muted' }, tl('キャラをクリックすると詳細が出ます')));
@@ -119,9 +123,9 @@ function mountPlayer(root, script) {
     const sndBtn = h('button', { class: 'btn btn-speed' + (sfxEnabled() ? ' on' : ''), title: tl('効果音'), 'aria-pressed': String(sfxEnabled()) }, sfxEnabled() ? tl('♪ 音あり') : tl('♪ 音なし'));
     sndBtn.onclick = () => { const on = !sfxEnabled(); setSfx(on); sndBtn.classList.toggle('on', on); sndBtn.setAttribute('aria-pressed', String(on)); sndBtn.textContent = on ? tl('♪ 音あり') : tl('♪ 音なし'); };
     slowBtn.onclick = () => { slowOn = !slowOn; slowBtn.classList.toggle('on', slowOn); slowBtn.setAttribute('aria-pressed', String(slowOn)); };
-    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { jump(0); playing = true; } }, '⏮'), playBtn, seek, h('button', { class: 'btn btn-icon', 'data-act': 'to-results', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { time = total; } }, '⏭'), h('div', { class: 'controls-opts' }, ...speeds, slowBtn, sndBtn, hlBtn, missBtn, nextBtn))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
+    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { jump(-r.introLen); playing = true; } }, '⏮'), playBtn, seek, h('button', { class: 'btn btn-icon', 'data-act': 'to-results', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { time = total; } }, '⏭'), h('div', { class: 'controls-opts' }, ...speeds, slowBtn, sndBtn, hlBtn, missBtn, nextBtn))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
     playBtn.onclick = () => { playing = !playing; if (ended) {
-        time = 0;
+        time = -r.introLen;
         ended = false;
         results.classList.add('hidden');
         playing = true;
@@ -143,7 +147,7 @@ function mountPlayer(root, script) {
             b.classList.toggle('on', on);
             b.setAttribute('aria-pressed', String(on));
         }
-        if (time < waves && !inc[Math.floor(time)])
+        if (time >= 0 && time < waves && !inc[Math.floor(time)])
             jump(nextIncluded(inc, Math.floor(time)) ?? waves);
     };
     const setRange = (r) => { range = range === r ? 'all' : r; saveRange(range); applyRange(); };
@@ -194,7 +198,7 @@ function mountPlayer(root, script) {
     const rosterItems = script.fighters.map((f, i) => {
         const hp = h('span', { class: 'hpbar' }, h('span', { class: 'hpfill' }));
         const stat = h('span', { class: 'roster-stat' });
-        // ウェーブごとの正誤（○＝正解、×＝不正解、—＝パス、MP＝MP切れ）
+        // ウェーブごとの正誤（○＝正解、×＝不正解、—＝パス、MP＝行動力切れ）
         const strip = h('span', { class: 'wave-strip', 'aria-label': tl('ウェーブごとの正誤') }, ...script.waves.map(() => h('i', { class: 'wv' })));
         const li = h('li', { class: 'roster-item', tabindex: 0, onclick: () => select(i), onkeydown: (e) => { if (e.key === 'Enter')
                 select(i); } }, avatarCanvas(f.loadout, 1), h('span', { class: 'roster-name' }, f.name, h('span', { class: `persona-tag pos-${f.row}` }, POSITION_LABELS[f.row])), hp, stat, strip);
@@ -212,7 +216,7 @@ function mountPlayer(root, script) {
             const wi = Math.floor(time);
             if (wi !== curWave) {
                 curWave = wi;
-                if (wi < waves && !inc[wi]) {
+                if (wi >= 0 && wi < waves && !inc[wi]) {
                     time = nextIncluded(inc, wi) ?? waves;
                     curWave = Math.floor(time);
                 }
@@ -237,9 +241,9 @@ function mountPlayer(root, script) {
         raf = requestAnimationFrame(loop);
     };
     const updateHud = () => {
-        if (!Number.isFinite(time) || time < 0)
+        if (!Number.isFinite(time))
             time = 0;
-        const w = Math.min(Math.floor(time), waves - 1);
+        const w = Math.max(0, Math.min(Math.floor(time), waves - 1)); // 幕開け（マイナスの時刻）は場面1として出す
         const wv = script.waves[w];
         if (!wv)
             return;
@@ -286,7 +290,7 @@ function mountPlayer(root, script) {
                 }
                 else {
                     cell.className = 'wv mp';
-                    cell.title = tl(`W{0} {1}: MP切れ`, i + 1, t2);
+                    cell.title = tl(`W{0} {1}: 行動力切れ`, i + 1, t2);
                 }
             }
         });
@@ -314,7 +318,7 @@ function mountPlayer(root, script) {
                 if (e.type !== 'death' || (i === w && e.t > time - w))
                     continue;
                 const victim = script.fighters[e.f].name;
-                const text = e.cause === 'mp' ? tl(`{0} はMP切れで倒れた`, victim) : tl(`{0} はボスの攻撃に倒れた`, victim);
+                const text = e.cause === 'mp' ? tl(`{0} は行動力切れで倒れた`, victim) : tl(`{0} はボスの攻撃に倒れた`, victim);
                 items.push(h('li', {}, text));
             }
         }

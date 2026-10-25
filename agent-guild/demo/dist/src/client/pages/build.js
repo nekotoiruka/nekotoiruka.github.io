@@ -1,7 +1,7 @@
 import { getBuild, getSeason } from '../api.js';
 import { COST_RULES } from '../../shared/catalog.js';
 import { avatarCanvas, fmtMs, h, loadoutChips, nodes, radar } from '../ui.js';
-import { traceGuide, traceView } from '../trace.js';
+import { sceneMp, traceGuide, traceView } from '../trace.js';
 import { tl } from '../../shared/i18n.js';
 import { gmPortrait } from '../guildmaster.js';
 const KIND = { normal: tl('通常'), trap: tl('ひっかけ'), bonus: tl('宝箱'), boss: tl('ボス') };
@@ -31,7 +31,7 @@ function adventureLog(cases) {
     const ng = cases.filter((c) => c.score < 0.6);
     let onlyNg = ng.length > 0;
     const list = h('div', { class: 'advlog-list' });
-    const draw = () => list.replaceChildren(...(onlyNg ? ng : cases).map((c) => h('details', { class: `advlog ${c.score >= 0.6 ? 'is-ok' : 'is-ng'}` }, h('summary', {}, h('span', { class: 'advlog-mark' }, c.score >= 0.6 ? '○' : '×'), h('span', { class: 'advlog-title' }, c.title, h('span', { class: 'small muted' }, tl(`　{0}・{1}`, KIND[c.kind] ?? c.kind, '★'.repeat(c.difficulty)))), h('span', { class: 'advlog-ans small' }, c.mpOut ? tl('MP切れ') : c.excerpt), h('span', { class: 'advlog-meta small muted' }, tl(`{0}トークン・{1}`, (c.tokensIn + c.tokensOut).toLocaleString(), fmtMs(c.latencyMs)))), traceView(c.trace))));
+    const draw = () => list.replaceChildren(...(onlyNg ? ng : cases).map((c) => h('details', { class: `advlog ${c.score >= 0.6 ? 'is-ok' : 'is-ng'}` }, h('summary', {}, h('span', { class: 'advlog-mark' }, c.score >= 0.6 ? '○' : '×'), h('span', { class: 'advlog-title' }, c.title, h('span', { class: 'small muted' }, tl(`　{0}・{1}`, KIND[c.kind] ?? c.kind, '★'.repeat(c.difficulty)))), h('span', { class: 'advlog-ans small' }, c.mpOut ? tl('行動力切れ') : c.excerpt), h('span', { class: 'advlog-meta small muted' }, tl(`{0}トークン・{1}`, (c.tokensIn + c.tokensOut).toLocaleString(), fmtMs(c.latencyMs)))), traceView(c.trace, sceneMp(c)))));
     const tabs = h('div', { class: 'seg' }, ...[[true, tl(`外した場面だけ（{0}）`, ng.length)], [false, tl(`すべての場面（{0}）`, cases.length)]].map(([v, label]) => {
         const btn = h('button', { class: `btn btn-sm ${onlyNg === v ? 'btn-primary' : ''}` }, String(label));
         btn.onclick = () => { onlyNg = v; tabs.querySelectorAll('button').forEach((x) => x.classList.remove('btn-primary')); btn.classList.add('btn-primary'); draw(); };

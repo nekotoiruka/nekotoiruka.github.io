@@ -7,12 +7,12 @@ import { bossCanvas, BOSS_IDLE, BW, BH } from '../boss.js';
 import { BRAND } from '../brand.js';
 import { burst, BODY_STYLE, fxColors } from '../fx.js';
 import { elderBeard, GM_GEAR, GM_LOOK } from '../guildmaster.js';
-import { drawFamiliarAt, drawHero, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
+import { drawFamiliarAt, drawHero, lookOf, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
 import { setSfx } from '../sfx.js';
 import { outlined } from '../sprites.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
 import { poseFor } from '../chibi.js';
-import { BODY_LABELS, CAT_PATTERN_LABELS } from '../../shared/build.js';
+import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 // ---------------------------------------------------------------------------
 // アニメの進行役: 画面に見えている canvas だけを描き直す。ページを離れたら止まる。
@@ -114,6 +114,10 @@ const ICONS = {
     dougu: {
         grid: ['...bb...', '..b..b..', '.ffffff.', 'ffllffff', 'fflfffff', 'ffffyfff', 'ffffffff', '.ffffff.'],
         colors: { b: '#8b5a2b', f: '#c98b4a', l: '#e8b878', y: '#feae34' }, outline: '#4a2a12',
+    },
+    otomo: {
+        grid: ['....hh....', '...hssh...', 'ww.sese.ww', 'wwwsssswww', '.wwddddww.', '..wddddw..', '...dddd...', '....ss....'],
+        colors: { h: '#ffd166', s: '#ffe0c8', e: '#2b1d3e', w: '#bfe9ff', d: '#ff9ce6' }, outline: '#3a4a7a',
     },
     makimono: {
         grid: ['wwwwwwwwww', '.dffffffd.', '.flllllff.', '.ffffffff.', '.flllllff.', '.ffffffff.', '.dffffffd.', 'wwwwwwwwww'],
@@ -722,9 +726,11 @@ export async function renderAbout(root, opts = {}) {
     const first = scriptFor(data);
     if (!first)
         throw new Error(tl('デモの討伐データが読めませんでした'));
-    // 見本の討伐でいちばん成績の良い冒険者を「あなたが送り出した冒険者」として見せる（目印はアニメーションの中だけ）。
+    // 見本の1人目（lp-samples/01、前衛の剣士）を「あなたが送り出した冒険者」として見せる（目印はアニメーションの中だけ）。
+    // 前衛の近接攻撃は、ボスへ駆け寄って斬りかかるので、主役として動きが大きく見える。見本の版は、1人目が戦果1位になるものを選んでいる。
     // 連携詠唱の結果は見ている人で変わるので、その人を見る人にして流し直す
-    const best = first.standings.slice().sort((a, b) => a.rank - b.rank)[0]?.f ?? 0;
+    const firstId = data.entrants[0]?.id;
+    const best = Math.max(0, first.fighters.findIndex((f) => f.id === firstId));
     const bestId = first.fighters[best]?.id;
     const full = scriptFor(data, bestId ? [bestId] : []) ?? first;
     const playUrl = opts.playUrl ?? '#/';
@@ -732,7 +738,7 @@ export async function renderAbout(root, opts = {}) {
     const ticker = makeTicker(page);
     const jump = (id) => () => page.querySelector(`#${id}`)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
     const playLink = (cls = 'btn btn-primary lp-play') => playUrl
-        ? h('a', { class: cls, href: playUrl }, tl('遊んでみる'))
+        ? h('a', { class: cls, href: playUrl }, opts.playLabel ?? tl('遊んでみる'))
         : h('p', { class: 'lp-noplay' }, tl('遊ぶためのURLは、このページを教えてくれた人に聞いてください。'));
     // --- ヒーロー ---
     const hero = h('section', { class: 'lp-hero' }, heroStage(ticker), h('div', { class: 'lp-hero-win win' }, h('h1', { class: 'lp-logo', 'aria-label': tl(`Agent Guild（{0}）`, BRAND.name) }, h('span', { class: 'lp-logo-en' }, 'AGENT GUILD'), h('span', { class: 'lp-logo-ja' }, BRAND.name)), h('p', { class: 'lp-catch' }, tl('言葉で育てたAIが、自分で考えてボスに挑む。')), h('p', { class: 'lp-lead' }, tl('あなたは冒険者の育て役。心得を教え、道具と巻物を持たせて送り出したら、あとは見守るだけ。シーズンごとに現れるボスに、みんなの冒険者がいっしょに挑みます。')), h('ul', { class: 'lp-cmd', 'aria-label': tl('このページの見どころ') }, h('li', {}, h('button', { type: 'button', onclick: jump('lp-demo') }, tl('討伐を見る'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-chars') }, tl('図鑑をひらく'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-mech') }, tl('しくみを知る'))), opts.demoUrl ? h('li', {}, h('a', { href: opts.demoUrl }, tl('デモで画面をさわる'))) : null), playLink()));
@@ -745,13 +751,16 @@ export async function renderAbout(root, opts = {}) {
         ['watch', tl('討伐を見る'), tl('みんなの冒険者がそろってボスに挑む様子を、ドット絵のアニメで見届ける。講評をヒントに鍛え直して、また挑戦。')],
     ];
     const kit = [
-        ['kokoroe', tl('心得'), tl('システムプロンプト'), tl('冒険者の考え方と、戦いの要点を書いた指示書。')],
-        ['dougu', tl('道具'), tl('ツール'), tl('冒険者が自分では知りえない情報を、外へ取りに行く手段。')],
-        ['makimono', tl('巻物'), tl('スキル'), tl('ふだんは閉じておき、必要なときだけ開いて読む知識の本。')],
-        ['nisshi', tl('冒険日誌'), tl('メモリ'), tl('戦いの最中に、前に起きたことを思い出すための記録。')],
-        ['kekkai', tl('結界'), tl('ガードレール'), tl('あやしい声を、冒険者の耳に届く前に弾くしくみ。')],
+        // 説明は、どれも「何か」と「どう効くか（どう持たせるか）」の2文にそろえる
+        ['kokoroe', tl('心得'), tl('システムプロンプト'), tl('冒険者が毎回思い出す、考え方と戦いの要点。教え方しだいで、働きぶりが変わる。')],
+        ['dougu', tl('道具'), tl('ツール'), tl('持たせるだけで、冒険者がとれる行動の幅が広がる品。いつ使うかを心得に書いておかないと、宝の持ち腐れになる。')],
+        ['makimono', tl('巻物'), tl('スキル'), tl('一度には覚えきれない詳しい手順や知識を、必要な場面でだけ開いて読む巻物。「いつ開くか」の条件まで決めて持たせる。')],
+        ['nisshi', tl('冒険日誌'), tl('メモリ'), tl('戦いの中で起きたことをその場で書き留める記録。「さっき何が起きたか」を思い出し、筋の通った動きができる。')],
+        ['kekkai', tl('結界'), tl('ガードレール'), tl('行動を狂わせるあやしい声を、耳に届く前に消し去るしくみ。心得で「無視しろ」と教えるだけでは防げない幻術を止める。')],
+        ['otomo', tl('お供'), tl('サブエージェント'), tl('頼まれたときだけ動く、もうひとりのAI。自分の心得と道具で調べて、要点だけを返す。')],
     ];
-    const howto = h('section', { class: 'lp-sec', id: 'lp-howto' }, h('h2', {}, tl('遊び方')), h('ol', { class: 'lp-steps' }, ...steps.map(([k, t, body]) => h('li', { class: 'lp-step' }, stepScene(k, ticker), h('h3', {}, t), h('p', {}, body)))), h('h3', { class: 'lp-sub' }, tl('冒険者に持たせるもの')), h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', {}, iconCanvas(id, 4, name), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
+    const howto = h('section', { class: 'lp-sec', id: 'lp-howto' }, h('h2', {}, tl('遊び方')), h('ol', { class: 'lp-steps' }, ...steps.map(([k, t, body]) => h('li', { class: 'lp-step' }, stepScene(k, ticker), h('h3', {}, t), h('p', {}, body)))), h('h3', { class: 'lp-sub' }, tl('冒険の備え')), // 持たせる物だけでなく、連れていくお供もあるので「備え」
+    h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', {}, iconCanvas(id, 4, name), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
     // --- 討伐の再生 ---
     const demo = h('section', { class: 'lp-sec', id: 'lp-demo' }, h('h2', {}, tl('実際の討伐')), h('p', { class: 'lp-intro' }, tl(`見本の討伐「{0}」。討伐隊{1}人の記録です。ボスが動くたびに、冒険者それぞれのAIが「どう動くか」を答え、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。`, data.task.title, full.fighters.length)), mainDemo(full, ticker, [best]));
     // --- 演出のこだわり ---
@@ -770,16 +779,7 @@ export async function renderAbout(root, opts = {}) {
     if (ougiW < 0)
         ougiW = sceneWave('ougi');
     if (ougiW >= 0)
-        fx.push({ title: tl('必殺技のカットイン'), body: tl('ここぞという場面では、カットインが入って必殺技が炸裂する。跳躍落下斬り・乱舞・召喚と、技ごとに見せ方が変わる。'), w: ougiW, mine: [best] });
-    // 会心: あなた（いちばん成績の良い冒険者）の会心を優先
-    const isCrit = (e, f) => e.type === 'attack' && !!e.crit && (f === undefined || e.f === f);
-    let critW = full.waves.findIndex((wv, i) => i !== spellW && i !== ougiW && wv.events.some((e) => isCrit(e, best)));
-    if (critW < 0)
-        critW = full.waves.findIndex((wv, i) => i !== spellW && i !== ougiW && wv.events.some((e) => isCrit(e)));
-    if (critW >= 0) {
-        const e = (full.waves[critW].events.find((x) => isCrit(x, best)) ?? full.waves[critW].events.find((x) => isCrit(x)));
-        fx.push({ title: tl('会心の一撃'), body: tl('正しく動けた冒険者は反撃する。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。'), w: critW, mine: e ? [e.f] : [] });
-    }
+        fx.push({ title: tl('必殺技'), body: tl('ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。'), w: ougiW, mine: [best] });
     const guarded = (e) => e.type === 'strike' && !e.charmed && e.used.tools.includes('guardrail');
     const calm = (e) => e.type === 'strike' && !e.charmed;
     const isIll = (wv) => full.cases[wv.caseIndex]?.scene === 'illusion';
@@ -794,9 +794,27 @@ export async function renderAbout(root, opts = {}) {
         const e = (ev.find(mineGuarded) ?? ev.find(guarded) ?? ev.find(calm));
         fx.push({ title: tl('幻術と結界'), body: tl('ボスは偉い人の声をまねて、もっともらしい偽の命令を混ぜてくる。あやしい声が、光の壁にはじかれて砕け散る。'), w: illW, mine: [e.f] });
     }
-    const breathW = full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.scene === 'breath' && wv.events.some((e) => e.type === 'strike' && e.success));
+    // 見切りと反撃（会心もここで見せる）: あなたがかわして会心を出した場面を優先
+    const isCrit = (e, f) => e.type === 'attack' && !!e.crit && (f === undefined || e.f === f);
+    const okBy = (wv, f) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.success);
+    const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
+    let breathW = full.waves.findIndex((wv) => plain(wv) && okBy(wv, best) && wv.events.some((e) => isCrit(e, best)));
+    if (breathW < 0)
+        breathW = full.waves.findIndex((wv) => plain(wv) && okBy(wv, best));
+    if (breathW < 0)
+        breathW = full.waves.findIndex((wv) => plain(wv) && wv.events.some((e) => e.type === 'strike' && e.success));
     if (breathW >= 0)
-        fx.push({ title: tl('見切りと反撃'), body: tl('ボスの攻撃をひらりとかわし、すかさず反撃。武器ごとに、斬りかかる者もいれば、遠くから撃ちこむ者もいる。'), w: breathW, mine: [best] });
+        fx.push({ title: tl('見切りと反撃'), body: tl('ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。'), w: breathW, mine: [best] });
+    // 武器ごとの技: 正しく動けた冒険者の武器がいちばん多くそろう場面（反撃の動きが武器ごとに違うのを見せる）
+    const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
+    const kinds = (wv) => new Set(wv.events.filter((e) => e.type === 'strike' && e.success && !full.fighters[e.f]?.off).map((e) => weaponOf[e.f])).size;
+    let wpW = -1, wpN = 1;
+    full.waves.forEach((wv, i) => { if (i !== breathW && plain(wv) && kinds(wv) > wpN) {
+        wpW = i;
+        wpN = kinds(wv);
+    } });
+    if (wpW >= 0)
+        fx.push({ title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), w: wpW, mine: [] });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
     // 「討伐の瞬間」の窓と入れ替える（窓は6つのまま）
     // 窓には、7人が交代で唱えて大魔法が決まるところ（あなたが最後の第7節）を見せる。
@@ -865,30 +883,38 @@ export async function renderAbout(root, opts = {}) {
         });
         return el;
     };
-    // 種族・職業・色・そうびを混ぜて、ひとつの並びに（分類はしない）
-    const roster = [
-        ['cat', '#e43b44', '#ffd166', 'sword', 'calico', NO_GEAR],
-        ['knight', '#3a7bd5', '#f2c14e', 'sword', undefined, { back: [], fams: [{ kind: 'bird', color: '#5ab4ff' }], charms: [] }],
-        ['bunny', '#ff9ce6', '#fbf7f0', 'wand', undefined, NO_GEAR],
-        ['mage', '#7e57c2', '#ffd166', 'wand', undefined, { back: [], fams: [{ kind: 'ghost', color: '#c59bff' }], charms: [{ kind: 'moon', color: '#ffd23f' }] }],
-        ['cat', '#3a7bd5', '#ffd166', 'dagger', 'black', NO_GEAR],
-        ['ninja', '#2b2d42', '#63c74d', 'katana', undefined, NO_GEAR],
-        ['bear', '#a0612a', '#ffd166', 'hammer', undefined, NO_GEAR],
-        ['witch', '#5a3d8a', '#63c74d', 'scythe', undefined, { back: [], fams: [{ kind: 'kitten', color: '#ff9ce6' }], charms: [] }],
-        ['frog', '#feae34', '#a8e04a', 'umbrella', undefined, NO_GEAR],
-        ['samurai', '#e43b44', '#2b1d2e', 'katana', undefined, { back: [{ kind: 'bow' }], fams: [], charms: [{ kind: 'gem', color: '#ff5d8f' }] }],
-        ['cat', '#feae34', '#ffd166', 'fan', 'tabby', NO_GEAR],
-        ['robot', '#9aa0c8', '#5fcde4', 'blaster', undefined, { back: [], fams: [{ kind: 'drone', color: '#5fcde4' }], charms: [] }],
-        ['priest', '#ece9f6', '#feae34', 'book', undefined, NO_GEAR],
-        ['ghostie', '#c77dff', '#5fcde4', 'scythe', undefined, NO_GEAR],
-        ['cat', '#5fcde4', '#ffd166', 'umbrella', 'siamese', NO_GEAR],
-        ['pirate', '#a0612a', '#e43b44', 'blaster', undefined, { back: [{ kind: 'axe' }], fams: [], charms: [{ kind: 'bolt', color: '#ffd23f' }] }],
-        ['cat', '#c77dff', '#9a9cb0', 'wand', 'tux', { back: [], fams: [{ kind: 'slime', color: '#6ee07a' }], charms: [] }],
-        ['chef', '#ffffff', '#e43b44', 'pan', undefined, { back: [], fams: [{ kind: 'dragon', color: '#e43b44' }], charms: [{ kind: 'flame', color: '#ff7a3a' }] }],
-        ['rogue', '#3d3d4a', '#e43b44', 'dagger', undefined, NO_GEAR],
-        ['astro', '#5fcde4', '#ffffff', 'blaster', undefined, { back: [{ kind: 'spear' }], fams: [], charms: [] }],
+    // 図鑑の並び: 種族・職業（ねこは柄ごと）20種を、開くたびに並べ替える。
+    //   武器は、それぞれの印象に合うものを決めてある（16種の武器がどれも必ず出る）。お供14種は、毎回ちがう相手に付く（残りの6人はお供なし）。
+    //   お供の色は、種類ごとにかわいく見える色で固定。服・髪の色だけ混ぜる。動物の毛の色は、その動物らしい決まった色
+    const shuffle = (a) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [b[i], b[j]] = [b[j], b[i]];
+    } return b; };
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const DEX = [
+        ['knight', undefined, 'sword'], ['mage', undefined, 'wand'], ['rogue', undefined, 'dagger'], ['robot', undefined, 'shield'],
+        ['ninja', undefined, 'katana'], ['priest', undefined, 'book'], ['pirate', undefined, 'axe'], ['samurai', undefined, 'spear'],
+        ['chef', undefined, 'pan'], ['astro', undefined, 'blaster'], ['bunny', undefined, 'fan'], ['bear', undefined, 'hammer'],
+        ['frog', undefined, 'umbrella'], ['witch', undefined, 'scythe'], ['ghostie', undefined, 'guitar'],
+        ['cat', 'tabby', 'bow'], ['cat', 'calico', 'fan'], ['cat', 'black', 'wand'], ['cat', 'tux', 'sword'], ['cat', 'siamese', 'umbrella'],
     ];
-    const chars = h('section', { class: 'lp-sec', id: 'lp-chars' }, h('h2', {}, tl('キャラ図鑑')), h('p', { class: 'lp-intro' }, tl('冒険者の見た目は自由に選べます。種族や職業、服の色、手に持つ武器、連れて歩くお供まで。強さには関係ないので、好きな姿で。')), h('div', { class: 'lp-dex win' }, h('ul', { class: 'lp-chars' }, ...roster.map(([b, p, hr, w, pat, gear], i) => card(look(b, p, hr, w, pat), pat === 'black' ? tl('黒ねこ') : pat ? tl(`ねこ（{0}）`, CAT_PATTERN_LABELS[pat]) : BODY_LABELS[b], gear, i)))));
+    const PET_COLOR = {
+        bird: '#5ab4ff', slime: '#6ee07a', spirit: '#c59bff', dragon: '#ffb36b', ghost: '#dfe6e9', drone: '#5fcde4', bat: '#9b8cd8',
+        fairy: '#ffd166', mushroom: '#ff8a9a', penguin: '#4a5a80', octopus: '#ff9ce6', ufo: '#81ecec', kitten: '#ffc49a', jelly: '#a7d8ff',
+    };
+    const CLOTH = ['#e43b44', '#3a7bd5', '#ff9ce6', '#7e57c2', '#2b2d42', '#a0612a', '#5a3d8a', '#feae34', '#2d5a27', '#5fcde4', '#ece9f6', '#c77dff', '#0f4c75', '#badc58'];
+    const HAIR = ['#ffd166', '#f2c14e', '#fbf7f0', '#63c74d', '#2b1d2e', '#e43b44', '#5fcde4', '#a29bfe', '#3b2a1a', '#ffffff'];
+    const FUR = {
+        'cat:tabby': '#f0a040', 'cat:calico': '#e8913a', 'cat:siamese': '#7a5a44', 'cat:black': '#4a4458', 'cat:tux': '#4a4458',
+        bunny: '#fbf7f0', bear: '#a0612a', frog: '#7bc950',
+    };
+    const dex = shuffle(DEX);
+    const pets = shuffle([...FAMILIAR_KINDS, ...Array(Math.max(0, dex.length - FAMILIAR_KINDS.length)).fill(null)]);
+    const roster = dex.map(([b, pat, w], i) => {
+        const pet = pets[i];
+        return [b, pick(CLOTH), FUR[pat ? `${b}:${pat}` : b] ?? pick(HAIR), w, pat, pet ? { back: [], fams: [{ kind: pet, color: PET_COLOR[pet] }], charms: [] } : NO_GEAR];
+    });
+    const chars = h('section', { class: 'lp-sec', id: 'lp-chars' }, h('h2', {}, tl('キャラ図鑑')), h('p', { class: 'lp-intro' }, tl('冒険者の見た目は自由に選べます。種族や職業、服の色、手に持つ武器。強さには関係ないので、好きな姿で。手に持つ武器によって、攻撃のしかたも、必殺技の動きも変わります。カードにふれると、その武器で攻撃してみせます。')), h('div', { class: 'lp-dex win' }, h('ul', { class: 'lp-chars' }, ...roster.map(([b, p, hr, w, pat, gear], i) => card(look(b, p, hr, w, pat), pat === 'black' ? tl('黒ねこ') : pat ? tl(`ねこ（{0}）`, CAT_PATTERN_LABELS[pat]) : BODY_LABELS[b], gear, i)))));
     // --- ボス図鑑 ---
     const bosses = h('section', { class: 'lp-sec', id: 'lp-bosses' }, h('h2', {}, tl('シーズンのボス')), h('p', { class: 'lp-intro' }, tl('シーズンごとに、ちがうボスが現れます。ボスが変われば、役に立つ資料も道具もがらりと変わる。前のシーズンの心得は、そのままでは通じません。')), h('ul', { class: 'lp-bosses' }, ...BOSSES.slice(0, 3).map((b, i) => {
         const hidden = i > 0; // シーズン2・3は影だけ（まだ姿を見せない）
@@ -938,7 +964,7 @@ export async function renderAbout(root, opts = {}) {
         const f = full.fighters[s.f];
         return h('tr', {}, h('td', { class: 'lp-rank' }, `${s.rank}`), h('td', { class: 'lp-who' }, avatarCanvas(f.loadout, 1), h('span', {}, f.name)), h('td', {}, `${s.accuracy}%`), h('td', {}, `${Math.round(s.avgTokens).toLocaleString(localeOf())}`), h('td', {}, fmtMs(Math.round(s.avgLatencyMs))));
     });
-    const ranking = h('section', { class: 'lp-sec', id: 'lp-rank' }, h('h2', {}, tl('ランキング')), h('div', { class: 'lp-rank-wrap' }, h('div', {}, h('p', {}, tl('順位を決めるのは、まず戦果。ボスの動きに正しく答えられた割合です。並んだときは、少ない言葉で済ませた冒険者（燃費）が上。それでも並んだら、答えるのが速いほうが上。')), h('ol', { class: 'lp-order' }, h('li', {}, h('b', {}, tl('戦果')), h('span', {}, tl('正しく動けた割合'))), h('li', {}, h('b', {}, tl('燃費')), h('span', {}, tl('使ったトークンが少ない'))), h('li', {}, h('b', {}, tl('速さ')), h('span', {}, tl('答えるまでの時間が短い')))), h('p', {}, tl('シーズン制なので、ボスが変わるたびに全員が同じところから再出発。'))), h('div', { class: 'win lp-board' }, h('h3', { class: 'win-title' }, tl(`見本の討伐の戦果`)), h('div', { class: 'lp-table-scroll' }, h('table', { class: 'lp-table' }, h('thead', {}, h('tr', {}, h('th', {}, tl('順位')), h('th', {}, tl('冒険者')), h('th', {}, tl('戦果')), h('th', {}, tl('燃費')), h('th', {}, tl('速さ')))), h('tbody', {}, ...rows))))));
+    const ranking = h('section', { class: 'lp-sec', id: 'lp-rank' }, h('h2', {}, tl('ランキング')), h('div', { class: 'lp-rank-wrap' }, h('div', {}, h('p', {}, tl('順位を決めるのは、まず戦果。ボスの動きに正しく答えられた割合です。並んだときは、少ない言葉で済ませた冒険者（燃費）が上。それでも並んだら、答えるのが速いほうが上。')), h('ol', { class: 'lp-order' }, h('li', {}, h('b', {}, tl('戦果')), h('span', {}, tl('正しく動けた割合'))), h('li', {}, h('b', {}, tl('燃費')), h('span', {}, tl('使った行動力が少ない'))), h('li', {}, h('b', {}, tl('速さ')), h('span', {}, tl('答えるまでの時間が短い')))), h('p', {}, tl('シーズン制なので、ボスが変わるたびに全員が同じところから再出発。'))), h('div', { class: 'win lp-board' }, h('h3', { class: 'win-title' }, tl(`見本の討伐の戦果`)), h('div', { class: 'lp-table-scroll' }, h('table', { class: 'lp-table' }, h('thead', {}, h('tr', {}, h('th', {}, tl('順位')), h('th', {}, tl('冒険者')), h('th', {}, tl('戦果')), h('th', {}, tl('燃費')), h('th', {}, tl('速さ')))), h('tbody', {}, ...rows))))));
     // --- 工夫・仕組み（ギルドマスターが語る） ---
     const gm = pixelCanvas(PORTRAIT_W, PORTRAIT_H, 'lp-gm-canvas', tl('ギルドマスター'));
     const gmCtx = ctx2d(gm);
@@ -949,20 +975,28 @@ export async function renderAbout(root, opts = {}) {
         drawHero(gmCtx, GM_LOOK, GM_GEAR, cx, fy, { frame, action: 'idle' });
         elderBeard(gmCtx, cx, fy, poseFor('idle', 0, frame).bob);
     });
-    const mech = [
-        [tl('資料室から、何を選んで書くか'), tl('ギルドの資料室には、役に立つ資料もあれば、今回の戦いには関係のない資料も並んでおる。全部を持たせることはできんからのう。どれを選んで、どのように心得や巻物に書いてやるか。そこが、育て役のいちばんの腕の見せどころじゃよ。')],
-        [tl('道具は、持たせるだけでは使われない'), tl('冒険者というのはのう、渡されただけの道具を、自分から使いこなしてはくれんものじゃ。いつ、何のために使うのか。それを心得で教えてやれば、ここぞという場面で手に取ってくれるじゃろう。')],
-        [tl('かばんの重さには上限がある'), tl('心得の長さにも、道具にも、巻物にも、結界にも、それぞれ重さがあってな。上限を超えると、門から出してやれんのじゃ。なんでも詰めこんだ重い荷物より、よく選んだ軽い荷物のほうが強いこともある。よく考えてみるのじゃぞ。')],
-        [tl('幻術を、結界で弾く'), tl('ボスはのう、偉い人の声をまねて、「作戦変更だ」などと、もっともらしい偽の命令を混ぜてくるのじゃ（プロンプトインジェクション）。結界を張っておけば、あやしい声は冒険者の耳に届く前に止まる。用心に越したことはないぞ。')],
-        [tl('ギルドマスターの講評'), tl('冒険から戻ったら、わしが場面ごとの結果と、どこが良くて何が足りなかったかを書いて渡そう。冒険者が何を見て、どう考えたかの記録もたどれるからのう。それを手がかりに、次の手を考えるのじゃよ。')],
+    // このセクションで伝えるのは「なぜ遊ぶと身につくのか」。遊び方のコツは募集要項とゲーム中の助言に任せる。
+    //   A: 自分で考えて試すことで身につくこと（実務のどの技術にあたるか）をカードで
+    //   B: ゲームだから続けられ、身につく理由を、ギルドマスターの語りで
+    const learn = [
+        [tl('資料から、何を選んでどう書くか'), tl('ナレッジの落とし込み'), tl('資料室には、役に立つ資料も、関係のない資料も並んでいます。毎回思い出す心得と、必要なときだけ開く巻物に、何をどう書き分けるかを考えます。')],
+        [tl('持たせたものを、いつ使わせるか'), tl('ツール・スキルの使わせ方'), tl('道具も巻物も、持たせるだけでは使われません。どんな場面で、何のために使うのかまで教えて、はじめて働きます。')],
+        [tl('任せ方と、渡し方'), tl('サブエージェント'), tl('お供に届くのは、こちらが伝えたことだけ。何を調べてほしいかと手がかりをそのまま渡せば、重い調べものを任せて、要点だけを受け取れます。')],
+        [tl('指示ではなく、しくみで守る'), tl('ガードレール'), tl('偉い人をまねた偽の命令（プロンプトインジェクション）は、心得に「無視しろ」と書いても防げません。結界を張れば、耳に届く前に止められます。')],
+        [tl('限りの中で組み立てる'), tl('コンテキストの予算'), tl('かばんの重さは、送り出す前に持たせられる量の上限。行動力（AP）は、1つの場面で使える行動の量。積みすぎず、使いすぎずに勝てる形を探します。')],
     ];
-    const mechSec = h('section', { class: 'lp-sec', id: 'lp-mech' }, h('h2', {}, tl('工夫としくみ')), h('div', { class: 'lp-gm' }, h('div', { class: 'lp-gm-face' }, gm, h('span', {}, tl('ギルドマスター'))), h('div', { class: 'lp-gm-talk' }, ...mech.map(([t, body]) => h('div', { class: 'win lp-say' }, h('h3', {}, t), h('p', {}, body))))));
+    const why = [
+        [tl('結果が、すぐ目に見える'), tl('冒険者は本物のAIじゃ。正しく動けたかどうかは討伐のアニメでひと目で分かるし、冒険の記録をたどれば、なぜそう動いたのかまで見えるぞ。')],
+        [tl('わしの講評'), tl('冒険から戻ったら、場面ごとの結果と、どこを直せばよいかの手がかりを渡そう。答えまでは教えんぞ。自分で考えて直すのが、いちばん身につくからのう。')],
+        [tl('みんなで、同じボスに挑む'), tl('同じ条件で戦うから、ほかの育て役のやり方と比べられる。戦果だけでなく燃費も競うから、正確さと無駄のなさを両方考えることになる。シーズンが変われば、また一から腕比べじゃ。')],
+    ];
+    const mechSec = h('section', { class: 'lp-sec', id: 'lp-mech' }, h('h2', {}, tl('工夫としくみ')), h('p', { class: 'lp-intro' }, tl('冒険者を育てて送り出すたびに、AIエージェントを実際に動かすときと同じことを、自分で考えて試すことになります。')), h('h3', { class: 'lp-sub' }, tl('遊びながら身につくこと')), h('ol', { class: 'lp-learn' }, ...learn.map(([t, ai, body], i) => h('li', { class: 'win' }, h('span', { class: 'lp-learn-no', 'aria-hidden': 'true' }, String(i + 1)), h('h4', {}, t), h('span', { class: 'lp-ai' }, ai), h('p', {}, body)))), h('h3', { class: 'lp-sub' }, tl('ゲームだから、続けられる')), h('div', { class: 'lp-gm' }, h('div', { class: 'lp-gm-face' }, gm, h('span', {}, tl('ギルドマスター'))), h('div', { class: 'lp-gm-talk' }, ...why.map(([t, body]) => h('div', { class: 'win lp-say' }, h('h3', {}, t), h('p', {}, body))))));
     // --- 最後の導線: ギルドの門で、冒険者たちが出発を待っている ---
     const cmd = (label, act, main = false) => h('li', {}, typeof act === 'string'
         ? h('a', { class: `lp-go${main ? ' lp-go-main' : ''}`, href: act }, label)
         : h('button', { class: 'lp-go', type: 'button', onclick: act }, label));
-    const cta = h('section', { class: 'lp-cta', id: 'lp-start' }, h('div', { class: 'lp-cta-stage' }, h('div', { class: 'lp-cta-copy' }, h('p', { class: 'lp-cta-kicker' }, '― Agent Guild ―'), h('h2', { class: 'lp-cta-title' }, h('span', {}, tl('さぁ、')), h('span', {}, tl('冒険に出かけよう！')))), ctaScene(ticker)), h('div', { class: 'lp-cta-win win' }, h('p', { class: 'lp-cta-lead' }, tl('最初の冒険者を育てて、門の外へ送り出そう。プログラミングはいりません。画面で選んで、日本語で書くだけ。最初のひとりなら10分ほどで出発できます。')), playUrl ? null : h('p', { class: 'lp-cta-msg' }, h('b', {}, tl('ギルドの受付')), tl('遊ぶためのURLは、このページを教えてくれた人に聞いてください。')), h('ul', { class: 'lp-cta-cmd', 'aria-label': tl('コマンド') }, playUrl ? cmd(tl('はじめる'), playUrl, true) : null, cmd(tl('討伐をもう一度見る'), jump('lp-demo')), opts.demoUrl ? cmd(tl('デモで画面をさわる'), opts.demoUrl) : null, cmd(tl('図鑑をひらく'), jump('lp-chars')))));
-    page.append(hero, about, howto, mechSec, demo, effects, chars, bosses, ranking, cta);
+    const cta = h('section', { class: 'lp-cta', id: 'lp-start' }, h('div', { class: 'lp-cta-stage' }, h('div', { class: 'lp-cta-copy' }, h('p', { class: 'lp-cta-kicker' }, '― Agent Guild ―'), h('h2', { class: 'lp-cta-title' }, h('span', {}, tl('さぁ、')), h('span', {}, tl('冒険に出かけよう！')))), ctaScene(ticker)), h('div', { class: 'lp-cta-win win' }, h('p', { class: 'lp-cta-lead' }, tl('最初の冒険者を育てて、門の外へ送り出そう。プログラミングはいりません。画面で選んで、日本語で書くだけ。最初のひとりなら10分ほどで出発できます。')), playUrl ? null : h('p', { class: 'lp-cta-msg' }, h('b', {}, tl('ギルドの受付')), tl('遊ぶためのURLは、このページを教えてくれた人に聞いてください。')), h('ul', { class: 'lp-cta-cmd', 'aria-label': tl('コマンド') }, playUrl ? cmd(opts.playLabel ?? tl('はじめる'), playUrl, true) : null, cmd(tl('討伐をもう一度見る'), jump('lp-demo')), opts.demoUrl ? cmd(tl('デモで画面をさわる'), opts.demoUrl) : null, cmd(tl('図鑑をひらく'), jump('lp-chars')))));
+    page.append(...(opts.banner ? [opts.banner] : []), hero, about, howto, mechSec, demo, effects, chars, bosses, ranking, cta);
     root.replaceChildren(page);
 }
 //# sourceMappingURL=about.js.map

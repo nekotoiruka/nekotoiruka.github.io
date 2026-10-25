@@ -94,7 +94,7 @@ function withTheme(sc, d) {
     if (!boss)
         return sc;
     sc.boss.name = boss.short ?? boss.name;
-    sc.theme = { hue: boss.hue ?? 0, filter: boss.filter, kind: boss.kind, breath: boss.breath ?? 'fire', labels: boss.labels, counter: boss.counter };
+    sc.theme = { hue: boss.hue ?? 0, filter: boss.filter, kind: boss.kind, breath: boss.breath ?? 'fire', labels: boss.labels, counter: boss.counter, captions: boss.captions, title: boss.name };
     return sc;
 }
 export async function getMe() {

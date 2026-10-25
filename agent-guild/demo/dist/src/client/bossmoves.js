@@ -69,19 +69,31 @@ const C = (evade, fx, sfx, color) => ({ evade, fx, sfx, color });
 export const COUNTERS = {
     // 竜: 炎は鏡で受け、爪は影を残してすり抜け、急降下は伏せ、尾は跳んでかわす（今までどおり）
     dragon: { breath: C('block', 'mirror', 'guard', '#bfe8ff'), claw: C('step', 'shadow', 'whoosh', '#e2c2ff'), dive: C('crawl', 'dust', 'whoosh', '#c8d0ff'), tail: C('jump', 'trail', 'jump', '#ffffff') },
-    // 伯爵: 蝙蝠は聖なる光で追いはらい、爪ははじき、蝙蝠の急降下は飛びのき、背後からの一撃は振り向いて受け止める
-    vampire: { breath: C('barrier', 'holy', 'barrier', '#fff2b0'), claw: C('slash', 'parry', 'guard', '#ffd0da'), dive: C('dodge', 'roll', 'whoosh', '#e0c8f0'), tail: C('turn', 'backGuard', 'guard', '#ffd0e0') },
-    // 大蜘蛛: 糸は斬りはらい、牙は横へ跳び、頭上からの奇襲は影を残してすり抜け、脚の薙ぎ払いは跳び越える
-    spider: { breath: C('slash', 'cut', 'slash', '#f4f6ff'), claw: C('dodge', 'roll', 'whoosh', '#9af0b0'), dive: C('step', 'shadow', 'whoosh', '#e2c2ff'), tail: C('jump', 'leap', 'jump', '#d8ffe0') },
-    // 頭目: 矢の雨は盾をかかげて受け、落とし穴は跳び越え、投石は飛びのき、槍の突撃は穂先をはらう
-    goblin: { breath: C('block', 'shieldWall', 'guard', '#fff0c0'), claw: C('jump', 'leap', 'jump', '#ffd166'), dive: C('dodge', 'roll', 'whoosh', '#e8d5a8'), tail: C('slash', 'parry', 'slash', '#ffd166') },
-    // 海の主: 墨は風で吹きはらい、触手の薙ぎは伏せてくぐり、足もとからの突き上げは跳んで離れ、巻き取りは触手を斬る
-    kraken: { breath: C('barrier', 'gust', 'whoosh', '#7bed9f'), claw: C('crawl', 'dust', 'whoosh', '#bfe8ff'), dive: C('jump', 'leap', 'jump', '#d8f2ff'), tail: C('slash', 'cut', 'slash', '#ffb0d0') },
-    // 守護巨人: 石礫は打ち砕き、拳は飛びのき、地割れは跳び越え、石の腕は伏せてやりすごす
-    golem: { breath: C('slash', 'smash', 'shatter', '#d8ccb0'), claw: C('dodge', 'roll', 'whoosh', '#c8b48a'), dive: C('jump', 'leap', 'jump', '#7af0e0'), tail: C('crawl', 'dust', 'whoosh', '#c8b48a') },
-    // 氷巨人: 凍てつく息は炎で溶かし、氷の槍は撃ち落とし、踏みつけは飛びのき、棍棒は跳び越える
-    giant: { breath: C('barrier', 'fireWall', 'fireWall', '#ffb070'), claw: C('shoot', 'shootDown', 'shoot', '#e6f6ff'), dive: C('dodge', 'roll', 'whoosh', '#e6f6ff'), tail: C('jump', 'leap', 'jump', '#bfe8ff') },
+    // 伯爵: 蝙蝠の群れは床に伏せてやり過ごし（床伏せ）、爪は銀の盾で受け（銀盾受け）、急降下は柱の陰へ駆けこみ（柱陰走り）、背後の霧は振り向いて斬る（背面斬り）。
+    //   動きはシーズンの正解の中身に合わせる（2026-10-24。以前は聖なる光・はじく・受け止める で、正解の名前と絵が食い違っていた）
+    vampire: { breath: C('crawl', 'dust', 'whoosh', '#e0c8f0'), claw: C('block', 'parry', 'guard', '#ffd0da'), dive: C('dodge', 'roll', 'whoosh', '#e0c8f0'), tail: C('turnCut', 'backGuard', 'slash', '#ffd0e0') },
+    // 大蜘蛛: 糸は横へ転がってかわし、牙は盾ではじき、頭上からの落下は飛びのき、脚の薙ぎ払いは低く斬りはらう（2026-10-24、正解の中身に合わせて付け替え）
+    spider: { breath: C('dodge', 'roll', 'whoosh', '#f4f6ff'), claw: C('slash', 'parry', 'guard', '#9af0b0'), dive: C('dodge', 'roll', 'whoosh', '#e2c2ff'), tail: C('slash', 'cut', 'slash', '#d8ffe0') },
+    // 頭目: 矢の雨は盾をかかげて受け、落とし穴は回りこんで避け、投石は飛びのき、群れの突進は穂先をはらう（落とし穴を付け替え）
+    goblin: { breath: C('block', 'shieldWall', 'guard', '#fff0c0'), claw: C('step', 'shadow', 'whoosh', '#ffd166'), dive: C('dodge', 'roll', 'whoosh', '#e8d5a8'), tail: C('slash', 'parry', 'slash', '#ffd166') },
+    // 海の主: 墨は物陰に伏せ、触手の薙ぎは跳んでかわし、足もとからの突き上げは跳んで離れ、巻き取りは触手を斬る（墨と薙ぎを付け替え）
+    kraken: { breath: C('crawl', 'dust', 'whoosh', '#7bed9f'), claw: C('jump', 'leap', 'jump', '#bfe8ff'), dive: C('jump', 'leap', 'jump', '#d8f2ff'), tail: C('slash', 'cut', 'slash', '#ffb0d0') },
+    // 守護巨人: 石礫は盾で受け、拳は飛びのき、地割れは跳び越え、石の腕は伏せてやりすごす（石礫を付け替え）
+    golem: { breath: C('block', 'parry', 'guard', '#d8ccb0'), claw: C('dodge', 'roll', 'whoosh', '#c8b48a'), dive: C('jump', 'leap', 'jump', '#7af0e0'), tail: C('crawl', 'dust', 'whoosh', '#c8b48a') },
+    // 氷巨人: 凍てつく息は物陰に伏せ、氷の槍は左右に駆けてかわし、踏みつけは飛びのき、棍棒は懐へ踏みこんで斬る（息・槍・棍棒を付け替え）
+    giant: { breath: C('crawl', 'dust', 'whoosh', '#ffb070'), claw: C('step', 'shadow', 'whoosh', '#e6f6ff'), dive: C('dodge', 'roll', 'whoosh', '#e6f6ff'), tail: C('slash', 'cut', 'slash', '#bfe8ff') },
 };
+/** 正しく動けた人の身のこなしを、どの基本の場面の対応技にするか。
+ *  課題の respond（ひっかけの回）→ 基本の4場面ならその場面 → 霧・記憶・仲間の声はボスの攻撃（attack）から。ほかの場面は undefined */
+export function respondScene(scene, respond, attack) {
+    if (respond)
+        return respond;
+    if (isBaseScene(scene))
+        return scene;
+    if (scene === 'fog' || scene === 'memory' || scene === 'ally')
+        return attack === 'claw' || attack === 'breath' || attack === 'tail' ? attack : attack === 'meteor' ? 'dive' : undefined;
+    return undefined;
+}
 /** その場面での対応技（基本の4場面だけ。ほかの場面は undefined） */
 export function counterFor(kind, scene) {
     return isBaseScene(scene) ? COUNTERS[kindOf(kind)][scene] : undefined;

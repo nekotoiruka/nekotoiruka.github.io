@@ -1,8 +1,9 @@
 // 提出画面: 画面でポチポチ組み立てるビルダー（YAML は上級者向けの読み書きだけ）
-import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAMILIAR_KINDS, FAMILIAR_LABELS, POSITIONS, POSITION_LABELS, POSITION_NOTES, DEFAULT_CHARM_COLORS, DEFAULT_FAMILIAR_COLORS, LEGACY_MAIN_PROMPTS, MAIN_PROMPT_TEMPLATE, backWeapons, buildToYaml, computeCost, estimateSubmitCost, estimateTokens, mainWeight, parseBuild, skillWeight, skillLook, toLoadout, CAT_PATTERNS, CAT_PATTERN_LABELS } from '../../shared/build.js';
-import { COST_RULES, WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
+import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAMILIAR_KINDS, FAMILIAR_LABELS, POSITIONS, POSITION_LABELS, POSITION_NOTES, DEFAULT_CHARM_COLORS, DEFAULT_FAMILIAR_COLORS, LEGACY_MAIN_PROMPTS, MAIN_PROMPT_TEMPLATE, COMPANION_PROMPT_TEMPLATE, MAIN_COMPANION_SNIPPET, backWeapons, buildToYaml, computeCost, estimateSubmitCost, estimateTokens, mainWeight, parseBuild, skillWeight, skillLook, toLoadout, CAT_PATTERNS, CAT_PATTERN_LABELS } from '../../shared/build.js';
+import { apLevel, COST_RULES, toolAp, WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
+import { MP_BUDGET_PER_CASE } from '../../shared/stats.js';
 import { accountBar, entryCard, loginForm, SWAY_NOTE } from '../account.js';
-import { traceView } from '../trace.js';
+import { sceneMp, traceView } from '../trace.js';
 import { accuracyDeltas, diffParts, sparkline } from '../history.js';
 import { demoMode, getMe, getSeason, mySubmissions, runTrial, submitBuild } from '../api.js';
 import { charmSprite, drawHero, familiarSprite, gearOf, lookOf, portrait, PORTRAIT_H, PORTRAIT_W, weaponSprite } from '../hero.js';
@@ -181,7 +182,7 @@ export async function renderSubmit(root) {
         meterFill.style.width = `${Math.min(100, (cost.total / cost.limit) * 100)}%`;
         meterFill.classList.toggle('over', cost.over);
         meterText.textContent = `${cost.total} / ${cost.limit}`;
-        const KINDS = [['main', tl('心得')], ['skill', tl('巻物')], ['tool', tl('道具')], ['guard', tl('結界')]];
+        const KINDS = [['main', tl('心得')], ['skill', tl('巻物')], ['tool', tl('道具')], ['guard', tl('結界')], ...(b.companion ? [['companion', tl('お供')]] : [])];
         const sums = KINDS.map(([k, label]) => ({ k, label, n: cost.items.filter((x) => x.kind === k).length, w: cost.items.filter((x) => x.kind === k).reduce((a, x) => a + x.cost, 0) }));
         const sumRows = () => sums.map((x) => h('li', { class: `ks-${x.k}` }, h('span', {}, x.label, x.k !== 'main' ? h('span', { class: 'muted small' }, tl(` ×{0}`, x.n)) : null), h('b', {}, x.w)));
         kindSum.replaceChildren(...sumRows());
@@ -258,10 +259,51 @@ export async function renderSubmit(root) {
         }));
         const mainCard = h('section', { class: 'card' }, h('h3', {}, tl('2. 心得'), h('span', { class: 'ai-term' }, tl('システムプロンプト'))), h('p', { class: 'small muted' }, tl(`冒険者が毎回思い出す教え。{0}{1}トークンごとに重さ1。長いほど燃費も悪くなります。`, R.mainMaxChars ? tl(`{0}字まで、`, R.mainMaxChars) : '', R.mainTokensPerPoint)), tips, main.el, main.note);
         // 3. ツール
+        // 行動力のものさし: 冒険者（1つの場面）とお供（1回の依頼）の行動力を、同じ縮尺の棒で並べる。
+        // お供の棒のほうが長く見えるので、「重いものはお供に読ませる」が数字を読まなくても伝わる
+        const petOk = catalog.some((t) => t.source === 'archive') || !!b.companion;
+        const AP_MAIN = MP_BUDGET_PER_CASE, AP_PET = R.companionTokenCap, AP_MAX = Math.max(AP_MAIN, petOk ? AP_PET : 0);
+        const AP_LEVEL = [tl('少ない'), tl('ふつう'), tl('多い'), tl('とても多い')];
+        const pct = (x) => `${(x * 100).toFixed(1)}%`;
+        // 棒: 長さは行動力の大きさ（同じ縮尺）。use を渡すと、右端から使うぶんを赤で削る
+        const apBar = (cap, use = 0) => h('span', { class: 'ap-track', style: `width:${pct(cap / AP_MAX)}` }, h('i', { class: 'ap-left', style: `width:${pct(Math.max(0, cap - use) / cap)}` }), use ? h('i', { class: 'ap-use', style: `width:${pct(Math.min(use, cap) / cap)}` }) : null);
+        const apRow = (who, sub, cap, end, kind, use = 0) => h('div', { class: `ap-row ap-${kind}` }, h('span', { class: 'ap-who' }, h('b', {}, who), h('small', {}, sub)), h('span', { class: 'ap-bar' }, apBar(cap, use)), h('span', { class: 'ap-num' }, end));
+        const apScale = h('div', { class: 'ap-scale' }, h('div', { class: 'ap-scale-head' }, h('b', {}, tl('行動力のものさし')), h('span', { class: 'small muted' }, tl('道具の結果を読むと、そのぶん行動力が減る'))), apRow(tl('冒険者'), tl('1つの場面で'), AP_MAIN, AP_MAIN.toLocaleString(), 'main'), petOk ? apRow(tl('お供'), tl('1回の依頼で'), AP_PET, AP_PET.toLocaleString(), 'pet') : null, h('p', { class: 'small muted' }, petOk
+            ? tl('読んだものは、考えるたびに読み返すので、重い結果ほど場面の終わりまで効きます。お供が読んだぶんは、冒険者の行動力から減りません。')
+            : tl('読んだものは、考えるたびに読み返すので、重い結果ほど場面の終わりまで効きます。')));
+        // 道具ごとの行動力の消費（4段階の目盛り）。多い道具は、1回で使う量の目安も出す
+        const apInfo = (t) => {
+            const n = toolAp(t), lv = apLevel(n, AP_MAIN);
+            return h('div', { class: `ap-line ap-lv${lv}`, title: tl('1回使うと、行動力 約{0}', n.toLocaleString()) }, h('span', { class: 'ap-k' }, tl('行動力の消費')), h('span', { class: 'ap-pips', 'aria-hidden': 'true' }, ...[1, 2, 3, 4].map((i) => h('i', { class: i <= lv ? 'on' : '' }))), h('b', {}, AP_LEVEL[lv - 1]), lv >= 3 ? h('span', { class: 'muted' }, tl('（1回 約{0}）', n.toLocaleString())) : null);
+        };
+        // 重い道具を、冒険者に持たせたままお供へ移す
+        const giveToPet = (id) => {
+            const c = b.companion;
+            if (!c || c.tools.length >= R.companionMaxTools)
+                return;
+            b.tools = b.tools.filter((x) => x !== id);
+            delete b.gear[id];
+            if (!c.tools.includes(id))
+                c.tools.push(id);
+            renderForm();
+            refresh();
+            document.getElementById('companion-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+        // 重い道具（多い・とても多い）: 冒険者が読んだときと、お供が読んだときの残りを並べる
+        const apCompare = (t, on) => {
+            const n = toolAp(t);
+            if (apLevel(n, AP_MAIN) < 3)
+                return null;
+            const left = (cap) => (n >= cap ? tl('足りない') : tl('残り 約{0}', (Math.round((cap - n) / 100) * 100).toLocaleString()));
+            const c = b.companion, petFull = !!c && c.tools.length >= R.companionMaxTools;
+            return h('div', { class: 'ap-compare' }, apRow(tl('冒険者が読むと'), '', AP_MAIN, left(AP_MAIN), 'main', n), petOk ? apRow(tl('お供が読むと'), '', AP_PET, left(AP_PET), 'pet', n) : null, petOk ? h('p', { class: 'ap-hint small' }, tl('お供が読めば、冒険者の行動力は減らない。'), on && c ? h('button', { type: 'button', class: 'btn btn-small', disabled: petFull, title: petFull ? tl('お供の道具がいっぱいです') : '', onclick: () => giveToPet(t.id) }, tl('お供に持たせかえる'))
+                : on ? h('a', { href: '#companion-card', onclick: (e) => { e.preventDefault(); document.getElementById('companion-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, tl('6. お供 を見る')) : null) : null);
+        };
         const toolCards = toolOrder.map((t) => {
             const on = b.tools.includes(t.id);
+            const withPet = !!b.companion?.tools.includes(t.id); // お供が持っている道具は、冒険者には持たせられない
             const full = !on && b.tools.length >= R.maxTools;
-            const cb = h('input', { type: 'checkbox', checked: on, disabled: full, 'data-tool': t.id });
+            const cb = h('input', { type: 'checkbox', checked: on, disabled: full || withPet, 'data-tool': t.id });
             // 持ち物（b.tools）を正とし、チェックの表示はそこから描き直す。input と change のどちらが来ても1回だけ反映する
             const toggle = () => {
                 const want = cb.checked;
@@ -294,7 +336,7 @@ export async function renderSubmit(root) {
             cb.onchange = toggle;
             cb.oninput = toggle;
             // 並び順と大きさは、チェックの有無で変えない（見た目の選択は、下の「持たせた道具の見た目」に出す）
-            return h('div', { class: 'tool-card' + (on ? ' on' : '') + (full ? ' full' : '') }, h('label', { class: 'tool-head' }, cb, h('b', {}, t.name), h('span', { class: 'tool-cost' }, tl(`重さ {0}`, t.cost))), h('p', { class: 'small' }, brief?.toolNotes[t.id] ?? t.description));
+            return h('div', { class: 'tool-card' + (on ? ' on' : '') + (full ? ' full' : '') }, h('label', { class: 'tool-head' }, cb, h('b', {}, t.name), withPet ? h('span', { class: 'chip chip-sub' }, tl('お供が持っている')) : null, h('span', { class: 'tool-cost' }, tl(`重さ {0}`, t.cost))), h('p', { class: 'small' }, brief?.toolNotes[t.id] ?? t.description), apInfo(t), withPet ? null : apCompare(t, on));
         });
         // 持たせた道具の見た目（持たせた順）
         const gearRows = b.tools.filter((id) => toolById[id]).map((id) => {
@@ -304,21 +346,8 @@ export async function renderSubmit(root) {
             return h('div', { class: 'gear-row', 'data-gear': id }, h('b', { class: 'gear-name small' }, t.name), lookPicker(WEAPON_KINDS, WEAPON_LABELS, { kind: wk, color: g.color ?? '' }, (k, c) => weaponSprite(k, c || undefined), (k, c) => { b.gear[id] = { weapon: k, color: c }; }));
         });
         const gearBox = gearRows.length ? h('div', { class: 'gear-box' }, h('h4', {}, tl('持たせた道具の見た目（強さには影響しません）')), ...gearRows) : null;
-        const toolCard = h('section', { class: 'card' }, h('h3', {}, tl('3. 道具'), h('span', { class: 'ai-term' }, tl('ツール')), R.maxTools < 99 ? h('span', { class: 'slot-count' }, `${b.tools.length} / ${R.maxTools}`) : null), h('p', { class: 'small muted' }, tl('持たせた道具は、冒険者が自分の判断で使います。持っているだけで重く、使えば時間とトークンも増えます。')), h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('道具は、持たせるだけでは使われんぞ！　いつ・何のために使うかを、心得の「道具の使い方」に書いておけ。書いておかんと、肝心な場面で使い忘れたり、要らん場面で使って時間とトークンを無駄にしたりする。'))), h('div', { class: 'tool-grid' }, ...toolCards), gearBox);
-        // お供（見た目だけ）
-        const petOn = h('input', { type: 'checkbox', checked: !!b.avatar.pet });
-        petOn.onchange = () => {
-            if (petOn.checked)
-                b.avatar.pet = { kind: FAMILIAR_KINDS[0], color: DEFAULT_FAMILIAR_COLORS[0] };
-            else
-                delete b.avatar.pet;
-            renderForm();
-            refresh();
-        };
-        const petPicker = b.avatar.pet
-            ? lookPicker(FAMILIAR_KINDS, FAMILIAR_LABELS, { kind: b.avatar.pet.kind, color: b.avatar.pet.color || DEFAULT_FAMILIAR_COLORS[0] }, (k, c) => familiarSprite(k, c, 0), (k, c) => { b.avatar.pet = { kind: k, color: c }; })
-            : null;
-        basics.append(h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('見た目（強さには影響しません）')), h('div', { class: 'body-picker' }, ...bodyBtns), patternRow, h('div', { class: 'color-row' }, h('label', {}, tl('服 '), palIn), h('label', {}, tl('髪・毛 '), hairIn), h('label', {}, tl('手に持つ武器 '), weaponSel))), h('div', { class: 'field' }, h('label', { class: 'chk' }, petOn, tl('お供を連れていく（見た目だけ・重さなし）')), petPicker));
+        const toolCard = h('section', { class: 'card' }, h('h3', {}, tl('3. 道具'), h('span', { class: 'ai-term' }, tl('ツール')), R.maxTools < 99 ? h('span', { class: 'slot-count' }, `${b.tools.length} / ${R.maxTools}`) : null), h('p', { class: 'small muted' }, tl('持たせた道具は、冒険者が自分の判断で使います。持っているだけで重く、使えば時間とトークンも増えます。')), h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('道具は、持たせるだけでは使われんぞ！　いつ・何のために使うかを、心得の「道具の使い方」に書いておけ。書いておかんと、肝心な場面で使い忘れたり、要らん場面で使って時間とトークンを無駄にしたりする。'))), apScale, h('div', { class: 'tool-grid' }, ...toolCards), gearBox);
+        basics.append(h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('見た目（強さには影響しません）')), h('div', { class: 'body-picker' }, ...bodyBtns), patternRow, h('div', { class: 'color-row' }, h('label', {}, tl('服 '), palIn), h('label', {}, tl('髪・毛 '), hairIn), h('label', {}, tl('手に持つ武器 '), weaponSel))));
         // 4. スキル
         emptyHints = [];
         const skCards = b.skills.map((s, i) => {
@@ -380,7 +409,53 @@ export async function renderSubmit(root) {
             return el;
         });
         const guardCard = h('section', { class: 'card' }, h('h3', {}, season.task.scrolls?.length ? tl('5. 幻術よけの結界') : tl('5. ガードレール'), h('span', { class: 'ai-term' }, tl('ガードレール')), h('span', { class: 'slot-count' }, tl(`重さ {0}・任意`, R.guardrailCost))), season.task.charm ? h('p', { class: 'guard-warn' }, tl('幻術は、冒険者の耳に入った時点で効きます。心得で「無視しろ」と教えても防げず、聞いた声はしばらく頭に残って次の行動を狂わせます。防げるのは結界だけです。')) : null, h('p', { class: 'small muted' }, tl(`ここに書いた言葉を含む声は、冒険者の耳に届く前に結界が消し、「{0}」と即答します（AIに聞かせずにシステムが止める＝ガードレール）。言葉が広すぎると、仲間の本物の声まで消してしまいます。{1}つまで。`, season.task.refuseWord ?? tl('お断り'), R.guardrailMaxWords)), h('div', { class: 'guard-row' }, ...gInputs));
-        form.replaceChildren(basics, mainCard, toolCard, skCard, guardCard, adv);
+        // 6. お供（サブエージェント）: 分厚い書物のある課題か、すでに連れているときだけ出す
+        const petCard = catalog.some((t) => t.source === 'archive') || b.companion ? companionCard() : null;
+        form.replaceChildren(basics, mainCard, toolCard, skCard, guardCard, ...(petCard ? [petCard] : []), adv);
+    };
+    // お供（サブエージェント）の欄
+    const companionCard = () => {
+        const c = b.companion;
+        const onBox = h('input', { type: 'checkbox', checked: !!c });
+        onBox.onchange = () => {
+            if (onBox.checked) {
+                b.companion = { prompt: COMPANION_PROMPT_TEMPLATE, tools: [] };
+                if (!b.avatar.pet)
+                    b.avatar.pet = { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] }; // お供の見た目（下の「お供の見た目」で変えられる）
+                if (!/お供|companion/i.test(b.main.prompt))
+                    b.main.prompt = `${b.main.prompt.replace(/\s*$/, '')}\n${MAIN_COMPANION_SNIPPET}`;
+            }
+            else
+                delete b.companion;
+            renderForm();
+            refresh();
+        };
+        const desc = brief?.prepare?.find((p) => p.key === 'companion')?.body
+            ?? tl('冒険者が頼むと動く、もうひとりの AI。お供だけの心得と道具で調べて、要点だけを返します。お供は自分の行動力で読むので、冒険者の行動力は減りません。ただし、頼むたびにお供の分のトークン（採点の費用）がかかります。');
+        const head = h('h3', {}, tl('6. お供'), h('span', { class: 'ai-term' }, tl('サブエージェント')), h('span', { class: 'slot-count' }, tl(`重さ {0}＋心得＋道具・任意`, R.companionCost)));
+        const tip = h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('お供に頼むかどうかは、冒険者が心得を読んで決めるんだぞ。「どんな場面で頼むか」と「頼むときは、名前や様子をそのまま伝える」を、心得に書いておけ。お供に届くのは、冒険者が伝えたことだけだからな。')));
+        const rules = h('p', { class: 'small muted' }, tl('上限: 1つの場面で頼めるのは{0}回まで、1回の送り出しで{1}回まで。お供の行動力は1回の依頼ぶんで、冒険者より少し多いくらい。尽きると、答えをまとめられません。', R.companionCallsPerCase, R.companionCallsPerRun, R.companionTokenCap.toLocaleString()));
+        if (!c)
+            return h('section', { class: 'card companion-card', id: 'companion-card' }, head, h('p', { class: 'small muted' }, desc), h('label', { class: 'chk' }, onBox, tl('お供を連れていく（サブエージェント）')), tip, rules);
+        const pa = area(c.prompt, (v) => { c.prompt = v; }, { rows: 6, kind: 'main', maxChars: R.companionMaxChars || undefined, placeholder: tl('お供が頼まれたときに思い出す教え。何をどう調べ、どう答えるか') });
+        const ptools = toolOrder.map((t) => {
+            const on = c.tools.includes(t.id), byMain = b.tools.includes(t.id);
+            const full = !on && c.tools.length >= R.companionMaxTools;
+            const cb = h('input', { type: 'checkbox', checked: on, disabled: byMain || full });
+            cb.onchange = () => {
+                if (cb.checked && !c.tools.includes(t.id) && c.tools.length < R.companionMaxTools)
+                    c.tools.push(t.id);
+                if (!cb.checked)
+                    c.tools = c.tools.filter((x) => x !== t.id);
+                renderForm();
+                refresh();
+            };
+            const n = toolAp(t), lv = apLevel(n, MP_BUDGET_PER_CASE);
+            return h('label', { class: 'chk pet-tool' + (on ? ' on' : '') }, cb, h('span', {}, t.name), byMain ? h('span', { class: 'chip chip-sub' }, tl('冒険者が持っている')) : null, h('span', { class: 'tool-cost' }, tl(`重さ {0}`, t.cost)), h('span', { class: `ap-mini ap-lv${lv}`, title: tl('1回使うと、行動力 約{0}', n.toLocaleString()) }, h('span', { class: 'ap-pips', 'aria-hidden': 'true' }, ...[1, 2, 3, 4].map((i) => h('i', { class: i <= lv ? 'on' : '' }))), lv >= 3 ? tl('行動力 約{0}', n.toLocaleString()) : null));
+        });
+        return h('section', { class: 'card companion-card', id: 'companion-card' }, head, h('p', { class: 'small muted' }, desc), h('label', { class: 'chk' }, onBox, tl('お供を連れていく（サブエージェント）')), tip, field(tl('お供の心得'), pa.el, pa.note), h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl(`お供に持たせる道具（{0}つまで）`, R.companionMaxTools)), h('div', { class: 'pet-tools' }, ...ptools), h('span', { class: 'small muted' }, tl('道具は、冒険者とお供のどちらかひとりにしか持たせられません。お供の道具は、お供に頼んだときだけ使われます。'))), 
+        // お供の見た目: お供を連れていくと、討伐で冒険者のそばに必ず姿を見せる（お供がいないと、姿も出ない）
+        h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('お供の見た目')), lookPicker(FAMILIAR_KINDS, FAMILIAR_LABELS, { kind: b.avatar.pet?.kind ?? 'spirit', color: b.avatar.pet?.color || DEFAULT_FAMILIAR_COLORS[2] }, (k, col) => familiarSprite(k, col, 0), (k, col) => { b.avatar.pet = { kind: k, color: col }; })), rules);
     };
     // --- キャラの見た目（右側） ---
     const bodyBtns = BODY_TYPES.map((t) => {
@@ -768,7 +843,7 @@ function trialView(r, caseCount, toolName, scrollWord) {
     const n = r.cases.length;
     const ok = r.cases.filter((c) => c.score >= 0.6).length;
     const per = r.totals.costUsd / Math.max(1, n);
-    return h('div', {}, h('p', {}, h('b', {}, tl(`{0} / {1} 問 正解`, ok, n)), h('span', { class: 'muted small' }, tl(`　残りの試走 {0} 回`, r.user.trialsLeft))), h('ul', { class: 'trial-list' }, ...r.cases.map((c) => h('li', { class: c.score >= 0.6 ? 'trial-ok' : 'trial-ng' }, h('div', {}, h('b', {}, c.score >= 0.6 ? '○ ' : '× '), c.title), h('div', { class: 'small' }, tl(`答え: {0}`, c.answer)), c.score < 0.6 ? h('div', { class: 'small muted' }, tl(`正解: {0}`, Object.values(c.expected).join(' / '))) : null, h('div', { class: 'small muted' }, tl(`道具: {0}{1}　{2}トークン・{3}秒{4}`, c.tools.map(toolName).join(tl('・')) || tl('なし'), c.skills.length ? (scrollWord ? tl(`　巻物: {0}`, c.skills.join(tl('・'))) : tl(`　スキル: {0}`, c.skills.join(tl('・')))) : '', (c.tokensIn + c.tokensOut).toLocaleString(), (c.latencyMs / 1000).toFixed(1), c.mpOut ? tl('　MP切れ') : '')), c.trace?.length ? h('details', { class: 'trial-trace', ...(c.score < 0.6 ? { open: true } : {}) }, h('summary', { class: 'small' }, tl('冒険の記録を見る')), traceView(c.trace)) : null))), h('p', { class: 'small muted' }, r.totals.costUsd > 0
+    return h('div', {}, h('p', {}, h('b', {}, tl(`{0} / {1} 問 正解`, ok, n)), h('span', { class: 'muted small' }, tl(`　残りの試走 {0} 回`, r.user.trialsLeft))), h('ul', { class: 'trial-list' }, ...r.cases.map((c) => h('li', { class: c.score >= 0.6 ? 'trial-ok' : 'trial-ng' }, h('div', {}, h('b', {}, c.score >= 0.6 ? '○ ' : '× '), c.title), h('div', { class: 'small' }, tl(`答え: {0}`, c.answer)), c.score < 0.6 ? h('div', { class: 'small muted' }, tl(`正解: {0}`, Object.values(c.expected).join(' / '))) : null, h('div', { class: 'small muted' }, tl(`道具: {0}{1}　{2}トークン・{3}秒{4}`, c.tools.map(toolName).join(tl('・')) || tl('なし'), c.skills.length ? (scrollWord ? tl(`　巻物: {0}`, c.skills.join(tl('・'))) : tl(`　スキル: {0}`, c.skills.join(tl('・')))) : '', (c.tokensIn + c.tokensOut).toLocaleString(), (c.latencyMs / 1000).toFixed(1), c.mpOut ? tl('　行動力切れ') : '')), c.trace?.length ? h('details', { class: 'trial-trace', ...(c.score < 0.6 ? { open: true } : {}) }, h('summary', { class: 'small' }, tl('冒険の記録を見る')), traceView(c.trace, sceneMp(c))) : null))), h('p', { class: 'small muted' }, r.totals.costUsd > 0
         ? tl(`この試走の費用は約{0}円。全{1}回を送り出すと、約{2}円の見込みです。`, yen(r.totals.costUsd), caseCount, yen(per * caseCount))
         : tl('（モック採点のため費用は出ません）')));
 }

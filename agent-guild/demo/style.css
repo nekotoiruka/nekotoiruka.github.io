@@ -650,8 +650,19 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .tr-think .tr-body { color: #ffe8a8; }
 .tr-tool .tr-k { background: #2a5a6a; color: #c8f0ff; } .tr-tool::before { background: #5fc8e6; }
 .tr-skill .tr-k { background: #2a5a3a; color: #c8ffd8; } .tr-skill::before { background: #5fd88a; }
+.tr-companion .tr-k { background: #5a3a6a; color: #f3d8ff; } .tr-companion::before { background: #c59bff; }
 .tr-answer.tr-ok .tr-k { background: #1f6a44; color: #fff; } .tr-answer.tr-ok::before { background: #3fbf7f; }
 .tr-answer.tr-ng .tr-k { background: #7a2a2a; color: #fff; } .tr-answer.tr-ng::before { background: #e05050; }
+/* 冒険の記録: この場面で冒険者が使った MP（1場面のトークンの上限に対して） */
+.mp-gauge { margin: 0 0 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: rgba(0,0,0,.18); }
+.mp-row { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.mp-bar { height: 8px; margin: 4px 0; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+.mp-bar > i { display: block; height: 100%; background: #5ab4ff; }
+.mp-gauge.is-high .mp-bar > i { background: #ffc35a; }
+.mp-gauge.is-out .mp-bar > i { background: #ff5d6c; }
+.mp-out { color: #ff7a86; }
+.tr-mp { color: #8fc8ff; }
+.tr-mp-heavy { color: #ff9aa4; font-weight: bold; }
 .trace-guide { display: inline-block; }
 .trace-guide ul { margin: 6px 0; padding-left: 18px; }
 .trial-trace { margin-top: 6px; }
@@ -720,14 +731,14 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-step h3 { font-size: 20px; color: var(--ink); margin: 14px 0 4px; display: flex; align-items: center; gap: 10px; }
 .lp-step h3::before { content: counter(lpstep); width: 28px; height: 28px; line-height: 28px; text-align: center; background: var(--accent); color: #12152a; font-size: 16px; }
 .lp-step p { margin: 0; color: var(--muted); }
-.lp-kit { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.lp-kit { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } /* 6つ（心得・道具・巻物・冒険日誌・結界・お供）を3つずつ2段に */
 .lp-kit li { background: var(--panel); box-shadow: 0 0 0 2px var(--line); padding: 14px 12px; display: grid; justify-items: start; align-content: start; gap: 2px; }
 .lp-kit .lp-icon { margin-bottom: 8px; }
 .lp-kit b { font-size: 18px; color: var(--accent); font-weight: normal; }
 .lp-ai { font-size: 12px; color: var(--info); }
 .lp-tip { margin: 30px 0 0; max-width: 46em; padding: 16px 20px; line-height: 1.8; }
 .lp-tip b { display: block; color: var(--accent); font-weight: normal; margin-bottom: 2px; }
-.lp-kit p { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.lp-kit p { margin: 6px 0 0; font-size: 13px; color: var(--muted); word-break: auto-phrase; text-wrap: pretty; } /* 日本語を文節で折り返す（語の途中で切らない） */
 
 /* 討伐の再生 */
 .lp-demo { background: var(--panel); box-shadow: 0 0 0 3px var(--line), 6px 6px 0 3px #05060d; padding: 10px; }
@@ -794,6 +805,12 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-you { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #ffd166; color: #2b1d0e; white-space: nowrap; }
 
 /* 工夫としくみ: ギルドマスターが語る */
+/* 工夫としくみ: 遊びながら身につくこと（番号つきのカード。5つを3つ＋2つに） */
+.lp-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.lp-learn li { position: relative; padding: 16px 16px 16px 18px; display: grid; align-content: start; gap: 4px; }
+.lp-learn h4 { margin: 0; padding-right: 28px; color: var(--accent); font-size: 17px; font-weight: normal; line-height: 1.5; word-break: auto-phrase; }
+.lp-learn p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.8; color: var(--muted); word-break: auto-phrase; text-wrap: pretty; }
+.lp-learn-no { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; display: grid; place-items: center; background: var(--accent); color: var(--ink); font-size: 13px; }
 .lp-gm { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 26px; align-items: start; margin-top: 18px; }
 .lp-gm-face { position: sticky; top: calc(var(--topbar-h, 55px) + 16px); display: grid; justify-items: center; gap: 4px; color: var(--accent); font-size: 14px; }
 .lp-standalone .lp-gm-face { top: 16px; }
@@ -832,6 +849,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 
 @media (max-width: 900px) {
   .lp-kit { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-learn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lp-rank-wrap { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
@@ -852,6 +870,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
   .lp-fx-grid { grid-template-columns: minmax(0, 1fr); }
   .lp-dex { padding: 20px 8px 10px; }
   .lp-char { font-size: 10px; padding: 2px 0 4px; }
+  .lp-learn { grid-template-columns: minmax(0, 1fr); }
   .lp-gm { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .lp-gm-face { position: static; grid-template-columns: auto 1fr; justify-items: start; align-items: center; gap: 12px; }
   .lp-gm-canvas { width: 104px; height: 80px; }
@@ -928,3 +947,91 @@ html[dir="rtl"] .editor, html[dir="rtl"] textarea { text-align: left; }
   .gm-canvas { width: 78px; height: 60px; }
   .gm-says { gap: 10px; }
 }
+
+/* お供（サブエージェント）の欄 */
+.companion-card .pet-tools { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0; }
+.companion-card .pet-tool { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--panel-2); box-shadow: 0 0 0 1px var(--line); }
+.companion-card .pet-tool.on { box-shadow: 0 0 0 2px #c59bff; }
+.companion-card .pet-tool .tool-cost { margin-left: 4px; }
+
+/* ===== アプリ全体のトンマナを、紹介ページにそろえる =====
+   紹介ページの骨組み: 大きなまとまりは RPG のメッセージウィンドウ（白い二重枠・角丸・濃い地・段付きの影）、
+   見出しは橙と赤の四角の目印、小さな項目は線の枠のタイル、まとまりの間はたっぷり空ける。
+   アプリの各タブ（募集要項・準備・討伐・戦果・講評）も同じ見た目にして、行き来しても同じ世界に見えるようにする */
+:root { --win: #0d1022; --frame: #ece9f6; }
+main { max-width: 1200px; padding: 28px 24px 56px; }
+/* 見出し: 紹介ページと同じ目印（.lp の中は紹介ページ側の指定のまま） */
+main h2 { display: flex; align-items: center; gap: 12px; font-size: 24px; letter-spacing: .06em; margin: 8px 0 14px; }
+main h2::before { content: ''; width: 10px; height: 10px; background: var(--accent); box-shadow: 3px 3px 0 #e43b44; flex: none; }
+.results-inner h2, .empty h2 { justify-content: center; }
+.brief h2 { margin-top: 48px; padding-bottom: 0; border-bottom: 0; }
+/* 大きなまとまり = ウィンドウ */
+.builder .card, .card.advlog-card, .card.diag, .card.past-card, .card.sent-card, .card.admin-settings, .card.admin-login,
+.stage, .side, .results-inner, .task-col, .ref-col, .empty, .next-card {
+  background: var(--win); border: 3px solid var(--frame); border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--win), 6px 6px 0 3px #05060d;
+}
+.next-card { border-color: var(--accent); }
+.builder .card { padding: 18px 22px 22px; }
+.builder .card + .card, .builder > .card { margin-bottom: 22px; }
+.builder .card h3:first-child, .builder .card > h3 { margin-top: 0; font-size: 18px; }
+.stage { padding: 12px; }
+.side { padding: 16px; }
+.task-col { padding: 14px 16px; }
+/* 小さな項目 = 線の枠のタイル（紹介ページの「冒険の備え」と同じ） */
+.prepare-card, .award, .sample, .fighter-card, .notice { background: var(--panel); box-shadow: 0 0 0 2px var(--line); border-radius: 0; }
+.prepare-card { padding: 14px 16px; }
+/* 読みやすさ: 説明文は文節で折り返し、行間を少し広く */
+main p { line-height: 1.75; }
+main p, main li, main dd { word-break: auto-phrase; }
+/* デモ版のホーム（紹介ページ）の先頭の断り書き */
+.demo-band { margin: 0 0 22px; padding: 10px 14px; background: rgba(95,205,228,.12); box-shadow: 0 0 0 2px var(--info); color: var(--ink); font-size: 14px; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.demo-band b { color: #12152a; background: var(--info); padding: 0 8px; font-weight: normal; }
+/* 募集要項: 荷物の重さと MP（2つの上限を並べて見せる） */
+.limits-dl { display: grid; grid-template-columns: 9em minmax(0, 1fr); gap: 10px 16px; margin: 0; }
+.limits-dl dt { color: var(--accent); }
+.limits-dl dd { margin: 0; line-height: 1.75; }
+@media (max-width: 600px) { .limits-dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .limits-dl dd { margin-bottom: 10px; } }
+/* 準備の左の欄（討伐依頼書・資料室）は欄そのものをウィンドウにし、中の依頼書は枠なしで載せる（二重枠にしない） */
+.ref-col .card.quest { background: transparent; border: 0; box-shadow: none; padding: 4px 2px; }
+.mp-gauge.is-out .mp-bar { box-shadow: inset 0 0 0 1px #ff5d6c; }
+
+/* 行動力（AP）: 準備の道具の欄。冒険者（1場面）とお供（1回の依頼）の行動力を同じ縮尺の棒で並べ、道具ごとの消費を4段階の目盛りで見せる */
+.ap-scale { background: var(--panel-2); padding: 10px 12px; margin: 10px 0 12px; }
+.ap-scale-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 6px; }
+.ap-scale-head b { color: var(--accent); }
+.ap-scale p { margin: 6px 0 0; }
+.ap-row { display: grid; grid-template-columns: 8.5em 1fr 6.5em; align-items: center; gap: 8px; margin: 3px 0; }
+.ap-who { display: flex; flex-direction: column; line-height: 1.25; }
+.ap-who b { font-weight: normal; }
+.ap-who small { color: var(--muted); font-size: 11px; }
+.ap-main .ap-who b { color: var(--info); }
+.ap-pet .ap-who b { color: var(--purple); }
+.ap-bar { display: block; }
+.ap-track { display: flex; height: 10px; background: #0d1022; box-shadow: 0 0 0 1px var(--line); }
+.ap-track i { display: block; height: 100%; }
+.ap-main .ap-left { background: var(--info); }
+.ap-pet .ap-left { background: var(--purple); }
+.ap-use { background: repeating-linear-gradient(135deg, #e43b44 0 3px, #8a1e28 3px 6px); }
+.ap-num { font-size: 12px; text-align: right; color: var(--muted); white-space: nowrap; }
+.ap-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 12px; margin-top: 2px; }
+.ap-k { color: var(--muted); }
+.ap-pips { display: inline-flex; gap: 2px; }
+.ap-pips i { width: 7px; height: 9px; background: #0d1022; box-shadow: 0 0 0 1px var(--line); }
+.ap-lv1 .ap-pips i.on, .ap-lv2 .ap-pips i.on { background: var(--accent-2); }
+.ap-lv3 .ap-pips i.on { background: var(--accent); }
+.ap-lv4 .ap-pips i.on { background: #e43b44; }
+.ap-line b { font-weight: normal; }
+.ap-lv3 > b { color: var(--accent); }
+.ap-lv4 > b { color: #ff8a8a; }
+.ap-compare { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.ap-compare .ap-row { grid-template-columns: 1fr auto; grid-template-areas: 'who num' 'bar bar'; gap: 0 8px; margin: 4px 0 6px; }
+.ap-compare .ap-who { grid-area: who; }
+.ap-compare .ap-bar { grid-area: bar; margin-top: 2px; }
+.ap-compare .ap-num { grid-area: num; color: var(--ink); }
+.ap-compare .ap-who b { font-size: 12px; }
+.ap-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0; color: #d9c4ff; }
+.ap-mini { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-left: 4px; }
+.ap-mini.ap-lv4 { color: #ff8a8a; }
+@media (max-width: 560px) { .ap-scale .ap-row { grid-template-columns: 6.5em 1fr 5.5em; } }
+#companion-card { scroll-margin-top: 140px; }

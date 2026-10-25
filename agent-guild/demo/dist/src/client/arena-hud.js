@@ -1,10 +1,11 @@
-import { MINE_BAND, bump, clamp01, ease, lerp } from './arena-common.js';
+import { bump, clamp01, ease, lerp } from './arena-common.js';
 import { skillLook } from '../shared/build.js';
 import { TOOL_BY_ID } from '../shared/catalog.js';
 import { SKILL_WEIGHT } from '../shared/stats.js';
 import { guardIcon, scrollIcon, toolIcon } from './toolIcons.js';
-import { sceneBanner } from './scenes.js';
-import { NOTE_MARK } from '../shared/types.js';
+import { elementLabel, sceneBanner } from './scenes.js';
+import { missLine, okLine } from './captions.js';
+import { bossWeakness } from './bossmoves.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 // 連携の表示: 続いた人数を「N 連携！」で数え、撃った仲間どうしを光の糸でつなぐ
 export function comboHud(ctx, w, phase, views) {
@@ -92,22 +93,32 @@ export function progressBar(w, phase, strikeOf) {
     ctx.fillText(`${Math.round((got / total) * 100)}%`, s.arena.w - 5, y + hgt / 2);
     ctx.restore();
 }
-// あなたの動き（青い帯）: 赤い帯（ボスの動き）が消えたあと、回避・反撃に移る前に、答えた技の名前を出す
+// あなたの動き（青い帯）: 自分の冒険者がどう応じたかを一文で（captions.ts）。画面で見せた動きと同じことを言う。
+// 正しく動けたら、正解の動きの文（なければ身のこなしの種類の文）。外したら、何が起きたかだけ（正しい対処は言わない）。キャラの名前は出さない（頭上の目印で分かる）
 export function mineBand(ctx, w, phase, strikeOf, scene) {
     const s = this.script;
     const mine = [...this.mine].find((f) => !s.fighters[f].off);
     if (mine === undefined || !scene)
         return;
     const st = strikeOf.get(mine);
-    if (!st || phase < st.t)
+    const win = this.bandWindow(w);
+    if (!st || !win)
         return;
-    const [b0, b1] = MINE_BAND;
+    const [b0, b1] = win;
     if (phase < b0 || phase > b1)
         return;
-    const act = (st.excerpt.split(NOTE_MARK)[0].split(/[：:]/)[0] || st.excerpt).trim().slice(0, 14);
-    const name = s.fighters[mine].name;
+    const cap = s.theme?.captions;
+    const mpOut = this.wave(w).events.some((e) => e.type === 'mpOut' && e.f === mine);
+    let line;
+    if (st.success && !mpOut) {
+        const cm = s.cases[s.waves[w].caseIndex];
+        const el = scene === 'opening' ? (cm?.element ?? bossWeakness(s.theme?.kind)) : undefined;
+        line = okLine(cap, scene, this.respScene(w), this.evadeOf(w, mine), el ? elementLabel(el) : undefined);
+    }
+    else
+        line = missLine(cap, scene, mpOut ? 'mpOut' : st.charmed ? 'charmed' : 'miss');
     // sceneBanner は 0〜0.25 の進行度で出入りする
-    sceneBanner(ctx, scene, tl('{0}（{1}）', name, this.mineLabel), ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, st.charmed ? '……' : tl('{0}！', act), '#6ab8ff');
+    sceneBanner(ctx, scene, '', ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, line, st.success && !mpOut ? '#6ab8ff' : '#ff8a8a');
 }
 // --- 画面上部: ボスの体力 ---
 export function bossBar(time) {
@@ -143,22 +154,26 @@ export function labelAt(text, x, y, color, size = 8) {
     ctx.fillText(text, Math.round(x), Math.round(y));
     ctx.restore();
 }
+// 自分の冒険者の目印: 頭のずっと上で、金の矢じり（▼）がゆっくり上下する（ゲームでおなじみの「操作キャラ」の印）。
+// 以前は足元に「あなた」の札を出していたが、下の列のキャラに重なって見づらかった。文字は場面の札（「◯◯（あなた）」）に任せる。
+// (wx, wy) は頭のてっぺんの位置。頭上に出る吹き出し・道具・数字より上に置く
 export function youMarker(wx, wy) {
-    const p = this.proj(wx, wy);
+    const bob = Math.round(Math.sin(this.frame / 9) * 1.5);
+    const p = this.proj(wx, wy - 8);
     this.uiTop.push(() => {
         const ctx = this.ctx;
+        const x = Math.round(p.x), y = Math.round(p.y) + bob;
         ctx.save();
-        ctx.font = `8px ${PIXEL_FONT}`;
-        ctx.textAlign = 'center';
-        // 足元の下に、上向きの矢印つきの札
-        const tw = Math.max(26, Math.ceil(ctx.measureText(this.mineLabel).width) + 8);
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(Math.round(p.x - 1), Math.round(p.y - 3), 3, 1);
-        ctx.fillRect(Math.round(p.x - 2), Math.round(p.y - 2), 5, 2);
-        ctx.fillRect(Math.round(p.x - tw / 2), Math.round(p.y), tw, 10);
-        ctx.fillStyle = '#12152a';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(this.mineLabel, Math.round(p.x), Math.round(p.y + 5.5));
+        // 縁どり（暗い色で1ドット大きく）→ 金 → 上半分にハイライト
+        const tri = (w, top, col) => {
+            ctx.fillStyle = col;
+            for (let r = 0; r < w; r++)
+                ctx.fillRect(x - (w - 1 - r), top + r, (w - 1 - r) * 2 + 1, 1);
+        };
+        tri(6, y - 1, '#1a1c2c');
+        tri(5, y, '#ffd166');
+        ctx.fillStyle = '#fff3c4';
+        ctx.fillRect(x - 3, y, 4, 1);
         ctx.restore();
     });
 }

@@ -1,9 +1,9 @@
-// ホーム（参加中の人のダッシュボード）と紹介ページ（初めての人・告知用）
+// ホーム: 参加中の人にはダッシュボード、まだの人とデモ版には紹介ページ（about.ts）と同じ中身
 import { accountBar } from '../account.js';
 import { briefingOf } from '../briefing.js';
-import { BRAND } from '../brand.js';
 import { demoMode, getBattle, getMe, getSeason, mySubmissions, scriptFor } from '../api.js';
 import { miniBattle } from '../minibattle.js';
+import { renderAbout } from './about.js';
 import { h, nodes } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 function daysLeft(end) {
@@ -13,36 +13,6 @@ function daysLeft(end) {
     return Number.isFinite(d) ? Math.max(0, d) : null;
 }
 const stat = (label, value, note = '') => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, String(value)), note ? h('div', { class: 'stat-note small muted' }, note) : null);
-// --- 紹介（ランディング）。「どんなゲームか」「参加すると何がいいか」を楽しく伝える。
-//     細かいルールは募集要項に任せる。採点のしくみなどの裏側の話はしない ---
-async function landing(season, cta) {
-    const mini = await miniBattle();
-    const steps = [
-        ['🧙', tl('育てる'), tl('冒険者に、日本語で心得を教えて、道具や巻物を持たせます。かばんの大きさには限りがあるので、何を持たせるかが腕の見せどころ。')],
-        ['⚔', tl('送り出す'), tl('ボタンひとつで出発。冒険者は本物のAIなので、戦場ではあなたの手を離れて、自分で考えて動きます。')],
-        ['🏆', tl('見届ける'), tl('みんなの冒険者がそろって、ボスとの決戦。順位を競い、ギルドマスターの講評をヒントに鍛え直して、また挑みます。')],
-    ];
-    const perks = [
-        ['🎮', tl('遊んでいるうちに、AIの使い方がうまくなる'), tl('うまく動かないのは、AIのせいか、教え方のせいか。冒険者を鍛えているうちに、AIへの頼み方が自然と身につきます。')],
-        ['⌨', tl('プログラミングはいりません'), tl('画面で選んで、日本語で書くだけ。最初の冒険者なら10分ほどで送り出せます。')],
-        ['👥', tl('みんなと腕を競える'), tl('ランキングと称号で、ほかの育て役と勝負。')],
-        ['🐉', tl('シーズンごとに、新しいボス'), tl('竜、大蜘蛛、ゴブリンの大群、海の魔物……。ボスが変われば、役に立つ知識も道具もがらりと変わります。')],
-    ];
-    const terms = [
-        [tl('心得'), tl('システムプロンプト'), tl('AIへの指示書')],
-        [tl('道具'), tl('ツール'), tl('AIが外の情報を取りに行く手段')],
-        [tl('冒険日誌'), tl('メモリ'), tl('前のことを思い出すための記録')],
-        [tl('巻物'), tl('スキル'), tl('必要なときだけ開く知識の本')],
-        [tl('結界'), tl('ガードレール'), tl('あやしい指示を、AIに届く前に止めるしくみ')],
-    ];
-    return [
-        h('section', { class: 'hero' }, h('div', { class: 'hero-text' }, h('p', { class: 'eyebrow' }, tl(`冒険者募集中！　{0} 開催中`, season.task.season)), h('h1', {}, BRAND.name), h('p', { class: 'hero-tag' }, BRAND.tagline), h('p', { class: 'lead' }, tl('あなたが言葉で育てたAIが、自分で考えてボスに挑む。みんなの冒険者が集まって、シーズンごとに強大なボスを討伐するゲームです。')), cta), h('div', { class: 'hero-art' }, mini)),
-        h('section', { class: 'about-block' }, h('h2', {}, tl('どんなゲーム？')), h('div', { class: 'pitch' }, ...steps.map(([icon, title, body], k) => h('div', { class: 'pitch-card' }, h('div', { class: 'pitch-icon' }, icon), h('h3', {}, `${k + 1}. ${title}`), h('p', {}, body))))),
-        h('section', { class: 'about-block' }, h('h2', {}, tl('参加すると、いいこと')), h('ul', { class: 'perk-list' }, ...perks.map(([icon, title, body]) => h('li', {}, h('span', { class: 'perk-icon' }, icon), h('div', {}, h('b', {}, title), h('p', { class: 'small' }, body)))))),
-        h('section', { class: 'about-block' }, h('h2', {}, tl('遊びながら覚える、AIエージェントのしくみ')), h('p', {}, tl('冒険者に持たせるものは、どれも本物のAIエージェントのしくみです。')), h('ul', { class: 'learn-list' }, ...terms.map(([n, ai, d]) => h('li', {}, h('b', {}, n), h('span', { class: 'ai-term' }, ai), h('span', {}, d)))), h('p', { class: 'small muted' }, tl('むずかしい言葉は覚えなくて大丈夫。遊んでいるうちに、気づけば使いこなしています。'))),
-        h('section', { class: 'about-block' }, h('h2', {}, tl('よくある質問')), h('dl', { class: 'faq' }, h('dt', {}, tl('AIやプログラミングの知識は要りますか？')), h('dd', {}, tl('要りません。むしろ、AIをあまり使ったことがない人にこそ遊んでほしいゲームです。')), h('dt', {}, tl('どのくらい時間がかかりますか？')), h('dd', {}, tl('最初の冒険者は10分ほどで送り出せます。あとは、すきま時間に鍛え直して、何度でも挑戦できます。')), h('dt', {}, tl('ほかの人の育て方は見られますか？')), h('dd', {}, tl('見られるのは、見た目と順位だけです。育て方（心得や持ち物）は、シーズンが終わっても公開しません。')))),
-    ].filter(Boolean);
-}
 // --- 参加中の人のダッシュボード ---
 async function dashboard(season, me, rerender) {
     const data = await getBattle().catch(() => null);
@@ -70,16 +40,20 @@ export async function renderHome(root) {
     const season = await getSeason();
     let me = await getMe().catch(() => null);
     const redo = () => { renderHome(root); };
+    // デモ版のホームは、紹介ページと同じ中身（いちばん伝わる見せ方なので、ホームでも同じものを見せる）。
+    // 準備はさわれるが送り出しはできないので、ボタンは「準備してみる（デモ）」、上に断り書きの帯を出す
     if (demoMode) {
-        const cta = h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: '#/task' }, tl('募集要項を見る')), h('a', { class: 'btn', href: '#/arena' }, tl('討伐の様子を見る')));
-        root.replaceChildren(...nodes(...(await landing(season, cta)), h('p', { class: 'notice' }, tl('これは静的デモ版です。準備と討伐の再生は試せますが、送り出し（提出）はできません。'))));
+        await renderAbout(root, {
+            playUrl: '#/make', playLabel: tl('準備してみる（デモ）'),
+            banner: h('p', { class: 'demo-band' }, h('b', {}, tl('デモ版')), tl('討伐の再生・準備の画面・図鑑をさわれます。送り出し（提出）と採点はできません。')),
+        });
         return;
     }
     if (me && me.entered) {
         root.replaceChildren(...nodes(...(await dashboard(season, me, redo))));
         return;
     }
-    const cta = h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: '#/task' }, tl('募集要項を見る')), me ? null : h('span', { class: 'small muted' }, tl('参加（登録）は募集要項のページから')));
-    root.replaceChildren(...nodes(...(await landing(season, cta))));
+    // まだ参加していない人にも、紹介ページと同じ中身を見せる。参加（登録）は募集要項のページから
+    await renderAbout(root, { playUrl: '#/task', playLabel: tl('募集要項を見る') });
 }
 //# sourceMappingURL=home.js.map
