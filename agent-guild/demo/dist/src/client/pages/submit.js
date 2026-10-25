@@ -198,6 +198,11 @@ export async function renderSubmit(root) {
         const ready = !demoMode && !!me && me.entered;
         submitBtn.disabled = demoMode || (ready && me.remainingToday <= 0);
         trialBtn.disabled = demoMode || (ready && me.trialsLeft <= 0);
+        // 直すところがあるあいだは、ボタンを「直してから」の見た目にする（押しても送られず、直すところの一覧が出る）
+        for (const btn of [submitBtn, trialBtn]) {
+            btn.classList.toggle('needs-fix', !valid);
+            btn.title = !valid ? tl('直すところがあります（押すと一覧が出ます。直すまで送れません）') : '';
+        }
         const est = estimateSubmitCost(b, season.task.caseCount);
         const yen = (u) => Math.max(1, Math.round(u * 150));
         runCostEl.textContent = tl(`1回の送り出しの費用の目安: 約{0}〜{1}円（道具を必要なときだけ使うか、毎回使うかで変わります）`, yen(est.low), yen(est.high));
@@ -242,7 +247,21 @@ export async function renderSubmit(root) {
     const R = COST_RULES;
     const brief = briefingOf(season);
     // 道具と巻物の並びは、開くたびにばらばらにする（並び順で正解が分からないように）
-    const shuffled = (xs) => xs.map((x) => ({ x, k: Math.random() })).sort((p, q) => p.k - q.k).map((p) => p.x);
+    // 並びは見るたびに混ぜるが、同じタブの中では同じ並びにする（画面を開き直しても、道具の位置が変わらないように）
+    let seed = 0;
+    try {
+        seed = Number(sessionStorage.getItem('ag-order-seed')) || 0;
+        if (!seed) {
+            seed = Math.floor(Math.random() * 1e9) + 1;
+            sessionStorage.setItem('ag-order-seed', String(seed));
+        }
+    }
+    catch {
+        seed = Math.floor(Math.random() * 1e9) + 1;
+    }
+    const keyOf = (id) => { let x = seed; for (const ch of id)
+        x = (Math.imul(x ^ ch.charCodeAt(0), 2654435761) >>> 0); return x; };
+    const shuffled = (xs) => xs.map((x) => ({ x, k: keyOf(x.id) })).sort((p, q) => p.k - q.k).map((p) => p.x);
     const toolOrder = shuffled(catalog);
     const scrollOrder = shuffled(season.task.scrolls ?? []);
     const renderForm = () => {
@@ -296,8 +315,10 @@ export async function renderSubmit(root) {
                 return null;
             const left = (cap) => (n >= cap ? tl('足りない') : tl('残り 約{0}', (Math.round((cap - n) / 100) * 100).toLocaleString()));
             const c = b.companion, petFull = !!c && c.tools.length >= R.companionMaxTools;
-            return h('div', { class: 'ap-compare' }, apRow(tl('冒険者が読むと'), '', AP_MAIN, left(AP_MAIN), 'main', n), petOk ? apRow(tl('お供が読むと'), '', AP_PET, left(AP_PET), 'pet', n) : null, petOk ? h('p', { class: 'ap-hint small' }, tl('お供が読めば、冒険者の行動力は減らない。'), on && c ? h('button', { type: 'button', class: 'btn btn-small', disabled: petFull, title: petFull ? tl('お供の道具がいっぱいです') : '', onclick: () => giveToPet(t.id) }, tl('お供に持たせかえる'))
-                : on ? h('a', { href: '#companion-card', onclick: (e) => { e.preventDefault(); document.getElementById('companion-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, tl('6. お供 を見る')) : null) : null);
+            return h('div', { class: 'ap-compare' }, apRow(tl('冒険者が読むと'), '', AP_MAIN, left(AP_MAIN), 'main', n), petOk ? apRow(tl('お供が読むと'), '', AP_PET, left(AP_PET), 'pet', n) : null, petOk ? h('p', { class: 'ap-hint small' }, tl('お供が読めば、冒険者の行動力は減らない。'), 
+            // チェックしていないときも同じ大きさの場所を空けておく（チェックでカードの高さが変わると、ほかのカードがずれて押し間違える）
+            c ? h('button', { type: 'button', class: 'btn btn-small' + (on ? '' : ' reserve'), disabled: petFull || !on, 'aria-hidden': on ? 'false' : 'true', tabindex: on ? '0' : '-1', title: petFull ? tl('お供の道具がいっぱいです') : '', onclick: () => giveToPet(t.id) }, tl('お供に持たせかえる'))
+                : h('a', { class: on ? '' : 'reserve', 'aria-hidden': on ? 'false' : 'true', tabindex: on ? '0' : '-1', href: '#companion-card', onclick: (e) => { e.preventDefault(); document.getElementById('companion-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, tl('6. お供 を見る'))) : null);
         };
         const toolCards = toolOrder.map((t) => {
             const on = b.tools.includes(t.id);
@@ -434,7 +455,7 @@ export async function renderSubmit(root) {
             ?? tl('冒険者が頼むと動く、もうひとりの AI。お供だけの心得と道具で調べて、要点だけを返します。お供は自分の行動力で読むので、冒険者の行動力は減りません。ただし、頼むたびにお供の分のトークン（採点の費用）がかかります。');
         const head = h('h3', {}, tl('6. お供'), h('span', { class: 'ai-term' }, tl('サブエージェント')), h('span', { class: 'slot-count' }, tl(`重さ {0}＋心得＋道具・任意`, R.companionCost)));
         const tip = h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('お供に頼むかどうかは、冒険者が心得を読んで決めるんだぞ。「どんな場面で頼むか」と「頼むときは、名前や様子をそのまま伝える」を、心得に書いておけ。お供に届くのは、冒険者が伝えたことだけだからな。')));
-        const rules = h('p', { class: 'small muted' }, tl('上限: 1つの場面で頼めるのは{0}回まで、1回の送り出しで{1}回まで。お供の行動力は1回の依頼ぶんで、冒険者より少し多いくらい。尽きると、答えをまとめられません。', R.companionCallsPerCase, R.companionCallsPerRun, R.companionTokenCap.toLocaleString()));
+        const rules = h('div', {}, h('p', { class: 'small muted' }, tl('上限: 1つの場面で頼めるのは{0}回まで、1回の送り出しで{1}回まで。お供の行動力は1回の依頼ぶんで、冒険者より少し多いくらい。尽きると、答えをまとめられません。', R.companionCallsPerCase, R.companionCallsPerRun, R.companionTokenCap.toLocaleString())), h('p', { class: 'small muted' }, tl('お供の答えは冒険者が読むので、答えが長いほど冒険者の行動力を使います。候補を並べずに、答えだけを短く返すよう、お供の心得に書いておきましょう。')));
         if (!c)
             return h('section', { class: 'card companion-card', id: 'companion-card' }, head, h('p', { class: 'small muted' }, desc), h('label', { class: 'chk' }, onBox, tl('お供を連れていく（サブエージェント）')), tip, rules);
         const pa = area(c.prompt, (v) => { c.prompt = v; }, { rows: 6, kind: 'main', maxChars: R.companionMaxChars || undefined, placeholder: tl('お供が頼まれたときに思い出す教え。何をどう調べ、どう答えるか') });
@@ -576,7 +597,7 @@ export async function renderSubmit(root) {
         const stateOf = (s) => s.status === 'queued' ? tl('順番待ち') : s.status === 'grading' ? tl(`戦闘中 {0}%`, Math.round(s.progress * 100)) : s.status === 'done' ? tl(`戦果 {0}%`, s.accuracy) : tl(`エラー: {0}`, s.error ?? '');
         const spark = sparkline(items), deltas = accuracyDeltas(items);
         const toolName = (id) => toolById[id]?.name ?? id;
-        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが送り出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('提出ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ送り出していません。'))));
+        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが送り出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('提出ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), s.status === 'done' && s.newCases ? h('div', { class: 'small warn-note' }, tl('この送り出しのあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度送り出すと、増えた場面も採点されます）。', s.newCases)) : null, diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ送り出していません。'))));
         const busy = items.some((s) => s.status === 'queued' || s.status === 'grading');
         clearInterval(poll);
         if (busy)
@@ -623,9 +644,9 @@ export async function renderSubmit(root) {
         submitBtn.hidden = true;
         refresh(); // 表示を持ち物のデータにそろえてから、確認に出す
         showDock(tl('送り出しの確認'), confirmEl);
-        // 送る前に、実際に送る持ち物（巻物・道具・結界）を確かめられるようにする
+        // 送る前に、実際に送る持ち物（巻物・道具・結界・お供）を確かめられるようにする
         const none = h('span', { class: 'muted' }, tl('なし'));
-        const kit = h('dl', { class: 'confirm-kit small' }, h('dt', {}, tl('巻物')), h('dd', {}, b.skills.length ? b.skills.map((x) => x.name || tl('（名前なし）')).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('道具')), h('dd', {}, b.tools.length ? b.tools.map((id) => toolById[id]?.name ?? id).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('結界')), h('dd', {}, b.guardrail?.words.length ? b.guardrail.words.join(tl('・')) : none.cloneNode(true)));
+        const kit = h('dl', { class: 'confirm-kit small' }, h('dt', {}, tl('巻物')), h('dd', {}, b.skills.length ? b.skills.map((x) => x.name || tl('（名前なし）')).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('道具')), h('dd', {}, b.tools.length ? b.tools.map((id) => toolById[id]?.name ?? id).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('結界')), h('dd', {}, b.guardrail?.words.length ? b.guardrail.words.join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('お供')), h('dd', {}, b.companion ? (b.companion.tools.length ? tl('連れていく（道具: {0}）', b.companion.tools.map((id) => toolById[id]?.name ?? id).join(tl('・'))) : tl('連れていく（道具なし）')) : none.cloneNode(true)));
         confirmEl.replaceChildren(h('p', {}, tl(`「{0}」を送り出します。今日の残り {1} 回のうち1回を使います。`, b.name, me.remainingToday)), h('p', { class: 'small' }, tl('送る持ち物:')), kit, h('p', { class: 'small muted' }, tl(`AI利用料の目安は約{0}〜{1}円（運営負担）。送り出す前に試走で確かめておくと安心です。`, yen(est.low), yen(est.high))), h('p', { class: 'small muted sway-note' }, SWAY_NOTE()), h('div', { class: 'row-gap' }, go, cancel));
     };
     // 試走: 公開サンプルだけを動かす。提出回数は使わない。

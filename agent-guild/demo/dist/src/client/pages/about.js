@@ -2,7 +2,7 @@
 // 絵はすべて本物の描画コード（ボス・ちびキャラ・討伐の再生）で、その場で動かす。
 // 同じ中身を 1ファイルの HTML にも書き出す（scripts/build-lp.mjs → lp.ts）。
 import { ArenaRenderer } from '../arena.js';
-import { getDemoBattle, scriptFor } from '../api.js';
+import { getDemoBattle, getSeason, scriptFor } from '../api.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from '../boss.js';
 import { BRAND } from '../brand.js';
 import { burst, BODY_STYLE, fxColors } from '../fx.js';
@@ -91,6 +91,12 @@ const BOSSES = [
     { kind: 'vampire', season: tl('シーズン6'), name: tl('ヴェスペリオ伯爵'), line: tl('霧ノ谷の古城の主。蝙蝠の群れ、見えない呪いの紋、魅了の声。'), sky: ['#1a0a1e', '#3a0f2a', '#5a1530', '#10060f'], ground: ['#3a2a3a', '#2e2030'] },
     { kind: 'giant', season: tl('シーズン7'), name: tl('氷巨人グラシエル'), line: tl('雪原に立つ巨人。凍てつく息、氷柱の槍、吹雪にまぎれる死者の声。'), sky: ['#13233f', '#24406a', '#4a74a0', '#0c1830'], ground: ['#c8d8ea', '#a8bcd4'] },
 ];
+// いま開催中のシーズンのボス（getSeason の募集要項。デモ版は見本の討伐の課題）。図鑑の絵と色はボスの種類から、名前とシーズンは課題から
+async function currentBoss(fallback) {
+    const b = (await getSeason().catch(() => null))?.task.briefing?.boss ?? fallback;
+    const base = BOSSES.find((x) => x.kind === b?.kind) ?? BOSSES[0];
+    return b?.kind === base.kind ? { ...base, season: b?.season ?? base.season, name: b?.name ?? base.name } : base;
+}
 function bossPose(t, ph, angry = 0) {
     const roar = angry > 0 ? angry : Math.max(0, wave(t, 0.7, ph) - 0.85) * 6.6; // ときどき吠える
     return {
@@ -156,12 +162,12 @@ const PARTY = [
 // ヒーロー: ボスが入れ替わりながら、討伐隊がかわるがわる跳びかかる
 // ---------------------------------------------------------------------------
 const HW = 384, HH = 176, FOOT = 152;
-function heroStage(ticker) {
+function heroStage(ticker, cur) {
     const c = pixelCanvas(HW, HH, 'lp-hero-canvas', tl('ボスと冒険者たちが戦うドット絵のアニメ'));
     const ctx = ctx2d(c);
     const caption = h('p', { class: 'lp-hero-boss', 'aria-live': 'off' });
-    // 姿を見せるのはシーズン1のボスだけ（先のシーズンのボスは、ボス図鑑でも影だけにしている）
-    const HERO_BOSSES = BOSSES.slice(0, 1);
+    // 姿を見せるのは、いま開催中のシーズンのボスだけ（先のシーズンのボスは、ボス図鑑でも影だけにしている）
+    const HERO_BOSSES = [cur];
     const SWAP = HERO_BOSSES.length > 1 ? 6.5 : 1e9; // ボスが入れ替わる間隔（秒）
     const homes = [{ x: 232, y: FOOT - 8 }, { x: 262, y: FOOT + 4 }, { x: 300, y: FOOT - 6 }, { x: 334, y: FOOT + 6 }];
     const stars = Array.from({ length: 42 }, (_, i) => ({ x: (i * 97) % HW, y: (i * 53) % 84, p: i * 1.7 }));
@@ -740,8 +746,11 @@ export async function renderAbout(root, opts = {}) {
     const playLink = (cls = 'btn btn-primary lp-play') => playUrl
         ? h('a', { class: cls, href: playUrl }, opts.playLabel ?? tl('遊んでみる'))
         : h('p', { class: 'lp-noplay' }, tl('遊ぶためのURLは、このページを教えてくれた人に聞いてください。'));
+    // いま開催中のシーズンのボス（募集要項・準備の画面と同じもの）。読めなければ、見本の討伐のボス
+    const curBoss = await currentBoss(data.task?.briefing?.boss);
+    const bossOrder = [curBoss, ...BOSSES.filter((b) => b.kind !== curBoss.kind)]; // ボス図鑑は、いまのボスから
     // --- ヒーロー ---
-    const hero = h('section', { class: 'lp-hero' }, heroStage(ticker), h('div', { class: 'lp-hero-win win' }, h('h1', { class: 'lp-logo', 'aria-label': tl(`Agent Guild（{0}）`, BRAND.name) }, h('span', { class: 'lp-logo-en' }, 'AGENT GUILD'), h('span', { class: 'lp-logo-ja' }, BRAND.name)), h('p', { class: 'lp-catch' }, tl('言葉で育てたAIが、自分で考えてボスに挑む。')), h('p', { class: 'lp-lead' }, tl('あなたは冒険者の育て役。心得を教え、道具と巻物を持たせて送り出したら、あとは見守るだけ。シーズンごとに現れるボスに、みんなの冒険者がいっしょに挑みます。')), h('ul', { class: 'lp-cmd', 'aria-label': tl('このページの見どころ') }, h('li', {}, h('button', { type: 'button', onclick: jump('lp-demo') }, tl('討伐を見る'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-chars') }, tl('図鑑をひらく'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-mech') }, tl('しくみを知る'))), opts.demoUrl ? h('li', {}, h('a', { href: opts.demoUrl }, tl('デモで画面をさわる'))) : null), playLink()));
+    const hero = h('section', { class: 'lp-hero' }, heroStage(ticker, curBoss), h('div', { class: 'lp-hero-win win' }, h('h1', { class: 'lp-logo', 'aria-label': tl(`Agent Guild（{0}）`, BRAND.name) }, h('span', { class: 'lp-logo-en' }, 'AGENT GUILD'), h('span', { class: 'lp-logo-ja' }, BRAND.name)), h('p', { class: 'lp-catch' }, tl('言葉で育てたAIが、自分で考えてボスに挑む。')), h('p', { class: 'lp-lead' }, tl('あなたは冒険者の育て役。心得を教え、道具と巻物を持たせて送り出したら、あとは見守るだけ。シーズンごとに現れるボスに、みんなの冒険者がいっしょに挑みます。')), h('ul', { class: 'lp-cmd', 'aria-label': tl('このページの見どころ') }, h('li', {}, h('button', { type: 'button', onclick: jump('lp-demo') }, tl('討伐を見る'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-chars') }, tl('図鑑をひらく'))), h('li', {}, h('button', { type: 'button', onclick: jump('lp-mech') }, tl('しくみを知る'))), opts.demoUrl ? h('li', {}, h('a', { href: opts.demoUrl }, tl('デモで画面をさわる'))) : null), playLink()));
     // --- 概要: このアプリは何で、何のためにあるのか ---
     const about = h('section', { class: 'lp-sec', id: 'lp-what' }, h('h2', {}, tl('エージェントギルドって？')), h('div', { class: 'lp-what' }, h('div', { class: 'win lp-say' }, h('h3', {}, tl('AIに、仕事をまかせる時代')), h('p', {}, tl('AIは、質問に答えるだけのものから、指示を受けて自分で考え、道具を使いこなして仕事を片づけるものへと変わりつつあります。こうしたAIは「AIエージェント」と呼ばれます。'))), h('div', { class: 'win lp-say' }, h('h3', {}, tl('うまく動かすには、コツがいる')), h('p', {}, tl('同じAIでも、何をどのように伝えるか、どんな道具や知識を持たせるかで、働きぶりは大きく変わります。そのコツは、説明を読むより、実際に試して結果を見るほうがずっと早く身につきます。'))), h('div', { class: 'win lp-say' }, h('h3', {}, tl('試すなら、遊びの中で')), h('p', {}, tl('エージェントギルドは、AIエージェントを「冒険者」として育て、ボス討伐に送り出すゲームです。プログラミングはいりません。日本語で書いて、画面で選ぶだけ。みんなで同じボスに挑み、戦果を競いながら、AIをうまく働かせる感覚を遊んで身につけます。')))));
     // --- 遊び方 ---
@@ -916,8 +925,8 @@ export async function renderAbout(root, opts = {}) {
     });
     const chars = h('section', { class: 'lp-sec', id: 'lp-chars' }, h('h2', {}, tl('キャラ図鑑')), h('p', { class: 'lp-intro' }, tl('冒険者の見た目は自由に選べます。種族や職業、服の色、手に持つ武器。強さには関係ないので、好きな姿で。手に持つ武器によって、攻撃のしかたも、必殺技の動きも変わります。カードにふれると、その武器で攻撃してみせます。')), h('div', { class: 'lp-dex win' }, h('ul', { class: 'lp-chars' }, ...roster.map(([b, p, hr, w, pat, gear], i) => card(look(b, p, hr, w, pat), pat === 'black' ? tl('黒ねこ') : pat ? tl(`ねこ（{0}）`, CAT_PATTERN_LABELS[pat]) : BODY_LABELS[b], gear, i)))));
     // --- ボス図鑑 ---
-    const bosses = h('section', { class: 'lp-sec', id: 'lp-bosses' }, h('h2', {}, tl('シーズンのボス')), h('p', { class: 'lp-intro' }, tl('シーズンごとに、ちがうボスが現れます。ボスが変われば、役に立つ資料も道具もがらりと変わる。前のシーズンの心得は、そのままでは通じません。')), h('ul', { class: 'lp-bosses' }, ...BOSSES.slice(0, 3).map((b, i) => {
-        const hidden = i > 0; // シーズン2・3は影だけ（まだ姿を見せない）
+    const bosses = h('section', { class: 'lp-sec', id: 'lp-bosses' }, h('h2', {}, tl('シーズンのボス')), h('p', { class: 'lp-intro' }, tl('シーズンごとに、ちがうボスが現れます。ボスが変われば、役に立つ資料も道具もがらりと変わる。前のシーズンの心得は、そのままでは通じません。')), h('ul', { class: 'lp-bosses' }, ...bossOrder.slice(0, 3).map((b, i) => {
+        const hidden = i > 0; // いまのボスのほかは影だけ（まだ姿を見せない）
         const c = pixelCanvas(BW, BH, 'lp-boss-canvas', hidden ? tl(`{0}のボス（影）`, b.season) : b.name);
         const ctx = ctx2d(c);
         let anger = -10;
@@ -941,7 +950,7 @@ export async function renderAbout(root, opts = {}) {
         // 4枠目: この先も、いろいろなボスが待っている（残りのボスの影を、遠くにうっすら並べる）
         const c = pixelCanvas(BW, BH, 'lp-boss-canvas', tl('この先のボスたちの影'));
         const ctx = ctx2d(c);
-        const rest = BOSSES.slice(3);
+        const rest = bossOrder.slice(3);
         ticker.add(c, (t) => {
             ctx.clearRect(0, 0, BW, BH);
             rest.forEach((b, j) => {

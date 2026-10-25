@@ -1035,3 +1035,10 @@ main p, main li, main dd { word-break: auto-phrase; }
 .ap-mini.ap-lv4 { color: #ff8a8a; }
 @media (max-width: 560px) { .ap-scale .ap-row { grid-template-columns: 6.5em 1fr 5.5em; } }
 #companion-card { scroll-margin-top: 140px; }
+
+/* チェックしていない道具のカードでも、ボタンの場所だけ空けておく（チェックで高さが変わって、ほかのカードがずれないように） */
+.ap-hint .reserve { visibility: hidden; }
+
+/* 直すところがあるあいだの、試走・送り出しのボタン（押すと直すところの一覧が出る。送られはしない） */
+.btn.needs-fix { opacity: 0.6; filter: grayscale(0.6); }
+.btn.needs-fix::before { content: '⚠ '; }

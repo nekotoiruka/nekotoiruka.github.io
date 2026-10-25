@@ -1,5 +1,6 @@
 import { TOOL_BY_ID } from '../shared/catalog.js';
 import { MP_BUDGET_PER_CASE } from '../shared/stats.js';
+import { estimateTokens } from '../shared/build.js';
 import { h } from './ui.js';
 import { tl } from '../shared/i18n.js';
 const toolName = (id) => TOOL_BY_ID[id]?.name ?? id;
@@ -50,7 +51,9 @@ function step(s) {
         // 道具の結果は、全文が冒険者の 行動力 に積まれる。重い結果ほど目立たせて、MP 切れの原因がどこかを分かるようにする
         s.tokens && s.tokens >= HEAVY_SHOW ? h('span', { class: `tr-mp small ${s.tokens >= HEAVY_WARN ? 'tr-mp-heavy' : ''}` }, tl('　行動力 −約{0}', s.tokens.toLocaleString())) : null, h('pre', { class: 'tr-out' }, pretty(s.output) + (s.tokens && s.tokens >= HEAVY_WARN ? tl('\n……（この先も長く続く。全文を読んだぶん、冒険者の行動力が減った）') : ''))));
         case 'skill': return h('li', { class: 'tr tr-skill' }, h('span', { class: 'tr-k' }, tl('巻物')), h('div', { class: 'tr-body' }, h('b', {}, tl(`「{0}」を開いた`, s.name)), s.output ? h('pre', { class: 'tr-out' }, s.output + (s.output.length >= 300 ? '…' : '')) : null));
-        case 'companion': return h('li', { class: 'tr tr-companion' }, h('span', { class: 'tr-k' }, tl('お供')), h('div', { class: 'tr-body' }, h('div', {}, h('b', {}, tl('お供に頼んだ：')), s.request || tl('（中身なし）')), s.tools?.length ? h('div', { class: 'small muted' }, tl(`お供が使った道具: {0}`, s.tools.map(toolName).join(tl('・'))), s.tokens ? tl('（お供が使った行動力 {0}。冒険者の行動力は減らない）', s.tokens.toLocaleString()) : '') : null, h('div', {}, h('b', {}, tl('お供の答え：')), s.output)));
+        case 'companion': return h('li', { class: 'tr tr-companion' }, h('span', { class: 'tr-k' }, tl('お供')), h('div', { class: 'tr-body' }, h('div', {}, h('b', {}, tl('お供に頼んだ：')), s.request || tl('（中身なし）')), s.tools?.length ? h('div', { class: 'small muted' }, tl(`お供が使った道具: {0}`, s.tools.map(toolName).join(tl('・'))), s.tokens ? tl('（お供が使った行動力 {0}。冒険者の行動力は減らない）', s.tokens.toLocaleString()) : '') : null, h('div', {}, h('b', {}, tl('お供の答え：')), s.output), 
+        // お供の答えは冒険者が読むので、その分は冒険者の行動力から減る（長い答えほど重い）
+        s.output ? h('div', { class: `small ${estimateTokens(s.output) >= 300 ? 'tr-mp-heavy' : 'muted'}` }, tl('この答えを冒険者が読んだ分、冒険者の行動力 −約{0}', estimateTokens(s.output).toLocaleString()), estimateTokens(s.output) >= 300 ? tl('（長い答えは冒険者の行動力を圧迫する。答えだけを短く返すよう、お供の心得に書こう）') : null) : null));
         case 'answer': return h('li', { class: `tr tr-answer ${s.ok ? 'tr-ok' : 'tr-ng'}` }, h('span', { class: 'tr-k' }, tl('答え')), h('div', { class: 'tr-body' }, h('b', {}, s.ok ? '○ ' : '× '), s.text));
     }
 }
