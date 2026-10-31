@@ -2,11 +2,12 @@
 import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAMILIAR_KINDS, FAMILIAR_LABELS, POSITIONS, POSITION_LABELS, POSITION_NOTES, DEFAULT_CHARM_COLORS, DEFAULT_FAMILIAR_COLORS, LEGACY_MAIN_PROMPTS, MAIN_PROMPT_TEMPLATE, COMPANION_PROMPT_TEMPLATE, MAIN_COMPANION_SNIPPET, backWeapons, buildToYaml, computeCost, estimateSubmitCost, estimateTokens, mainWeight, parseBuild, skillWeight, skillLook, toLoadout, CAT_PATTERNS, CAT_PATTERN_LABELS } from '../../shared/build.js';
 import { apLevel, COST_RULES, toolAp, WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { MP_BUDGET_PER_CASE } from '../../shared/stats.js';
-import { accountBar, entryCard, loginForm, SWAY_NOTE } from '../account.js';
-import { sceneMp, traceView } from '../trace.js';
+import { accountBar, entryCard, loginForm, MOCK_NOTE, SWAY_NOTE } from '../account.js';
+import { coach, coachTaskOf, COACH_PARTS } from '../../shared/coach.js';
 import { accuracyDeltas, diffParts, sparkline } from '../history.js';
-import { demoMode, getMe, getSeason, mySubmissions, runTrial, submitBuild } from '../api.js';
+import { coachReview, demoMode, getMe, getSeason, mySubmissions, submitBuild } from '../api.js';
 import { charmSprite, drawHero, familiarSprite, gearOf, lookOf, portrait, PORTRAIT_H, PORTRAIT_W, weaponSprite } from '../hero.js';
+import { senpaiName, senpaiPortrait } from '../guildmaster.js';
 import { BODY_STYLE, STYLE_LABEL } from '../fx.js';
 import { h, nodes, toast } from '../ui.js';
 import { parseYaml, toYaml } from '../../shared/yaml.js';
@@ -110,11 +111,11 @@ export async function renderSubmit(root) {
     const kindSum = h('ul', { class: 'kind-sum' });
     const meterTip = h('div', { class: 'meter-tip', role: 'tooltip', id: 'meter-tip' });
     const errorsEl = h('ul', { class: 'errors', 'aria-live': 'polite' });
-    const submitBtn = h('button', { class: 'btn btn-primary' }, tl('この冒険者を送り出す'));
+    const submitBtn = h('button', { class: 'btn btn-primary' }, tl('この冒険者で冒険に出発する'));
     const accountEl = h('div', { class: 'account' });
     const subsEl = h('div', { class: 'subs' });
     const runCostEl = h('p', { class: 'small muted run-cost' });
-    const trialBtn = h('button', { class: 'btn btn-trial' }, tl('試走する（例の場面で試す）'));
+    const trialBtn = h('button', { class: 'btn btn-trial' }, tl('先輩冒険者に会う'));
     const trialEl = h('div', { class: 'trial-result', 'aria-live': 'polite' });
     const confirmEl = h('div', { class: 'confirm-box' });
     // 画面上部に固定する「出発の準備」バー。内訳・試走の結果・送り出しの確認は、バーの下に開くパネルに出す
@@ -191,21 +192,20 @@ export async function renderSubmit(root) {
         nameLabel.textContent = b.name || tl('（名前未設定）');
         dockName.textContent = b.name || tl('（名前未設定）');
         dockErr.textContent = issues.length ? `⚠ ${issues[0]}${issues.length > 1 ? tl(` ほか{0}件`, issues.length - 1) : ''}` : '';
-        dockMe.textContent = demoMode ? tl('デモ版（送り出しはできません）') : !me ? tl('未ログイン') : !me.entered ? tl('エントリー前') : tl(`{0} さん・今日の残り: 送り出し{1}回・試走{2}回`, me.name, me.remainingToday, me.trialsLeft);
+        dockMe.textContent = demoMode ? tl('デモ版（冒険への出発はできません）') : !me ? tl('未ログイン') : !me.entered ? tl('エントリー前') : tl(`{0} さん・今日の残り: 出発{1}回`, me.name, me.remainingToday);
         const lo = toLoadout(b, catalog);
         legend.replaceChildren(h('li', {}, h('b', {}, tl('手の武器')), tl(` {0}（{1}）`, WEAPON_LABELS[lo.weapon], b.avatar.weapon === 'auto' ? (b.tools.length ? tl('最も高いツール') : tl('ツールなし')) : tl('指定'))), h('li', {}, h('b', {}, tl('背中')), ` ${backWeapons(lo).map((w) => WEAPON_LABELS[w]).join(tl('・')) || tl('なし')}`), h('li', {}, h('b', {}, tl('技の系統')), tl(` {0}（体型で決まる）`, STYLE_LABEL[BODY_STYLE[b.avatar.body]])));
         // 直すところがあっても押せる（押すと、直すところを一覧で出す）
         const ready = !demoMode && !!me && me.entered;
         submitBtn.disabled = demoMode || (ready && me.remainingToday <= 0);
-        trialBtn.disabled = demoMode || (ready && me.trialsLeft <= 0);
         // 直すところがあるあいだは、ボタンを「直してから」の見た目にする（押しても送られず、直すところの一覧が出る）
-        for (const btn of [submitBtn, trialBtn]) {
+        for (const btn of [submitBtn]) {
             btn.classList.toggle('needs-fix', !valid);
             btn.title = !valid ? tl('直すところがあります（押すと一覧が出ます。直すまで送れません）') : '';
         }
         const est = estimateSubmitCost(b, season.task.caseCount);
         const yen = (u) => Math.max(1, Math.round(u * 150));
-        runCostEl.textContent = tl(`1回の送り出しの費用の目安: 約{0}〜{1}円（道具を必要なときだけ使うか、毎回使うかで変わります）`, yen(est.low), yen(est.high));
+        runCostEl.textContent = tl(`1回の出発の費用の目安: 約{0}〜{1}円（道具を必要なときだけ使うか、毎回使うかで変わります）`, yen(est.low), yen(est.high));
     };
     // トークン数と、それが重さにどう効くか（心得: トークン数で決まる / 巻物: 1つの重さ＋超えた分の加算）
     const tokenNote = (text, kind) => {
@@ -374,7 +374,7 @@ export async function renderSubmit(root) {
         const skCards = b.skills.map((s, i) => {
             const c = area(s.content, (v) => { s.content = v; fresh.delete(s); }, { rows: 4, kind: 'skill', placeholder: tl('ルール集・手順・判断基準など。必要なときだけ読まれます') });
             // 中身が空のあいだの案内は、入力欄の下に控えめに出す（警告にはしない）
-            const hint = h('span', { class: 'empty-hint' }, tl('中身を書くと持たせられます（空のままでは、試走・送り出しはできません）'));
+            const hint = h('span', { class: 'empty-hint' }, tl('中身を書くと持たせられます（空のままでは、冒険に出発できません）'));
             hint.hidden = !!s.content.trim();
             emptyHints.push(hint);
             const look = lookPicker(CHARM_KINDS, CHARM_LABELS, skillLook(lo, i), (k, col) => charmSprite(k, col), (k, col) => { s.look = { kind: k, color: col }; }, 4);
@@ -455,7 +455,7 @@ export async function renderSubmit(root) {
             ?? tl('冒険者が頼むと動く、もうひとりの AI。お供だけの心得と道具で調べて、要点だけを返します。お供は自分の行動力で読むので、冒険者の行動力は減りません。ただし、頼むたびにお供の分のトークン（採点の費用）がかかります。');
         const head = h('h3', {}, tl('6. お供'), h('span', { class: 'ai-term' }, tl('サブエージェント')), h('span', { class: 'slot-count' }, tl(`重さ {0}＋心得＋道具・任意`, R.companionCost)));
         const tip = h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('お供に頼むかどうかは、冒険者が心得を読んで決めるんだぞ。「どんな場面で頼むか」と「頼むときは、名前や様子をそのまま伝える」を、心得に書いておけ。お供に届くのは、冒険者が伝えたことだけだからな。')));
-        const rules = h('div', {}, h('p', { class: 'small muted' }, tl('上限: 1つの場面で頼めるのは{0}回まで、1回の送り出しで{1}回まで。お供の行動力は1回の依頼ぶんで、冒険者より少し多いくらい。尽きると、答えをまとめられません。', R.companionCallsPerCase, R.companionCallsPerRun, R.companionTokenCap.toLocaleString())), h('p', { class: 'small muted' }, tl('お供の答えは冒険者が読むので、答えが長いほど冒険者の行動力を使います。候補を並べずに、答えだけを短く返すよう、お供の心得に書いておきましょう。')));
+        const rules = h('div', {}, h('p', { class: 'small muted' }, tl('上限: 1つの場面で頼めるのは{0}回まで、1回の冒険で{1}回まで。お供の行動力は1回の依頼ぶんで、冒険者より少し多いくらい。尽きると、答えをまとめられません。', R.companionCallsPerCase, R.companionCallsPerRun, R.companionTokenCap.toLocaleString())), h('p', { class: 'small muted' }, tl('お供の答えは冒険者が読むので、答えが長いほど冒険者の行動力を使います。候補を並べずに、答えだけを短く返すよう、お供の心得に書いておきましょう。')));
         if (!c)
             return h('section', { class: 'card companion-card', id: 'companion-card' }, head, h('p', { class: 'small muted' }, desc), h('label', { class: 'chk' }, onBox, tl('お供を連れていく（サブエージェント）')), tip, rules);
         const pa = area(c.prompt, (v) => { c.prompt = v; }, { rows: 6, kind: 'main', maxChars: R.companionMaxChars || undefined, placeholder: tl('お供が頼まれたときに思い出す教え。何をどう調べ、どう答えるか') });
@@ -573,10 +573,10 @@ export async function renderSubmit(root) {
             refreshSubs();
         };
         if (demoMode) {
-            accountEl.replaceChildren(h('p', { class: 'notice' }, tl('これは静的デモ版です。準備とプレビューは試せますが、送り出し（提出）はできません。')));
+            accountEl.replaceChildren(h('p', { class: 'notice' }, tl('これは静的デモ版です。準備とプレビューは試せますが、冒険への出発はできません。')));
         }
         else if (!me) {
-            accountEl.replaceChildren(h('p', { class: 'small muted' }, tl('準備は、ログインしなくても試せます。試走と送り出しにはログインとエントリーが必要です。')), loginForm(season, after));
+            accountEl.replaceChildren(h('p', { class: 'small muted' }, tl('準備と先輩冒険者の助言は、ログインしなくても試せます。冒険に出発するには、ログインとエントリーが必要です。')), loginForm(season, after));
         }
         else if (!me.entered) {
             accountEl.replaceChildren(entryCard(season, me, after));
@@ -597,7 +597,7 @@ export async function renderSubmit(root) {
         const stateOf = (s) => s.status === 'queued' ? tl('順番待ち') : s.status === 'grading' ? tl(`戦闘中 {0}%`, Math.round(s.progress * 100)) : s.status === 'done' ? tl(`戦果 {0}%`, s.accuracy) : tl(`エラー: {0}`, s.error ?? '');
         const spark = sparkline(items), deltas = accuracyDeltas(items);
         const toolName = (id) => toolById[id]?.name ?? id;
-        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが送り出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('提出ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), s.status === 'done' && s.newCases ? h('div', { class: 'small warn-note' }, tl('この送り出しのあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度送り出すと、増えた場面も採点されます）。', s.newCases)) : null, diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ送り出していません。'))));
+        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが冒険に出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('出発ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), s.status === 'done' && s.newCases ? h('div', { class: 'small warn-note' }, tl('この出発のあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度出発すると、増えた場面も採点されます）。', s.newCases)) : null, diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ冒険に出ていません。'))));
         const busy = items.some((s) => s.status === 'queued' || s.status === 'grading');
         clearInterval(poll);
         if (busy)
@@ -609,19 +609,19 @@ export async function renderSubmit(root) {
             return false;
         attempted = true;
         refresh();
-        showDock(tl('試走・送り出しの前に、直すところがあります'), errorsEl);
+        showDock(tl('出発の前に、直すところがあります'), errorsEl);
         return true;
     };
     submitBtn.onclick = () => {
         if (!me || !me.entered) {
-            showDock(tl('送り出すには'), accountEl);
+            showDock(tl('冒険に出発するには'), accountEl);
             return;
         }
         if (blockedByIssues())
             return;
         const est = estimateSubmitCost(b, season.task.caseCount);
         const yen = (u) => Math.max(1, Math.round(u * 150));
-        const go = h('button', { class: 'btn btn-primary' }, tl('送り出す'));
+        const go = h('button', { class: 'btn btn-primary' }, tl('出発する'));
         const cancel = h('button', { class: 'btn' }, tl('やめる'));
         cancel.onclick = () => { confirmEl.replaceChildren(); submitBtn.hidden = false; hideDock(); };
         go.onclick = async () => {
@@ -643,28 +643,21 @@ export async function renderSubmit(root) {
         };
         submitBtn.hidden = true;
         refresh(); // 表示を持ち物のデータにそろえてから、確認に出す
-        showDock(tl('送り出しの確認'), confirmEl);
+        showDock(tl('出発の確認'), confirmEl);
         // 送る前に、実際に送る持ち物（巻物・道具・結界・お供）を確かめられるようにする
         const none = h('span', { class: 'muted' }, tl('なし'));
         const kit = h('dl', { class: 'confirm-kit small' }, h('dt', {}, tl('巻物')), h('dd', {}, b.skills.length ? b.skills.map((x) => x.name || tl('（名前なし）')).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('道具')), h('dd', {}, b.tools.length ? b.tools.map((id) => toolById[id]?.name ?? id).join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('結界')), h('dd', {}, b.guardrail?.words.length ? b.guardrail.words.join(tl('・')) : none.cloneNode(true)), h('dt', {}, tl('お供')), h('dd', {}, b.companion ? (b.companion.tools.length ? tl('連れていく（道具: {0}）', b.companion.tools.map((id) => toolById[id]?.name ?? id).join(tl('・'))) : tl('連れていく（道具なし）')) : none.cloneNode(true)));
-        confirmEl.replaceChildren(h('p', {}, tl(`「{0}」を送り出します。今日の残り {1} 回のうち1回を使います。`, b.name, me.remainingToday)), h('p', { class: 'small' }, tl('送る持ち物:')), kit, h('p', { class: 'small muted' }, tl(`AI利用料の目安は約{0}〜{1}円（運営負担）。送り出す前に試走で確かめておくと安心です。`, yen(est.low), yen(est.high))), h('p', { class: 'small muted sway-note' }, SWAY_NOTE()), h('div', { class: 'row-gap' }, go, cancel));
+        confirmEl.replaceChildren(h('p', {}, tl(`「{0}」が冒険に出発します。今日の残り {1} 回のうち1回を使います。`, b.name, me.remainingToday)), h('p', { class: 'small' }, tl('送る持ち物:')), kit, h('p', { class: 'small muted' }, tl(`AI利用料の目安は約{0}〜{1}円（運営負担）。出発の前に、先輩冒険者に会っておくと安心です。`, yen(est.low), yen(est.high))), h('p', { class: 'small muted sway-note' }, SWAY_NOTE()), h('div', { class: 'row-gap' }, go, cancel));
     };
-    // 試走: 公開サンプルだけを動かす。提出回数は使わない。
-    // 広い画面（資料の欄が横に出ているとき）は、結果を資料の欄の「試走の結果」タブに出し、準備のフォームを隠さない。
-    // 狭い画面は、上のパネルに出す（閉じずに折りたためる）
+    // 先輩冒険者の助言: AI は呼ばない（費用なし・すぐ返る・何回でも・ログインもいらない）。準備の中身と、募集要項に公開されていることだけを見て、
+    // 危ういところと考え方を問いかける（答えは教えない）。
+    // 広い画面（資料の欄が横に出ているとき）は、資料の欄の「先輩の助言」タブに出し、準備のフォームを隠さない。狭い画面は、上のパネルに出す（折りたためる）
     const sideBySide = () => window.matchMedia('(min-width: 901px)').matches;
-    // 見出しは、上のパネル用と資料の欄用の2つ（同じ文言にそろえる）
-    const trialTitle = h('span', {}, tl('試走の結果'));
-    const trialTitle2 = h('span', {}, tl('試走の結果'));
-    const setTrialTitle = (v) => { trialTitle.textContent = v; trialTitle2.textContent = v; };
-    trialBtn.onclick = async () => {
-        if (!me || !me.entered) {
-            showDock(tl('試走するには'), accountEl);
-            return;
-        }
-        if (blockedByIssues())
-            return;
-        setTrialTitle(tl('試走の結果'));
+    const trialTitle = h('span', {}, tl('先輩冒険者'));
+    const trialTitle2 = h('span', {}, tl('先輩冒険者'));
+    const coachTask = coachTaskOf(season.task, catalog, MP_BUDGET_PER_CASE);
+    let lastVerdict = null;
+    trialBtn.onclick = () => {
         trialTab.hidden = false;
         if (sideBySide()) {
             hideDock();
@@ -672,24 +665,43 @@ export async function renderSubmit(root) {
         }
         else
             showDockOpt({ collapsible: true }, trialTitle, trialEl);
-        trialBtn.disabled = true;
-        trialEl.replaceChildren(h('p', { class: 'muted' }, tl('試走中…（数秒〜十数秒かかります）')));
-        try {
-            const r = await runTrial(buildToYaml(b));
-            me = r.user;
-            renderAccount();
-            trialEl.replaceChildren(trialView(r, season.task.caseCount, (id) => toolById[id]?.name ?? id, !!season.task.scrolls?.length));
-            const ok = r.cases.filter((c) => c.score >= 0.6).length;
-            setTrialTitle(tl(`試走の結果（{0} / {1} 問 正解）`, ok, r.cases.length)); // たたんでも分かるように
-        }
-        catch (e) {
-            trialEl.replaceChildren(h('p', { class: 'errors' }, e.message));
-        }
-        refresh();
+        lastVerdict = coach(b, coachTask);
+        trialEl.replaceChildren(...(valid ? [] : [h('p', { class: 'errors small' }, tl('先に、直すところがあります（荷物の重さの横の ⚠ を押すと一覧が出ます）。'))]), ...[coachView(lastVerdict), deepBox()].filter((x) => !!x));
+    };
+    // 詳しいアドバイス（AI）: 心得・巻物・お供の心得の中身を読んで、場面ごとに備えがあるかを返す。1日の回数に上限がある
+    const perDay = season.limits.coachReviewsPerDay ?? 0;
+    const deepBox = () => {
+        if (demoMode || !perDay)
+            return null;
+        const out = h('div', { class: 'coach-deep', 'aria-live': 'polite' });
+        const left = me?.coachReviewsLeft ?? 0;
+        const label = (n) => tl('詳しいアドバイスをもらう（今日あと{0}回）', n);
+        const btn = h('button', { class: 'btn btn-deep' }, label(left));
+        const ready = !!me && me.entered;
+        btn.disabled = !ready || !valid || left <= 0;
+        if (!ready)
+            btn.title = tl('ログインしてエントリーすると使えます');
+        btn.onclick = async () => {
+            btn.disabled = true;
+            out.replaceChildren(senpaiBubble(h('p', { class: 'senpai-wait' }, tl('どれ、心得と巻物を読ませてもらう。少し待ってろ。'))));
+            try {
+                const r = await coachReview(buildToYaml(b));
+                if (me)
+                    me.coachReviewsLeft = r.left;
+                btn.textContent = label(r.left);
+                out.replaceChildren(deepView(r.review));
+                btn.disabled = r.left <= 0;
+            }
+            catch (e) {
+                out.replaceChildren(h('p', { class: 'errors small' }, e.message));
+                btn.disabled = false;
+            }
+        };
+        return h('div', { class: 'coach-deep-box' }, btn, out);
     };
     // --- 左: 作戦メモ（募集要項を見ながら準備できるように）---
     const t = season.task;
-    const taskCol = h('div', { class: 'lib-pane' }, brief ? library(brief, t.references ?? []) : h('p', { class: 'small' }, t.description), t.publicSamples.length ? h('details', {}, h('summary', {}, tl('戦場の様子の例')), ...t.publicSamples.map((x) => h('div', { class: 'sample small' }, h('p', {}, x.body), h('div', { class: 'muted' }, tl(`頼れる冒険者の行動: {0}`, Object.values(x.expected)[0]))))) : null, season.provider === 'mock' ? h('p', { class: 'notice small' }, tl('いまは「模擬採点」で動いています。心得の中身は点数にほとんど反映されないので、戦果は目安です。')) : null);
+    const taskCol = h('div', { class: 'lib-pane' }, brief ? library(brief, t.references ?? []) : h('p', { class: 'small' }, t.description), t.publicSamples.length ? h('details', {}, h('summary', {}, tl('戦場の様子の例')), ...t.publicSamples.map((x) => h('div', { class: 'sample small' }, h('p', {}, x.body), h('div', { class: 'muted' }, tl(`頼れる冒険者の行動: {0}`, Object.values(x.expected)[0]))))) : null, season.provider === 'mock' ? h('p', { class: 'notice small' }, MOCK_NOTE()) : null);
     const panelTabs = h('div', { class: 'tabs panel-tabs', role: 'tablist' }, h('button', { class: 'tab on', 'data-p': 'build', onclick: () => setPanel('build') }, tl('準備')), h('button', { class: 'tab', 'data-p': 'task', onclick: () => setPanel('task') }, tl('討伐依頼書・資料室')));
     const page = h('div', { class: 'submit-page' });
     const setPanel = (v) => {
@@ -703,10 +715,10 @@ export async function renderSubmit(root) {
         trial: h('div', { class: 'trial-pane' }, h('h3', {}, trialTitle2)),
     };
     const refBody = h('div', { class: 'ref-scroll' });
-    const refTabs = h('div', { class: 'tabs ref-tabs', role: 'tablist' }, ...[['report', tl('討伐依頼書')], ['library', tl('資料室')], ['trial', tl('試走の結果')]].map(([k, label]) => h('button', { class: 'tab', 'data-k': k, onclick: () => setRef(k), hidden: k === 'trial' }, label)));
-    const trialTab = refTabs.querySelector('[data-k=trial]'); // 試走するまでは出さない
+    const refTabs = h('div', { class: 'tabs ref-tabs', role: 'tablist' }, ...[['report', tl('討伐依頼書')], ['library', tl('資料室')], ['trial', tl('先輩冒険者')]].map(([k, label]) => h('button', { class: 'tab', 'data-k': k, onclick: () => setRef(k), hidden: k === 'trial' }, label)));
+    const trialTab = refTabs.querySelector('[data-k=trial]'); // 先輩に見てもらうまでは出さない
     const setRef = (k) => {
-        // 試走の結果は1つなので、資料の欄で見るときは上のパネルから移す
+        // 先輩の助言は1つなので、資料の欄で見るときは上のパネルから移す
         if (k === 'trial') {
             if (dockBody.contains(trialEl))
                 hideDock();
@@ -724,7 +736,7 @@ export async function renderSubmit(root) {
     const meterBtn = h('button', { class: 'dock-meter', 'aria-describedby': 'meter-tip', onclick: () => showDock(tl('荷物の内訳'), kindSum, breakdown, runCostEl) }, h('span', { class: 'dock-label small' }, tl('荷物の重さ')), h('div', { class: 'meter' }, meterFill, meterText), meterTip);
     const dock = h('div', { class: 'dock' }, h('div', { class: 'dock-bar' }, miniPreview, h('div', { class: 'dock-who' }, dockName, dockMe), meterBtn, dockErr, h('div', { class: 'dock-actions' }, trialBtn, submitBtn)), dockPanel);
     root.replaceChildren(...nodes(dock, panelTabs, page));
-    page.replaceChildren(...nodes(refCol, h('section', { class: 'editor-col' }, h('div', { class: 'row-between' }, h('h2', {}, tl('冒険者の準備')), armButton('reset', tl('はじめからやり直す'), tl('もう一度押すとテンプレートに戻します'), () => { b = parseBuild(BUILD_TEMPLATE, catalog).build; renderForm(); refresh(); syncLook(); toast(tl('テンプレートに戻しました')); })), h('p', { class: 'small muted' }, tl(`心得・道具・巻物・結界を、荷物の重さ {0} までで準備して送り出します。左の討伐依頼書と資料室を見比べながら、何を持たせて送り出すかを決めてください。入力は自動で保存されます。`, R.limit)), form, h('section', { class: 'card sent-card' }, accountEl, subsEl))));
+    page.replaceChildren(...nodes(refCol, h('section', { class: 'editor-col' }, h('div', { class: 'row-between' }, h('h2', {}, tl('冒険者の準備')), armButton('reset', tl('はじめからやり直す'), tl('もう一度押すとテンプレートに戻します'), () => { b = parseBuild(BUILD_TEMPLATE, catalog).build; renderForm(); refresh(); syncLook(); toast(tl('テンプレートに戻しました')); })), h('p', { class: 'small muted' }, tl(`心得・道具・巻物・結界を、荷物の重さ {0} までで準備して、冒険に出発します。左の討伐依頼書と資料室を見比べながら、何を持たせるかを決めてください。入力は自動で保存されます。`, R.limit)), form, h('section', { class: 'card sent-card' }, accountEl, subsEl))));
     setRef('report');
     setPanel('build');
     renderForm();
@@ -746,7 +758,7 @@ function battleWait(id, name, onDone) {
     const actions = h('div', { class: 'row-gap wait-actions' });
     const note = h('p', { class: 'small muted' }, tl('本物のAIが、ボスの仕掛けにひとつずつ立ち向かっています。終わるまで数分かかります。この画面のままお待ちください。'));
     // 道のりの飾り（冒険者 → ボス）。ボタンではないので、読み上げとクリックの対象から外す
-    const box = h('div', { class: 'wait-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': tl('冒険者が戦っています') }, h('p', { class: 'eyebrow' }, tl('送り出しました')), h('h2', {}, tl(`「{0}」が戦場へ向かっています`, name)), h('div', { class: 'wait-scene', 'aria-hidden': 'true' }, h('span', { class: 'wait-hero' }, '🧙'), h('span', { class: 'wait-road' }), h('span', { class: 'wait-boss' }, '⚔')), h('div', { class: 'wait-bar' }, bar), label, note, actions);
+    const box = h('div', { class: 'wait-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': tl('冒険者が戦っています') }, h('p', { class: 'eyebrow' }, tl('冒険に出発しました')), h('h2', {}, tl(`「{0}」が戦場へ向かっています`, name)), h('div', { class: 'wait-scene', 'aria-hidden': 'true' }, h('span', { class: 'wait-hero' }, '🧙'), h('span', { class: 'wait-road' }), h('span', { class: 'wait-boss' }, '⚔')), h('div', { class: 'wait-bar' }, bar), label, note, actions);
     const overlay = h('div', { class: 'wait-overlay' }, box);
     document.body.append(overlay);
     document.body.dataset.locked = '1';
@@ -857,15 +869,26 @@ function armButton(k, label, armedLabel, onConfirm) {
     };
     return btn;
 }
-// 試走の結果表示: 答え・正誤・使った道具・トークン・費用、そして提出した場合の費用の見込み
-// 道具は表示名で出す（内部の ID を出さない）
-function trialView(r, caseCount, toolName, scrollWord) {
-    const yen = (u) => Math.max(1, Math.round(u * 150));
-    const n = r.cases.length;
-    const ok = r.cases.filter((c) => c.score >= 0.6).length;
-    const per = r.totals.costUsd / Math.max(1, n);
-    return h('div', {}, h('p', {}, h('b', {}, tl(`{0} / {1} 問 正解`, ok, n)), h('span', { class: 'muted small' }, tl(`　残りの試走 {0} 回`, r.user.trialsLeft))), h('ul', { class: 'trial-list' }, ...r.cases.map((c) => h('li', { class: c.score >= 0.6 ? 'trial-ok' : 'trial-ng' }, h('div', {}, h('b', {}, c.score >= 0.6 ? '○ ' : '× '), c.title), h('div', { class: 'small' }, tl(`答え: {0}`, c.answer)), c.score < 0.6 ? h('div', { class: 'small muted' }, tl(`正解: {0}`, Object.values(c.expected).join(' / '))) : null, h('div', { class: 'small muted' }, tl(`道具: {0}{1}　{2}トークン・{3}秒{4}`, c.tools.map(toolName).join(tl('・')) || tl('なし'), c.skills.length ? (scrollWord ? tl(`　巻物: {0}`, c.skills.join(tl('・'))) : tl(`　スキル: {0}`, c.skills.join(tl('・')))) : '', (c.tokensIn + c.tokensOut).toLocaleString(), (c.latencyMs / 1000).toFixed(1), c.mpOut ? tl('　行動力切れ') : '')), c.trace?.length ? h('details', { class: 'trial-trace', ...(c.score < 0.6 ? { open: true } : {}) }, h('summary', { class: 'small' }, tl('冒険の記録を見る')), traceView(c.trace, sceneMp(c))) : null))), h('p', { class: 'small muted' }, r.totals.costUsd > 0
-        ? tl(`この試走の費用は約{0}円。全{1}回を送り出すと、約{2}円の見込みです。`, yen(r.totals.costUsd), caseCount, yen(per * caseCount))
-        : tl('（モック採点のため費用は出ません）')));
+// 先輩冒険者の吹き出し（顔は最初の1回だけ。続きは吹き出しだけを重ねる）
+function senpaiBubble(...body) {
+    return h('div', { class: 'senpai-bubble senpai-bubble-cont' }, ...body.filter((x) => x !== null));
+}
+// 詳しいアドバイスの結果: 先輩のひとことと、場面ごとの備え（書いてある／あいまい／見当たらない）、道具・巻物・お供をいつ使うかが伝わるか
+function deepView(r) {
+    const cov = { ok: ['✓', 'coach-good', tl('備えあり')], partial: ['？', 'coach-tip', tl('あいまい')], missing: ['！', 'coach-warn', tl('見当たらない')] };
+    const cl = { clear: ['✓', 'coach-good', tl('いつ使うか伝わる')], unclear: ['？', 'coach-tip', tl('いつ使うかがあいまい')], none: ['・', 'coach-none', tl('持っていない')] };
+    const [n1, n2] = [COACH_PARTS.tools(), COACH_PARTS.skills()];
+    const partName = { tools: tl('{0}（{1}）', ...n1), skills: tl('{0}（{1}）', ...n2), companion: tl('{0}（{1}）', ...COACH_PARTS.companion()) };
+    const li = (m, title, note) => h('li', { class: m[1] }, h('b', { class: 'coach-mark', 'aria-hidden': 'true' }, m[0]), h('div', {}, h('div', { class: 'coach-part' }, title, h('span', { class: 'coach-tag' }, m[2])), note ? h('div', {}, note) : null));
+    return h('div', { class: 'coach-deep-result' }, r.summary || r.tips.length ? senpaiBubble(r.summary ? h('p', {}, r.summary) : null, ...r.tips.map((x) => h('p', { class: 'senpai-tip' }, x))) : null, h('h4', { class: 'coach-h' }, tl('場面ごとの備え')), h('ul', { class: 'coach-list' }, ...r.scenes.map((s) => li(cov[s.coverage], s.name, s.note))), h('h4', { class: 'coach-h' }, tl('いつ使うか')), h('ul', { class: 'coach-list' }, ...r.usage.map((u) => li(cl[u.clarity], partName[u.part], u.note))));
+}
+// 先輩冒険者の助言: 侍の先輩が吹き出しで語る。ひとこと（出発してよし／あと一歩／まだ早い）と、仕組みごとの指摘（気になるところから）
+function coachView(r) {
+    const mark = { warn: '！', tip: '？', good: '✓' };
+    const stamp = { ready: tl('出発してよし'), almost: tl('あと一歩'), notyet: tl('まだ早い') }[r.verdict];
+    return h('div', { class: `coach coach-${r.verdict}` }, h('div', { class: 'senpai-says' }, h('div', { class: 'senpai-face' }, senpaiPortrait('senpai-canvas'), h('span', {}, senpaiName())), h('div', { class: 'senpai-bubble' }, h('span', { class: 'senpai-stamp' }, stamp), h('p', { class: 'coach-say' }, r.say))), h('ul', { class: 'coach-list' }, ...r.items.map((it) => {
+        const [name, ai] = COACH_PARTS[it.part]();
+        return h('li', { class: `coach-${it.level}` }, h('b', { class: 'coach-mark', 'aria-hidden': 'true' }, mark[it.level]), h('div', {}, h('div', { class: 'coach-part' }, tl('{0}（{1}）', name, ai)), h('div', {}, it.text)));
+    })));
 }
 //# sourceMappingURL=submit.js.map

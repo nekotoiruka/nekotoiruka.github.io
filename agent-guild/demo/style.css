@@ -289,8 +289,6 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; align-items: center; margin: 8px 0 28px; }
 .hero h1 { font-size: 34px; margin: 4px 0 8px; letter-spacing: .06em; color: var(--accent); }
 .hero .lead { font-size: 17px; }
-.hero-art .mini-battle, .mini-battle { box-shadow: 0 0 0 3px var(--line), 5px 5px 0 0 #0a0c18; line-height: 0; background: #12152a; }
-.mini-empty { line-height: 1.6; padding: 40px 16px; text-align: center; color: var(--muted); }
 .eyebrow { color: var(--info); font-size: 13px; letter-spacing: .1em; margin: 0; }
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 28px; }
 .step { background: var(--panel); box-shadow: 0 0 0 2px var(--line), 4px 4px 0 0 #0a0c18; padding: 14px 16px; }
@@ -365,7 +363,6 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .guide-steps li { margin: 4px 0; }
 @media (max-width: 900px) { .submit-page { grid-template-columns: minmax(0, 1fr); } }
 
-.dash .mini-battle { max-width: 760px; }
 .next-card .btn-primary { width: auto; margin-top: 0; padding: 8px 18px; }
 .task-col .row-gap { margin: 6px 0 10px; }
 .hero .btn-primary, .cta-bottom .btn-primary { width: auto; margin-top: 0; padding: 10px 22px; }
@@ -1042,3 +1039,53 @@ main p, main li, main dd { word-break: auto-phrase; }
 /* 直すところがあるあいだの、試走・送り出しのボタン（押すと直すところの一覧が出る。送られはしない） */
 .btn.needs-fix { opacity: 0.6; filter: grayscale(0.6); }
 .btn.needs-fix::before { content: '⚠ '; }
+/* ホームの「あなたの冒険者」（待機している全身のドット絵） */
+.my-hero-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+.my-hero { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px 10px; background: #12152a; box-shadow: 0 0 0 3px var(--line), 5px 5px 0 0 #0a0c18; }
+.my-hero-canvas { width: 304px; max-width: 100%; height: auto; image-rendering: pixelated; }
+.my-hero-plate { display: flex; flex-direction: column; align-items: center; color: #e8ecff; }
+.my-hero-empty { line-height: 1.6; padding: 32px 20px; text-align: center; color: var(--muted); max-width: 360px; }
+.my-hero-go { flex: 1 1 220px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+/* 先輩の助言 */
+/* 先輩冒険者（侍）が吹き出しで語る */
+.senpai-says { display: flex; gap: 16px; align-items: flex-start; margin: 6px 8px 16px 4px; }
+.senpai-face { flex: none; display: grid; justify-items: center; gap: 4px; color: #ff9f43; font-size: 11px; font-weight: bold; text-align: center; max-width: 120px; }
+.senpai-canvas { width: 117px; height: 90px; background: radial-gradient(circle at 50% 70%, #3a1620 0%, #12152a 70%); box-shadow: 0 0 0 2px #8f1d2c, 0 0 0 4px #0a0c18, 4px 4px 0 4px #0a0c18; }
+.senpai-bubble { position: relative; flex: 1; min-width: 0; background: #f6efe1; color: #1d1a26; padding: 12px 16px; box-shadow: 0 0 0 2px #1d1a26, 0 0 0 4px #8f1d2c, 4px 4px 0 4px #0a0c18; line-height: 1.75; }
+.senpai-says .senpai-bubble::before { content: ''; position: absolute; left: -14px; top: 26px; border: 8px solid transparent; border-right: 10px solid #8f1d2c; border-left: 0; }
+.senpai-says .senpai-bubble::after { content: ''; position: absolute; left: -9px; top: 28px; border: 6px solid transparent; border-right: 8px solid #f6efe1; border-left: 0; }
+.senpai-bubble p { margin: 0 0 6px; }
+.senpai-bubble p:last-child { margin-bottom: 0; }
+.senpai-bubble-cont { margin: 10px 8px 14px 4px; }
+.senpai-stamp { display: inline-block; margin-bottom: 6px; padding: 1px 10px; font-size: 12px; font-weight: bold; letter-spacing: .1em; color: #fff; background: #8f1d2c; transform: rotate(-2deg); box-shadow: 2px 2px 0 #1d1a26; }
+.coach-ready .senpai-stamp { background: #2e8b57; }
+.coach-almost .senpai-stamp { background: #c77d1a; }
+.senpai-tip { font-size: 14px; padding-left: 1.1em; text-indent: -1.1em; }
+.senpai-tip::before { content: '― '; color: #8f1d2c; }
+.senpai-wait { font-style: italic; }
+.coach .coach-say { margin: 0; font-weight: bold; font-size: 16px; color: inherit; }
+.coach-part { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.coach-tag { font-size: 11px; padding: 0 6px; box-shadow: 0 0 0 1px currentColor; }
+.coach-h { margin: 14px 0 4px; color: var(--accent); }
+.btn-deep { margin-top: 4px; }
+@media (max-width: 560px) {
+  .senpai-canvas { width: 78px; height: 60px; }
+  .senpai-says { gap: 12px; }
+}
+.coach-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.coach-list li { display: flex; gap: 10px; padding: 8px 10px; margin: 6px 0; background: var(--panel-2); line-height: 1.6; }
+.coach-list .coach-mark { flex: none; width: 1.4em; text-align: center; }
+.coach-warn { box-shadow: inset 3px 0 0 var(--danger); }
+.coach-warn .coach-mark { color: var(--danger); }
+.coach-tip { box-shadow: inset 3px 0 0 var(--accent); }
+.coach-tip .coach-mark { color: var(--accent); }
+.coach-good { box-shadow: inset 3px 0 0 var(--accent-2); }
+.coach-good .coach-mark { color: var(--accent-2); }
+.coach-none { opacity: .7; }
+.coach-deep-box { border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 6px; }
+.coach-deep-result h4 { margin: 12px 0 4px; }
+.btn-danger { border-color: var(--danger); color: #ffd7d9; }
+.btn-danger:hover { background: var(--danger); color: #fff; }
+.site-foot { text-align: center; padding: 24px 16px 32px; }
+.site-foot a { color: var(--muted); }
+.admin-settings > .row-gap { margin-top: 12px; }

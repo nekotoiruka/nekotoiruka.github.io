@@ -51,7 +51,7 @@ async function route() {
     if (WATCH_GATE && /^#\/(arena|ranking)/.test(hash) && !/^#\/arena\/past\//.test(hash) && !(await canWatch())) {
         lastHash = hash;
         setNav(hash);
-        root.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, tl('まだ見られません')), h('p', {}, tl('討伐と戦果は、あなたの冒険者を送り出して、戦いが終わってから見られます（ネタバレ防止のためでもあります）。')), h('a', { class: 'btn btn-primary', href: '#/make' }, tl('冒険者の準備へ'))));
+        root.replaceChildren(h('div', { class: 'empty' }, h('h2', {}, tl('まだ見られません')), h('p', {}, tl('討伐と戦果は、あなたの冒険者が冒険に出発して、戦いが終わってから見られます（ネタバレ防止のためでもあります）。')), h('a', { class: 'btn btn-primary', href: '#/make' }, tl('冒険者の準備へ'))));
         if (hash.startsWith('#/ranking'))
             root.append(await pastSeasonsSection().catch(() => h('span')));
         return;
@@ -93,7 +93,7 @@ async function canWatch() {
 function lockNav(locked) {
     document.querySelectorAll('nav a[href="#/arena"], nav a[href="#/ranking"]').forEach((a) => {
         a.classList.toggle('locked', locked);
-        a.title = locked ? tl('冒険者を送り出すと見られます') : '';
+        a.title = locked ? tl('冒険者が出発すると見られます') : '';
     });
 }
 await detectMode();
@@ -106,11 +106,15 @@ if (!demoMode && WATCH_GATE)
     canWatch();
 if (demoMode)
     document.body.classList.add('demo');
-else
-    getMe().then((me) => {
-        if (me?.admin)
+else {
+    // 運営の入り口: 管理者（ADMIN_USERS の表示名、または管理者パスワードでログイン中）なら上のメニューに「運営」を出す。
+    // そうでない人にも、いちばん下に小さく入り口を置く（ADMIN_PASSWORD で入る。パスワードを知らなければ何もできない）
+    fetch('api/me').then((r) => r.json()).then((j) => {
+        if (j.admin && !document.querySelector('nav a[href="#/admin"]'))
             document.querySelector('nav').append(h('a', { href: '#/admin' }, tl('運営')));
     }).catch(() => undefined);
+    document.body.append(h('footer', { class: 'site-foot small muted' }, h('a', { href: '#/admin' }, tl('運営の方へ（管理者画面）'))));
+}
 // 上部に固定する部品の高さを CSS に伝える（スマホではヘッダーが折り返して高くなるため）
 const topbar = document.querySelector('.topbar');
 const syncHeights = () => {

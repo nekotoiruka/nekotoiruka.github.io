@@ -28,16 +28,16 @@ export function elderBeard(ctx, cx, fy, bob) {
     px(hx - 1, hy + 2 + rows.length, 3, O);
     px(hx - 1, hy + 2, 3, '#9b3b4f'); // 口（ひげの間から少し見える）
 }
-/** ギルドマスターの顔（全身の小さな絵）。ゆっくり息をする（画面から外れたら止まる） */
-export function gmPortrait(cls = 'gm-canvas') {
-    const c = h('canvas', { class: `pixel ${cls}`, width: PORTRAIT_W, height: PORTRAIT_H, role: 'img', 'aria-label': tl('ギルドマスター') });
+/** 全身の小さな絵（ギルドマスター・先輩冒険者など、語り役の顔）。ゆっくり息をする（画面から外れたら止まる） */
+export function speakerPortrait(look, gear, label, cls = 'gm-canvas', extra) {
+    const c = h('canvas', { class: `pixel ${cls}`, width: PORTRAIT_W, height: PORTRAIT_H, role: 'img', 'aria-label': label });
     const ctx = c.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     const draw = (frame) => {
         ctx.clearRect(0, 0, PORTRAIT_W, PORTRAIT_H);
         const cx = PORTRAIT_W / 2 + 2, fy = PORTRAIT_H - 3;
-        drawHero(ctx, GM_LOOK, GM_GEAR, cx, fy, { frame, action: 'idle' });
-        elderBeard(ctx, cx, fy, poseFor('idle', 0, frame).bob);
+        drawHero(ctx, look, gear, cx, fy, { frame, action: 'idle' });
+        extra?.(ctx, cx, fy, frame);
     };
     draw(0);
     let raf = 0;
@@ -54,6 +54,15 @@ export function gmPortrait(cls = 'gm-canvas') {
     setTimeout(() => { raf = requestAnimationFrame(tick); }, 0);
     return c;
 }
+/** ギルドマスターの顔（全身の小さな絵） */
+export function gmPortrait(cls = 'gm-canvas') {
+    return speakerPortrait(GM_LOOK, GM_GEAR, tl('ギルドマスター'), cls, (ctx, cx, fy, frame) => elderBeard(ctx, cx, fy, poseFor('idle', 0, frame).bob));
+}
+// 先輩冒険者: 歴戦の侍（深紅の鎧・黒髪・刀。背に大太刀、お供は紅い竜）。出発の前に準備を見てくれる
+export const SENPAI_LOOK = { body: 'samurai', palette: '#8f1d2c', hair: '#1c1c28', weapon: 'katana' };
+export const SENPAI_GEAR = { back: [{ kind: 'katana', color: '#d8dee9' }], fams: [{ kind: 'dragon', color: '#e0503c' }], charms: [{ kind: 'flame', color: '#ff9f43' }] };
+export const senpaiName = () => tl('先輩冒険者 カゲトラ');
+export const senpaiPortrait = (cls = 'gm-canvas') => speakerPortrait(SENPAI_LOOK, SENPAI_GEAR, senpaiName(), cls);
 /** ギルドマスターが語る吹き出し（顔＋名前＋本文） */
 export function gmSays(...body) {
     return h('div', { class: 'gm-says' }, h('div', { class: 'gm-face' }, gmPortrait(), h('span', {}, tl('ギルドマスター'))), h('div', { class: 'gm-bubble' }, ...body.filter((x) => x !== null)));

@@ -35,7 +35,7 @@ function savePinned(ids) {
     userSet(MINE_KEY, JSON.stringify(ids));
 }
 let stopCurrent = null;
-const RAID_DESC = tl('送り出された冒険者全員で、ボスに挑みます。ボスが仕掛けるたびに、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。ボスの大技を外すとダウンしますが、次に正しく動けた場面で起き上がります（脱落はしません）。順位は戦果（正しく動けた割合）→ 燃費 → 速さで決まります。');
+const RAID_DESC = tl('冒険に出発した冒険者全員で、ボスに挑みます。ボスが仕掛けるたびに、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。ボスの大技を外すとダウンしますが、次に正しく動けた場面で起き上がります（脱落はしません）。順位は戦果（正しく動けた割合）→ 燃費 → 速さで決まります。');
 // past: 過去のシーズンの討伐を再生するとき（focus の冒険者を「自分」と同じように目立たせる）
 export async function renderArena(root, initialView, past) {
     getSeason().catch(() => null); // 課題ごとのコスト上限を読み込む（表示用）
@@ -51,7 +51,7 @@ export async function renderArena(root, initialView, past) {
     const pastBar = data.past ? h('div', { class: 'past-replay-bar' }, h('span', {}, h('b', {}, tl(`過去のシーズンの再生: {0}「{1}」`, data.past.label, data.task.title)), past?.focus ? h('span', { class: 'small muted' }, tl(`　{0} を中心に表示`, data.entrants.find((e) => e.id === past.focus)?.name ?? '')) : null), h('a', { class: 'btn btn-small', href: '#/ranking' }, tl('戦果（順位表）へ戻る'))) : null;
     // ひとりでも討伐に出られる（採点の終わった提出が1件あれば始まる）
     if (!data.entrants.length) {
-        root.replaceChildren(...nodes(pastBar), h('div', { class: 'empty' }, h('h2', {}, tl('まだ討伐がありません')), h('p', {}, tl('冒険者を送り出して採点が終わると、ここで討伐が始まります。ひとりでも挑めます。')), h('a', { href: '#/make', class: 'btn' }, tl('キャラをつくる'))));
+        root.replaceChildren(...nodes(pastBar), h('div', { class: 'empty' }, h('h2', {}, tl('まだ討伐がありません')), h('p', {}, tl('冒険者が出発して採点が終わると、ここで討伐が始まります。ひとりでも挑めます。')), h('a', { href: '#/make', class: 'btn' }, tl('キャラをつくる'))));
         return;
     }
     // 討伐隊: あなた＋同じチームの人＋順位の近い人で最大12人（順位はシーズンの参加者全員で決まる）
@@ -82,7 +82,7 @@ export async function renderArena(root, initialView, past) {
         const off = staged.fighters.filter((f) => f.off).length;
         stageNote.textContent = off ? tl(`舞台に立つのは {0} 人（残り {1} 人は画面下の「控え」。順位は全員で決まります）`, staged.fighters.length - off, off)
             : partyOnly ? (hasMine ? tl('討伐隊は、あなた・同じチームの人・順位の近い人の{0}人です（順位はシーズンの参加者全員で決まります）。', sc.fighters.length)
-                : tl('いまの戦果の上位{0}人の討伐です。冒険者を送り出すと、あなたの討伐隊の討伐になります。', sc.fighters.length)) : '';
+                : tl('いまの戦果の上位{0}人の討伐です。冒険者が出発すると、あなたの討伐隊の討伐になります。', sc.fighters.length)) : '';
         stopCurrent = mountPlayer(host, staged);
     };
     // まだ送り出していない人に: 見ているのは上位の討伐。自分も加わる入口

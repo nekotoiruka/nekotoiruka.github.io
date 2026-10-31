@@ -32,12 +32,15 @@ export function loginForm(season, onDone) {
         } }, nameIn, passIn, h('button', { class: 'btn', type: 'submit' }, tl('ログイン / 登録'))));
 }
 // 戦果の揺れの説明（送り出しの確認と戦果の画面で同じ文言）
-export const SWAY_NOTE = () => tl('AI の判断は毎回少し揺れるので、同じ準備でも、送り出すたびに戦果が少し変わることがあります。順位は最新の送り出しで決まります。');
+// 模擬採点（モック）の断り書き。本物の AI は動かさず、準備の中身を言葉の一致で見て点を近似しているだけなので、
+// 心得の書き方の良し悪しは、本物の AI とは違う結果になることがある
+export const MOCK_NOTE = () => tl('いまは「模擬採点」で動いています。本物の AI は動かさず、準備の中身を言葉の一致で見て、点を近似しているだけです。結界・冒険日誌・行動力の上限のような仕掛けは本物と同じに決まりますが、心得や巻物の書き方による点の差は、本物の AI とは違うことがあります。戦果と講評は、練習用の目安として見てください。');
+export const SWAY_NOTE = () => tl('AI の判断は毎回少し揺れるので、同じ準備でも、出発するたびに戦果が少し変わることがあります。順位は最新の出発で決まります。');
 export function seasonRules(season) {
     const R = season.costRules;
     return [
         tl(`荷物の重さは {0} まで。何を持たせて何を置いていくかを選びます。`, R.limit),
-        tl(`送り出しは1日 {0} 回まで。試走（例の場面だけで試す）は1日 {1} 回まで、送り出しの回数は使いません。`, season.limits.submissionsPerDay, season.limits.trialsPerDay ?? 3),
+        tl(`冒険に出発できるのは1日 {0} 回まで。出発の前に、先輩冒険者に準備を見てもらえます（何回でも・回数は減りません）。`, season.limits.submissionsPerDay),
         tl('戦場で起きることは非公開です。採点は正しい行動との機械的な照合だけで行い、AI は採点に使いません。'),
         tl('ほかの人の心得と持ち物は、シーズンが終わっても公開されません。'),
     ];
@@ -59,6 +62,6 @@ export function entryCard(season, me, onDone) {
     return h('section', { class: 'card entry-card' }, h('h3', {}, tl(`{0}「{1}」`, season.task.season, season.task.briefing?.headline ?? season.task.title)), h('ul', { class: 'rule-list' }, ...seasonRules(season).map((t) => h('li', {}, t))), btn);
 }
 export function accountBar(season, me, onChange) {
-    return h('div', { class: 'account-bar' }, h('span', {}, tl(`{0} さん`, me.name)), h('span', { class: 'muted small' }, me.entered ? tl(`今日の残り: 送り出し {0} 回・試走 {1} 回`, me.remainingToday, me.trialsLeft) : tl('まだエントリーしていません')), !demoMode && season.authMode === 'passcode' ? h('button', { class: 'btn btn-small', onclick: async () => { await logout(); signOut(); onChange(); } }, tl('ログアウト')) : null);
+    return h('div', { class: 'account-bar' }, h('span', {}, tl(`{0} さん`, me.name)), h('span', { class: 'muted small' }, me.entered ? tl(`今日の残り: 出発 {0} 回`, me.remainingToday) : tl('まだエントリーしていません')), !demoMode && season.authMode === 'passcode' ? h('button', { class: 'btn btn-small', onclick: async () => { await logout(); signOut(); onChange(); } }, tl('ログアウト')) : null);
 }
 //# sourceMappingURL=account.js.map

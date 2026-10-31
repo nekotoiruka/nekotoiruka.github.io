@@ -70,7 +70,7 @@ function mpGauge(m) {
 // 1場面ぶんの記録。mp を渡すと、先頭にこの場面の 行動力 のゲージを出す
 export function traceView(steps, mp) {
     if (!steps?.length)
-        return h('p', { class: 'small muted' }, tl('この場面の記録はありません（記録をとる前の送り出しです）。'));
+        return h('p', { class: 'small muted' }, tl('この場面の記録はありません（記録をとる前の出発です）。'));
     const used = steps.some((s) => s.t === 'tool' || s.t === 'skill' || s.t === 'companion');
     return h('div', { class: 'trace' }, mp ? mpGauge(mp) : null, h('ol', { class: 'trace-list' }, ...steps.map(step)), !used && !steps.some((s) => s.t === 'guard') ? h('p', { class: 'small muted' }, tl('この場面では、道具も巻物も使わずに、心得だけで答えています。')) : null);
 }

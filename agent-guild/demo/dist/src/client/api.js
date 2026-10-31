@@ -58,7 +58,7 @@ export async function getSeason() {
         const ids = d.catalog;
         return {
             task: d.task, catalog: ids ? TOOL_CATALOG.filter((t) => ids.includes(t.id)) : TOOL_CATALOG, costRules: COST_RULES,
-            seasonEnd: '', seasonOver: true, limits: { submissionsPerDay: 3, trialsPerDay: 3 }, provider: 'mock', authMode: 'passcode',
+            seasonEnd: '', seasonOver: true, limits: { submissionsPerDay: 3 }, provider: 'mock', authMode: 'passcode',
         };
     }
     const season = await req('GET', 'api/season');
@@ -105,8 +105,8 @@ export async function getMe() {
 export const login = (name, passcode) => req('POST', 'api/login', { name, passcode });
 export const logout = () => req('POST', 'api/logout');
 export const enterSeason = (team) => req('POST', 'api/entry', { team: team ?? '' });
-export const runTrial = (yaml) => req('POST', 'api/trial', { yaml });
 export const submitBuild = (yaml) => req('POST', 'api/submissions', { yaml });
+export const coachReview = (yaml) => req('POST', 'api/coach/review', { yaml });
 export const mySubmissions = () => req('GET', 'api/submissions/mine');
 export async function getBuild(id) {
     if (demoMode) {
