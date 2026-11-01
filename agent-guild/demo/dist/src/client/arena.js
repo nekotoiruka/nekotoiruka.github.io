@@ -7,8 +7,8 @@ import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
 import { setUltQuiet } from './ultkit.js';
 import { ELEMENT_COLOR, isUltScene, ULT_SCENES, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
-import { AGILE, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
-import { bossBar, bubble, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
+import { AGILE, chainTiming, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
+import { bossBar, bubble, chainDmg, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
 import { bossSilhouette } from './boss.js';
@@ -21,7 +21,8 @@ import { bossWeakness, counterFor, respondScene } from './bossmoves.js';
 import { bossLine, chainBeats } from './captions.js';
 import { introBoss, introFighter, introHud, introLen, introPlan } from './arena-intro.js';
 const BOSS_RED = '#ff6b7a';
-import { attackPattern, protoPattern, respOf } from './motionlab.js';
+import { attackPattern, hurtPattern, protoPattern, respOf } from './motionlab.js';
+import { hurtFor } from './hurtmoves.js';
 import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
@@ -68,7 +69,12 @@ export class ArenaRenderer {
         return d;
     }
     spotCache = new Map();
-    downAt = null;
+    downRaw = null;
+    /** ボスが倒れた瞬間。大魔法で倒したときは、ダメージが入る瞬間（光の柱が落ちてから chainTiming.delay あと）に合わせる */
+    get downAt() {
+        const d = this.downRaw;
+        return d && this.chainOf(d.wave)?.view.full ? { wave: d.wave, t: d.t + chainTiming.delay } : d;
+    }
     winner = null;
     lastTime = 0;
     // 光源（毎フレーム集める）: 暗がりの中で、松明・火花・魔法陣・自分のキャラのまわりだけ明るくする
@@ -109,7 +115,7 @@ export class ArenaRenderer {
                 if (e.type === 'bossEscape')
                     this.escapeAt = { wave: w, t: e.t, hpLeft: e.hpLeft };
                 if (e.type === 'bossDown')
-                    this.downAt = { wave: w, t: e.t };
+                    this.downRaw = { wave: w, t: e.t };
                 if (e.type === 'winner')
                     this.winner = e.f;
             }
@@ -321,6 +327,39 @@ export class ArenaRenderer {
         const pattern = resp ? protoPattern(resp, this.looks[f].weapon, w) : null; // 候補が2つある武器は、回ごとに交互に
         return pattern && resp ? { pattern, resp } : null;
     }
+    /** 外した人の被弾の動き（見本帳の「被弾」の型。割り当ては hurtmoves.ts）。null なら以前の動き（小さく下がる）。
+     *  魂の回は、シーズンの中で何回目かで、おばけ・口から を順に使う */
+    /** ボスの攻撃が誰にも飛んでこない回（正しく動けた人に、身のこなしをさせない）。
+     *  隙あり（ボスはよろめいていて攻撃しない）と、大技の回で外した人がいない（主役の必殺技が大技を潰し、衝撃波が出ない） */
+    noThreat(w) {
+        const sc = this.sceneOf(w);
+        if (sc === 'opening')
+            return true;
+        if (isUltScene(sc))
+            return this.ultOf(w)?.f !== undefined && !this.wave(w).events.some((e) => e.type === 'hit');
+        return false;
+    }
+    /** 冒険者の足もと（いま描いている位置。輪・目印・明かりがキャラについていくように。drawFighter が毎コマ書く） */
+    footAt = new Map();
+    hurtCache = new Map();
+    hurtOf(w) {
+        if (!this.motionProto)
+            return null;
+        if (this.hurtCache.has(w))
+            return this.hurtCache.get(w);
+        const idOf = (i, turn) => {
+            const wv = this.script.waves[i], cm = wv ? this.script.cases[wv.caseIndex] : undefined;
+            return hurtFor(this.script.theme?.kind, this.caseSceneOf(i), cm?.respond, wv?.attack, turn);
+        };
+        let turn = 0;
+        for (let i = 0; i < w; i++)
+            if (idOf(i, 0)?.startsWith('hurt-soul'))
+                turn++;
+        const id = idOf(w, turn);
+        const p = id ? hurtPattern(id) : null;
+        this.hurtCache.set(w, p);
+        return p;
+    }
     /** ボスへの反撃を、見本帳で武器ごとに選んだ通常攻撃の型で見せる（null なら以前の共通の動き） */
     attackProtoOf(w, f) {
         if (!this.motionProto)
@@ -413,9 +452,9 @@ export class ArenaRenderer {
             { x: this.bossBody.x, y: this.bossBody.y - 10, r: 80, a: 0.55 },
         ];
         for (const f of this.mine) {
-            const v = views[f];
+            const v = views[f], at = this.footAt.get(f);
             if (v?.alive && !s.fighters[f].off)
-                this.lights.push({ x: v.x, y: v.y - 14, r: 46, a: 0.85, col: '#ffd166' });
+                this.lights.push({ x: at?.x ?? v.x, y: (at?.y ?? v.y) - 14, r: 46, a: 0.85, col: '#ffd166' });
         }
         // --- 狙われた警告（隊列はないので、討伐隊ぜんたいに一つ） ---
         const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
@@ -569,6 +608,8 @@ export class ArenaRenderer {
             }
         });
         // --- 数字・ラベル ---
+        if (chain?.view.full && outro === 0)
+            this.chainDmg(chain.view, phase); // 大魔法のダメージ
         for (const e of outro > 0 ? [] : wv.events) {
             const age = phase - e.t;
             if (age < 0 || age > 0.22)
@@ -701,6 +742,7 @@ export class ArenaRenderer {
     projectile = projectile; // arena-fighter.ts
     hitSpark = hitSpark; // arena-fighter.ts
     damageNum = damageNum; // arena-hud.ts
+    chainDmg = chainDmg; // arena-hud.ts
     aura = aura; // arena-fighter.ts
     keyItem = keyItem; // arena-hud.ts
     progressBar = progressBar; // arena-hud.ts

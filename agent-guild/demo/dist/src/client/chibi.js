@@ -798,6 +798,18 @@ export function poseFor(action, t, frame) {
             p.sweat = true;
             p.headDy = 1;
             break;
+        case 'daze': // 尻もちをついて目を回す（被弾）。足を前に投げ出し、両手を床につく
+            p.bob = 2;
+            p.squash = 1;
+            p.footF = [2, -1];
+            p.footB = [3, -1];
+            p.armF = [1, 2];
+            p.armB = [-1, 2];
+            p.headDy = Math.floor(frame / 8) % 2;
+            p.eyes = 'swirl';
+            p.mouth = 'open';
+            p.sweat = true;
+            break;
         case 'ko':
             p.eyes = 'swirl';
             p.mouth = 'open';

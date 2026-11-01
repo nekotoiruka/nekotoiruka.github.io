@@ -42,7 +42,7 @@ code, pre, .editor { font-family: var(--mono); }
 nav { display: flex; gap: 4px; flex-wrap: wrap; }
 nav a { color: var(--muted); text-decoration: none; padding: 4px 10px; }
 nav a:hover { color: var(--ink); }
-nav a.on { color: #12152a; background: var(--accent); }
+nav a.on { color: var(--accent); box-shadow: inset 0 -4px 0 var(--accent); } /* 選んだ所は塗らずに、橙の文字と下線（デザインシステムのタブ） */
 .demo-flag { margin-left: auto; font-size: 12px; color: #12152a; background: var(--info); padding: 2px 8px; display: none; }
 body.demo .demo-flag { display: inline-block; }
 
@@ -682,7 +682,9 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 
 /* ===== 紹介ページ（#/about と 1ファイル版 lp.html） =====
    RPG のメッセージウィンドウ（白い二重枠）を骨組みにする。見出しは窓の枠に乗せる */
-.lp { max-width: 1120px; margin: 0 auto; --win: #0d1022; }
+.lp { max-width: 1120px; margin: 0 auto; --win: #0d1022; --read: #d2d5e8; } /* --read: 窓やカードの中の説明文。--muted（紫がかった灰）より明るく、紫みをおさえた色 */
+/* 冒険の備えの色（デザインシステムの sonae-*）。道具・巻物・お供は、アプリの札（chip-tool・chip-skill・chip-sub）と同じ色 */
+:root { --sonae-kokoroe: #ff8a6b; --sonae-dougu: #5fcde4; --sonae-makimono: #ff9ce6; --sonae-nisshi: #63c74d; --sonae-kekkai: #c77dff; --sonae-otomo: #ffd166; }
 .lp-standalone main { padding-top: 24px; }
 .win {
   position: relative; background: var(--win); border: 3px solid var(--ink); border-radius: 6px;
@@ -692,7 +694,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp h2 { font-size: 28px; color: var(--ink); margin: 0 0 10px; letter-spacing: .06em; display: flex; align-items: center; gap: 12px; }
 .lp h2::before { content: ''; width: 12px; height: 12px; background: var(--accent); box-shadow: 4px 4px 0 #e43b44; flex: none; }
 .lp-sec { margin: 84px 0 0; }
-.lp-intro { max-width: 46em; color: var(--muted); margin: 0 0 22px; }
+.lp-intro { max-width: 46em; color: var(--read); margin: 0 0 22px; }
 .lp-sub { color: var(--accent); font-size: 18px; margin: 36px 0 14px; }
 
 /* ヒーロー: 動くステージの下端に、タイトルの窓を重ねる */
@@ -707,7 +709,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
   filter: drop-shadow(2px 0 0 #2a0f08) drop-shadow(-2px 0 0 #2a0f08) drop-shadow(0 2px 0 #2a0f08) drop-shadow(0 -2px 0 #2a0f08) drop-shadow(4px 4px 0 #e43b44) drop-shadow(3px 3px 0 #05060d); }
 .lp-logo-ja { font-size: clamp(12px, 1.6vw, 16px); letter-spacing: .5em; color: #fff1d6; padding-left: 4px; }
 .lp-catch { font-size: 21px; margin: 0 0 8px; }
-.lp-lead { color: var(--muted); margin: 0 0 14px; }
+.lp-lead { color: var(--read); margin: 0 0 14px; }
 .lp-cmd { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
 .lp-cmd a { display: inline-block; font-size: 16px; color: var(--ink); text-decoration: none; padding: 4px 0 4px 20px; position: relative; }
 .lp-cmd a::before { content: '▶'; position: absolute; left: 0; color: var(--accent); opacity: 0; }
@@ -727,18 +729,22 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-step-canvas { width: 100%; height: auto; display: block; box-shadow: 0 0 0 3px var(--line); }
 .lp-step h3 { font-size: 20px; color: var(--ink); margin: 14px 0 4px; display: flex; align-items: center; gap: 10px; }
 .lp-step h3::before { content: counter(lpstep); width: 28px; height: 28px; line-height: 28px; text-align: center; background: var(--accent); color: #12152a; font-size: 16px; }
-.lp-step p { margin: 0; color: var(--muted); }
+.lp-step p { margin: 0; color: var(--read); }
 .lp-kit { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } /* 6つ（心得・道具・巻物・冒険日誌・結界・お供）を3つずつ2段に */
-.lp-kit li { background: var(--panel); box-shadow: 0 0 0 2px var(--line); padding: 14px 12px; display: grid; justify-items: start; align-content: start; gap: 2px; }
-.lp-kit .lp-icon { margin-bottom: 8px; }
+.lp-kit li { --k: var(--line); background: var(--win); box-shadow: 0 0 0 2px var(--k); padding: 14px 12px; display: grid; justify-items: start; align-content: start; gap: 2px; }
+.lp-kit li { grid-template-rows: 56px auto auto 1fr; } /* アイコンの高さがちがっても、名前の位置を横にそろえる */
+.lp-kit .lp-icon { margin-bottom: 8px; align-self: end; }
+/* 冒険の備え: 枠の色だけ、6つに1色ずつ。準備画面の見出し・冒険の記録でも同じ色を使う */
+.lp-kit .lp-kit-kokoroe { --k: var(--sonae-kokoroe); } .lp-kit .lp-kit-dougu { --k: var(--sonae-dougu); } .lp-kit .lp-kit-makimono { --k: var(--sonae-makimono); }
+.lp-kit .lp-kit-nisshi { --k: var(--sonae-nisshi); } .lp-kit .lp-kit-kekkai { --k: var(--sonae-kekkai); } .lp-kit .lp-kit-otomo { --k: var(--sonae-otomo); }
 .lp-kit b { font-size: 18px; color: var(--accent); font-weight: normal; }
 .lp-ai { font-size: 12px; color: var(--info); }
 .lp-tip { margin: 30px 0 0; max-width: 46em; padding: 16px 20px; line-height: 1.8; }
 .lp-tip b { display: block; color: var(--accent); font-weight: normal; margin-bottom: 2px; }
-.lp-kit p { margin: 6px 0 0; font-size: 13px; color: var(--muted); word-break: auto-phrase; text-wrap: pretty; } /* 日本語を文節で折り返す（語の途中で切らない） */
+.lp-kit p { margin: 6px 0 0; font-size: 13px; color: var(--read); word-break: auto-phrase; text-wrap: pretty; } /* 日本語を文節で折り返す（語の途中で切らない） */
 
 /* 討伐の再生 */
-.lp-demo { background: var(--panel); box-shadow: 0 0 0 3px var(--line), 6px 6px 0 3px #05060d; padding: 10px; }
+.lp-demo { background: var(--win); box-shadow: 0 0 0 3px var(--line), 6px 6px 0 3px #05060d; padding: 10px; }
 .lp-demo-hud { display: flex; gap: 14px; align-items: baseline; padding: 2px 4px 10px; flex-wrap: wrap; }
 .lp-demo-wave { color: var(--accent); }
 .lp-demo-case { font-size: 16px; }
@@ -759,7 +765,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-what h3 { margin-top: 0; }
 .lp-fx figcaption { padding: 12px 6px 0; display: grid; gap: 4px; }
 .lp-fx b { font-size: 18px; font-weight: normal; color: var(--accent); }
-.lp-fx span { font-size: 13px; color: var(--muted); }
+.lp-fx span { font-size: 13px; color: var(--read); }
 
 /* キャラ図鑑・ボス図鑑 */
 .lp-dex { margin-top: 30px; padding-top: 22px; }
@@ -780,13 +786,13 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 @media (prefers-reduced-motion: reduce) { .lp-boss-q { animation: none; } }
 .lp-boss-season { margin: 12px 4px 0; color: var(--info); font-size: 13px; }
 .lp-boss h3 { margin: 0 4px 6px; color: var(--ink); font-size: 17px; }
-.lp-boss p:last-child { margin: 0 4px; font-size: 13px; color: var(--muted); }
+.lp-boss p:last-child { margin: 0 4px; font-size: 13px; color: var(--read); }
 
 /* ランキング */
 .lp-rank-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 34px; align-items: start; }
 .lp-rank-wrap > div > p { margin: 0 0 14px; }
 .lp-order { list-style: none; padding: 0; margin: 0 0 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 360px; counter-reset: lpord; }
-.lp-order li { counter-increment: lpord; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; background: var(--panel); box-shadow: 0 0 0 2px var(--line); padding: 8px 14px 8px 10px; }
+.lp-order li { counter-increment: lpord; display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; background: var(--win); box-shadow: 0 0 0 2px var(--line); padding: 8px 14px 8px 10px; }
 .lp-order li::before { content: counter(lpord); grid-row: span 2; width: 26px; height: 26px; line-height: 26px; text-align: center; background: var(--accent); color: #12152a; }
 .lp-order b { font-weight: normal; font-size: 17px; color: var(--accent); }
 .lp-order span { font-size: 12px; color: var(--muted); }
@@ -806,16 +812,18 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-learn { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .lp-learn li { position: relative; padding: 16px 16px 16px 18px; display: grid; align-content: start; gap: 4px; }
 .lp-learn h4 { margin: 0; padding-right: 28px; color: var(--accent); font-size: 17px; font-weight: normal; line-height: 1.5; word-break: auto-phrase; }
-.lp-learn p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.8; color: var(--muted); word-break: auto-phrase; text-wrap: pretty; }
-.lp-learn-no { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; display: grid; place-items: center; background: var(--accent); color: var(--ink); font-size: 13px; }
+.lp-learn p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.8; color: var(--read); word-break: auto-phrase; text-wrap: pretty; }
+.lp-learn-no { position: absolute; top: 12px; right: 12px; width: 24px; height: 24px; display: grid; place-items: center; background: var(--accent); color: #12152a; font-size: 13px; }
 .lp-gm { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 26px; align-items: start; margin-top: 18px; }
 .lp-gm-face { position: sticky; top: calc(var(--topbar-h, 55px) + 16px); display: grid; justify-items: center; gap: 4px; color: var(--accent); font-size: 14px; }
 .lp-standalone .lp-gm-face { top: 16px; }
-.lp-gm-canvas { width: 156px; height: 120px; background: var(--panel); box-shadow: 0 0 0 3px var(--line); }
+.lp-gm-canvas { width: 156px; height: 120px; background: var(--win); box-shadow: 0 0 0 3px var(--line); }
+/* ギルドマスターの語り: 線だけの吹き出し。縁と、顔の側の三角のしっぽを橙にする */
+.lp-gm .lp-say { border-color: var(--accent); }
 .lp-gm-talk { display: grid; gap: 22px; }
 .lp-say h3 { margin: 0 0 6px; color: var(--accent); font-size: 18px; }
 .lp-say p { margin: 0; line-height: 1.8; }
-.lp-say:first-child::before { content: ''; position: absolute; left: -15px; top: 22px; border: 9px solid transparent; border-right-color: var(--ink); border-left: 0; }
+.lp-gm-talk .lp-say:first-child::before { content: ''; position: absolute; left: -12px; top: 22px; border: 9px solid transparent; border-right-color: var(--accent); border-left: 0; }
 
 /* 最後の導線 */
 .lp-cta { margin: 110px 0 48px; }
@@ -861,9 +869,11 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
   .lp-step-canvas { grid-row: span 2; }
   .lp-step h3 { margin-top: 0; }
   .lp-kit { grid-template-columns: minmax(0, 1fr); }
-  .lp-kit li { grid-template-columns: auto 1fr; column-gap: 12px; align-items: center; }
+  .lp-kit li { grid-template-columns: 56px 1fr; grid-template-rows: none; column-gap: 12px; align-items: center; }
+  .lp-kit .lp-icon { justify-self: center; align-self: center; }
   .lp-kit .lp-icon { grid-row: span 3; margin: 0; }
   .lp-kit p { grid-column: 2; margin-top: 2px; }
+
   .lp-fx-grid { grid-template-columns: minmax(0, 1fr); }
   .lp-dex { padding: 20px 8px 10px; }
   .lp-char { font-size: 10px; padding: 2px 0 4px; }
@@ -871,7 +881,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
   .lp-gm { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .lp-gm-face { position: static; grid-template-columns: auto 1fr; justify-items: start; align-items: center; gap: 12px; }
   .lp-gm-canvas { width: 104px; height: 80px; }
-  .lp-say:first-child::before { left: 24px; top: -15px; border: 9px solid transparent; border-bottom-color: var(--ink); border-top: 0; }
+  .lp-gm-talk .lp-say:first-child::before { left: 24px; top: -12px; border: 9px solid transparent; border-bottom-color: var(--accent); border-top: 0; }
   .lp-table { font-size: 13px; }
   .lp-cta { margin-top: 80px; }
   .lp-cta-copy { position: static; padding: 18px 8px 14px; }
@@ -1089,3 +1099,51 @@ main p, main li, main dd { word-break: auto-phrase; }
 .site-foot { text-align: center; padding: 24px 16px 32px; }
 .site-foot a { color: var(--muted); }
 .admin-settings > .row-gap { margin-top: 12px; }
+
+/* ===== デザインシステムをアプリ本体に（2026-10-31）=====
+   操作するものは暗い窓、読むもの（討伐依頼書・資料室の本文）はドットの縁の羊皮紙。
+   タブは塗らずに橙の文字と下線。語りは線だけの吹き出し（ギルドマスター＝橙、先輩冒険者＝水色）。 */
+/* 青い塗り（--panel #1d2242・--panel-2 #262c55）をやめ、窓の色と、一段だけ持ち上げた暗い色に */
+:root { --panel: #0d1022; --panel-2: #181d3a; }
+:root { --read: #d2d5e8; --paper: #efe2c0; --paper-2: #e4d3a8; --paper-ink: #2b1d12; --paper-muted: #5a4431; --paper-edge: #5a3a1e; --seal: #9a2a22; }
+/* 説明文は紫がかった灰より明るい色で */
+main p.muted, main p .muted { color: var(--read); }
+/* タブ: 塗らない。選んだ所だけ橙の文字と下線 */
+.tab { color: var(--muted); background: none; box-shadow: none; padding: 8px 14px; }
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--accent); background: none; box-shadow: inset 0 -4px 0 var(--accent); }
+.ref-tabs { padding: 4px 12px 0; gap: 8px; }
+/* 小さな項目のタイルも、青で塗らずに窓の色に */
+.prepare-card, .award, .sample, .fighter-card, .notice { background: var(--win); }
+/* 準備のカードの見出しに、冒険の備えの色の目印（紹介ページの「冒険の備え」の枠の色と同じ） */
+.kit-kokoroe { --k: var(--sonae-kokoroe); } .kit-dougu { --k: var(--sonae-dougu); } .kit-makimono { --k: var(--sonae-makimono); }
+.kit-nisshi { --k: var(--sonae-nisshi); } .kit-kekkai { --k: var(--sonae-kekkai); } .kit-otomo { --k: var(--sonae-otomo); }
+.builder .card[class*="kit-"] > h3::before { content: ''; display: inline-block; width: 12px; height: 12px; background: var(--k); margin-right: 10px; vertical-align: 1px; }
+
+/* 読むものは紙: 討伐依頼書 */
+.ref-col .card.quest { background: var(--paper); color: var(--paper-ink); border-left: 0; padding: 20px 22px; margin: 4px 4px 12px;
+  box-shadow: 4px 0 0 var(--paper-edge), -4px 0 0 var(--paper-edge), 0 4px 0 var(--paper-edge), 0 -4px 0 var(--paper-edge), 8px 8px 0 #05060d; }
+.ref-scroll .quest .eyebrow, .ref-scroll .quest .small, .ref-scroll .quest .muted { color: var(--paper-muted); }
+.ref-scroll .quest .quest-title { color: var(--seal); }
+.ref-scroll .quest h2::before { background: var(--seal); box-shadow: 3px 3px 0 var(--paper-edge); }
+.ref-scroll .quest h3 { color: var(--paper-ink); border-top: 2px dashed var(--paper-edge); padding-top: 12px; }
+.ref-scroll .quest .report { background: var(--paper-2); color: var(--paper-ink); }
+.ref-scroll .quest .report-head b { color: var(--paper-ink); }
+/* 読むものは紙: 資料室の一冊ずつ（棚の見出しやボタンは窓のまま） */
+.ref-col .library .lib-item { background: var(--paper); color: var(--paper-ink); padding: 8px 14px; margin: 10px 4px;
+  box-shadow: 4px 0 0 var(--paper-edge), -4px 0 0 var(--paper-edge), 0 4px 0 var(--paper-edge), 0 -4px 0 var(--paper-edge); }
+.ref-col .library .lib-item summary b { color: var(--paper-ink); }
+.ref-col .library .lib-item .muted { color: var(--paper-muted); }
+.ref-col .library .lib-item .ref-body { background: none; box-shadow: none; color: var(--paper-ink); font-family: var(--font); font-size: 14px; line-height: 1.85; padding: 8px 0 4px; border-top: 2px dashed var(--paper-edge); margin-top: 8px; word-break: normal; overflow-wrap: anywhere; }
+
+/* ギルドマスターの語り: 線だけの吹き出し（縁は橙、顔の側に三角のしっぽ）。顔の枠は落ち着いた線の色 */
+.gm-bubble { background: var(--win); border: 3px solid var(--accent); border-radius: 6px; box-shadow: 0 0 0 3px var(--win), 6px 6px 0 3px #05060d; padding: 12px 16px; }
+.gm-says > .gm-bubble::before { content: ''; position: absolute; left: -12px; top: 22px; border: 9px solid transparent; border-right-color: var(--accent); border-left: 0; }
+.gm-canvas { background: var(--win); box-shadow: 0 0 0 3px var(--line); }
+/* 先輩冒険者: 同じ形で、縁は水色 */
+.senpai-face { color: var(--info); }
+.senpai-canvas { box-shadow: 0 0 0 3px var(--line); }
+.senpai-bubble { background: var(--win); color: var(--ink); border: 3px solid var(--info); border-radius: 6px; box-shadow: 0 0 0 3px var(--win), 6px 6px 0 3px #05060d; }
+.senpai-says .senpai-bubble::before { left: -12px; top: 26px; border: 9px solid transparent; border-right-color: var(--info); border-left: 0; }
+.senpai-says .senpai-bubble::after { content: none; }
+.senpai-tip::before { color: var(--info); }

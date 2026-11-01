@@ -760,7 +760,8 @@ export async function renderAbout(root, opts = {}) {
         ['otomo', tl('お供'), tl('サブエージェント'), tl('頼まれたときだけ動く、もうひとりのAI。自分の心得と道具で調べて、要点だけを返す。')],
     ];
     const howto = h('section', { class: 'lp-sec', id: 'lp-howto' }, h('h2', {}, tl('遊び方')), h('ol', { class: 'lp-steps' }, ...steps.map(([k, t, body]) => h('li', { class: 'lp-step' }, stepScene(k, ticker), h('h3', {}, t), h('p', {}, body)))), h('h3', { class: 'lp-sub' }, tl('冒険の備え')), // 持たせる物だけでなく、連れていくお供もあるので「備え」
-    h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', {}, iconCanvas(id, 4, name), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
+    // 備えごとに枠の色を変える（準備画面の見出し・冒険の記録でも同じ色を使う）
+    h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', { class: `lp-kit-${id}` }, iconCanvas(id, 4, name), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
     // --- 討伐の再生 ---
     const demo = h('section', { class: 'lp-sec', id: 'lp-demo' }, h('h2', {}, tl('実際の討伐')), h('p', { class: 'lp-intro' }, tl(`見本の討伐「{0}」。討伐隊{1}人の記録です。ボスが動くたびに、冒険者それぞれのAIが「どう動くか」を答え、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。`, data.task.title, full.fighters.length)), mainDemo(full, ticker, [best]));
     // --- 演出のこだわり ---

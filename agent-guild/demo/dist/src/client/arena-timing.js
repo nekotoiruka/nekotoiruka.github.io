@@ -94,7 +94,7 @@ export function hitStop(w, phase) {
         for (const e of wv.events) {
             if (e.type === 'attack' && (focus.has(e.f) || e.crit))
                 list.push([e.t, e.crit ? 0.0009 : 0.0006, 0.05]);
-            if ((e.type === 'hit' || e.type === 'evade') && focus.has(e.f))
+            if ((e.type === 'hit' || (e.type === 'evade' && !this.noThreat(w))) && focus.has(e.f))
                 list.push([IMPACT + this.lagOf(w, e.f), 0.0006, 0.06]);
             if (e.type === 'bossDown')
                 list.push([e.t, 0.002, 0.04]);
@@ -163,7 +163,7 @@ export function cues(w) {
     for (const e of wv.events) {
         if (e.type === 'strike' && focus.has(e.f) && e.used.tools.length && !ch)
             c.push({ t: e.t, s: 'tool' });
-        if (e.type === 'evade' && focus.has(e.f)) {
+        if (e.type === 'evade' && focus.has(e.f) && !this.noThreat(w)) { // 攻撃が来ない回は、身のこなしの音を出さない
             const ev = this.evadeOf(w, e.f), co = counterFor(this.script.theme?.kind, this.respScene(w));
             c.push({ t: IMPACT + this.lagOf(w, e.f), s: co ? co.sfx : ev === 'chant' ? 'barrier' : ev === 'resist' ? 'shatter' : ev === 'block' ? 'guard' : ev === 'barrier' ? 'barrier' : ev === 'slash' ? 'slash' : ev === 'shoot' ? 'shoot' : 'whoosh' });
         }

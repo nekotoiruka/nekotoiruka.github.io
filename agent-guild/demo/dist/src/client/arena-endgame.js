@@ -2,6 +2,7 @@ import { clamp01, ease } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { PIXEL_FONT, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
+const CHAIN_BANNER_LAG = 0.05; // 大魔法で倒したときの「討伐成功！」の遅れ（進行度。着弾のあとはスローなので、本番の速さで1秒ほど）
 // --- 終盤の演出: ボス撃破・撃退、戦果1位 ---
 export function endgame(ctx, w, phase, outro, views, down) {
     const s = this.script;
@@ -18,10 +19,12 @@ export function endgame(ctx, w, phase, outro, views, down) {
     const cap = s.theme?.captions;
     if (this.escapeAt && esc >= 0)
         this.bigBanner(ctx, esc - 0.15, tl('討伐成功！'), cap?.escape ?? tl('{0}はたまらず逃げ出した！ 戦果1位は…', s.boss.name), '#ffd166');
+    // 大魔法で倒しきったときは、特大のダメージ数字（arena-hud.ts の chainDmg）を見せてから、帯を出す
+    const lag = this.downAt && this.chainOf(this.downAt.wave)?.view.full ? CHAIN_BANNER_LAG : 0;
     if (down >= 0)
-        this.bigBanner(ctx, down, tl('討伐成功！'), cap?.down ?? tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
+        this.bigBanner(ctx, down - lag, tl('討伐成功！'), cap?.down ?? tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
     const winT = this.winner !== null ? t - (s.waves.length - 1 + ((s.waves[s.waves.length - 1].events.find((e) => e.type === 'winner')?.t) ?? 1)) : -1;
-    if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75) && (esc < 0 || esc > 0.9)) {
+    if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75 + lag) && (esc < 0 || esc > 0.9)) {
         const v = views[this.winner];
         const p = this.proj(v.x, v.y);
         const k = clamp01(winT / 0.3);

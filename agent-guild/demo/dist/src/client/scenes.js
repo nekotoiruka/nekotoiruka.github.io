@@ -3357,12 +3357,7 @@ function chainTop(a, c) {
         }
         flash(a, bump(p, c.impact - 0.004, c.impact + 0.05), '#ffffff', 0.95);
         flash(a, bump(p, c.doneT, c.doneT + 0.03), '#fff6c8', 0.5);
-        // 特大のダメージ数字
-        const dk = win(p, c.impact, c.impact + 0.26);
-        if (dk > 0 && dk < 1 && c.dmg > 0) {
-            const pop = 1 + 0.8 * (1 - ease(clamp01(dk / 0.1)));
-            text(ctx, fmtDmg(c.dmg), a.body.x + 44, a.body.y - 26 - ease(dk) * 10, R(26 * pop), a.frame % 6 < 3 ? '#ffffff' : '#ffe27a', Math.min(1, (1 - dk) * 5), '#5a1a00');
-        }
+        // 特大のダメージ数字は、画面座標で（arena-hud.ts の chainDmg。会心と同じ色）
     }
 }
 // 輪郭だけの色つきシルエット（カットインのふち取り）。キャラ×色ごとに一度だけ作る

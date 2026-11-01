@@ -14,7 +14,7 @@ import { reducedMotion } from './motion.js';
 // --- キャラ1体: 回答 → 構え → 回避 or 被弾 → 反撃 ---
 export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarget, atk) {
     const s = this.script;
-    let ox = 0, oy = 0, flash = false, tilt = 0;
+    let ox = 0, oy = 0, flash = false, tilt = 0, groundDy = 0; // groundDy: 足もとの床の高さの変化（斬りかかりでボスの前の列へ寄るとき。跳ぶ高さは入れない）
     const ghosts = [];
     let action = 'idle', act01 = 0;
     const set = (a, t) => { action = a; act01 = clamp01(t); };
@@ -101,8 +101,16 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     // 見本帳で武器ごとに選んだ動き（見本帳は 0.40 で当たる。本番は IMPACT＝0.42 ＋ 届くまでの遅れ）
     const proto = evaded && !uHero && v.alive ? this.protoOf(w, v.f) : null;
     const protoT = phase - lag - 0.02;
-    const protoOn = !atkOn && !!proto && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
-    if (protoOn) { /* 動きは drawInArena が描く */ }
+    const protoOn = !atkOn && !!proto && !this.noThreat(w) && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
+    const calm = this.noThreat(w); // 攻撃が飛んでこない回（隙あり・外した人のいない大技）: よけたり受けたりせず、反撃に向けて構えるだけ
+    if (calm && evaded && !uHero && v.alive) {
+        const k = win(0.34, 0.46) * (1 - win(0.46, 0.52));
+        if (k > 0) {
+            set('guard', 0.6 * k);
+            ox -= ease(k) * 1.5;
+        }
+    }
+    if (protoOn || calm) { /* 動きは drawInArena が描く・攻撃が来ないので身のこなしはしない */ }
     else if (evaded && !uHero && holdSc !== 'spell' && holdSc !== 'illusion') {
         const co = counterFor(this.script.theme?.kind, this.respScene(w)); // ボスごとの対応技（正解の動きに合わせた基本の場面）
         const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
@@ -206,8 +214,14 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         ox += Math.sin(this.frame / 3) * 1.5;
         tilt += Math.sin(this.frame / 5) * 0.12;
     }
-    // 被弾: 素早く吹き飛んで、ゆっくり戻る
-    if (hit && phase >= IMPACT + lag && phase < IMPACT + lag + 0.16) {
+    // 被弾: 見本帳の「被弾」の型で見せる（赤く光る・尻もち・目を回す・体の見た目が変わる。割り当ては hurtmoves.ts）。
+    // 型の 0.4 が当たる瞬間（本番は IMPACT＝0.42 ＋ 届くまでの遅れ）。この回で倒れる人は、型を使わず倒れる動きへ
+    const hurtPat = hit && !uHero && s.waves[w].aliveAfter[v.f] ? this.hurtOf(w) : null;
+    const hurtT = phase - lag - 0.02;
+    const hurtOn = !!hurtPat && v.alive && hurtT >= 0.395 && hurtT < 0.995;
+    const away = hurtOn && hurtPat.id === 'hurt-fly' && hurtT > 0.44 && hurtT < 0.92; // 画面の外へ飛ばされているあいだ（立ち位置に目印や光を残さない）
+    // 以前の被弾（型がない場面）: 素早く吹き飛んで、ゆっくり戻る
+    if (hit && !hurtPat && phase >= IMPACT + lag && phase < IMPACT + lag + 0.16) {
         const k = (phase - IMPACT - lag) / 0.16;
         set('hurt', 0);
         ox += Math.pow(Math.sin(Math.pow(k, 0.55) * Math.PI), 1.2) * 8;
@@ -230,6 +244,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
             const wind = win(at.t - 0.2, at.t - 0.12), go = win(at.t - 0.12, at.t - 0.02), back = win(at.t + 0.08, at.t + 0.2);
             if (wind > 0 && back < 1) {
                 const g = go * go * go * (1 - ease(back)); // 加速しながら一気に（イーズイン）
+                groundDy = (ty - v.y) * g;
                 ox += (tx - v.x) * g + 4 * ease(wind) * (1 - go);
                 oy += (ty - v.y) * g - Math.sin(go * Math.PI) * 6 * (1 - back) + 1.5 * ease(wind) * (1 - go);
                 if (go <= 0)
@@ -280,28 +295,35 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     if (winNow)
         set('victory', (this.frame % 36) / 36);
     const x = v.x + ox, y = v.y + oy;
+    // 足もとの輪・頭上の目印・選んだときの輪は、キャラが動いてもついていく。
+    // 見本帳の型（反撃・身のこなし・被弾）で描くときは、型が描いた位置（1コマ前。drawInArena が返す）を使う。
+    // 跳んでいるあいだ、輪は床に残す（床の高さは変わる: 斬りかかりでボスの前の列へ寄るとき）
+    const patNow = hurtOn || atkOn || protoOn;
+    const prev = this.footAt.get(v.f);
+    const foot = patNow && prev ? prev : { x, y: y + 1, ground: v.y + groundDy + 1 };
     if (this.mine.has(v.f)) {
         ctx.save();
         // 足元の金の輪と、立ちのぼる光（自分のキャラがひと目で分かるように）
-        const g = ctx.createLinearGradient(0, v.y - 40, 0, v.y + 2);
+        const gx = foot.x, gy = foot.ground - 1;
+        const g = ctx.createLinearGradient(0, gy - 40, 0, gy + 2);
         g.addColorStop(0, 'rgba(255,209,102,0)');
         g.addColorStop(1, 'rgba(255,209,102,0.28)');
         ctx.fillStyle = g;
-        ctx.fillRect(Math.round(v.x - 11), Math.round(v.y - 40), 22, 42);
+        ctx.fillRect(Math.round(gx - 11), Math.round(gy - 40), 22, 42);
         ctx.strokeStyle = '#ffd166';
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.7 + Math.sin(this.frame / 6) * 0.3;
         ctx.beginPath();
-        ctx.ellipse(v.x, v.y + 1, 14, 5.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(gx, gy + 1, 14, 5.5, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
-        if (v.alive && alpha > 0)
-            this.youMarker(x, y - 40); // 頭上（スキルの飾りより上）。斬りかかりに駆け寄るときも、大技の最中も、キャラについていく
+        if (v.alive && alpha > 0 && !away)
+            this.youMarker(foot.x, foot.y - 41); // 頭上（スキルの飾りより上）。斬りかかりに駆け寄るときも、大技の最中も、キャラについていく
     }
     if (this.selected === v.f || this.hovered === v.f) {
         ctx.strokeStyle = '#ffffff';
         ctx.beginPath();
-        ctx.ellipse(v.x, v.y + 1, 11, 4, 0, 0, Math.PI * 2);
+        ctx.ellipse(foot.x, foot.ground, 11, 4, 0, 0, Math.PI * 2);
         ctx.stroke();
     }
     if (isTarget && atk !== 'treasure' && this.sceneOf(w) !== 'opening' && phase > 0.28 && phase < IMPACT && v.alive && this.frame % 10 < 6) {
@@ -328,23 +350,27 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     const own = this.mine.has(v.f), gear = { ...this.gears[v.f], fams: [], ...(own ? {} : { charms: [] }) };
     if (!own && this.gears[v.f].charms.length && v.alive && (alpha ?? 1) > 0.5)
         this.motes(ctx, x, y, v.f);
-    if (st && v.alive && outro === 0 && !this.chainOf(w))
+    if (st && v.alive && outro === 0 && !this.chainOf(w) && !away)
         this.aura(ctx, x, y, v.f, st, phase);
     // 武器の先の位置（飛び道具はここから出す。このあと同じコマで描く projectile が使う）
     this.muzzles.set(v.f, muzzleOf(look, x, y + 1, { frame: this.frame + v.f * 7, flip, action, t: act01, rot }));
-    if (atkOn) {
+    let drawn = null;
+    if (hurtOn)
+        drawn = drawInArena(ctx, { pattern: hurtPat, resp: 'dodge', t: hurtT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
+    else if (atkOn) {
         // 近接の型が踏みこむ先: ボスの前。並びの上下・前後で少しずつずらす。高さは、4つの列をボスの体の幅（足元の少し上〜少し下）に詰めて、どの列もボスに当たって見えるように
         const row = clamp01((v.y - 98) / 96), col = Math.max(-1, Math.min(1, (v.x - 248) / 70));
-        drawInArena(ctx, { pattern: aPat, resp: 'cut', attack: true, reach: this.bossFoot.x + 42 + row * 12 + col * 8, reachY: this.bossFoot.y - 14 + row * 28, t: aT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
+        drawn = drawInArena(ctx, { pattern: aPat, resp: 'cut', attack: true, reach: this.bossFoot.x + 42 + row * 12 + col * 8, reachY: this.bossFoot.y - 14 + row * 28, t: aT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
     }
     else if (protoOn)
-        drawInArena(ctx, { pattern: proto.pattern, resp: proto.resp, t: protoT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
+        drawn = drawInArena(ctx, { pattern: proto.pattern, resp: proto.resp, t: protoT, frame: this.frame + v.f * 7, look: { look, gear }, hx: v.x, fy: v.y + 1, boss: this.bossBody, aw: s.arena.w, ah: s.arena.h, quiet: !this.mine.has(v.f) });
     else
         drawHero(ctx, look, gear, x, y + 1, {
             frame: this.frame + v.f * 7, flip, flash: flash && !reducedMotion(), action, t: act01, rot, alpha,
             ...(st?.charmed && phase > GUARD_HIT + 0.04 && phase < 0.95 && v.alive ? { eyes: 'swirl' } : {}),
             skillGlow,
         });
+    this.footAt.set(v.f, drawn ?? { x, y: y + 1, ground: v.y + groundDy + 1 });
     const pet = this.gears[v.f].fams[0];
     if (pet)
         this.petFx(ctx, v, pet, chain ? x : v.x, chain ? y : v.y, st, phase, { alpha, own, busy: !!chain || outro > 0 || uHero });

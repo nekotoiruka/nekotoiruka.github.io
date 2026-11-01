@@ -1,4 +1,4 @@
-import { runeLine } from './arena-common.js';
+import { chainTiming, runeLine } from './arena-common.js';
 import { CHAIN_T, chainOrder } from '../shared/simulate.js';
 import { chainBreakAt, isUltScene, verseAt } from './scenes.js';
 // 連携詠唱で並ぶ足元の位置（唱える順。最後＝あなたがボスに向いた左の先頭）。
@@ -52,7 +52,7 @@ export function chainOf(w) {
         const spots = chainSpots(front.length, ring);
         front.forEach((f, k) => line.set(f, spots[k]));
         view.ring = ring;
-        plan = { ev, view, line, dmgAt: full ? ev.t : breakT + 0.05, last: w === s.waves.length - 1 };
+        plan = { ev, view, line, dmgAt: full ? ev.t + chainTiming.delay : breakT + 0.05, last: w === s.waves.length - 1 };
     }
     this.chainCache.set(key, plan);
     return plan;

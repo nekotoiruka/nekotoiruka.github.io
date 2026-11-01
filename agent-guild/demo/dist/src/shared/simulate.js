@@ -37,6 +37,7 @@ const CHAIN_MUL = 3;
 export const RAID_PARTY = 12; // 討伐隊の人数（自分＋最大11人）
 const RAID_CLEAR = 0.65; // 12人がそれぞれ8割ほど正しく動ければ倒しきれる（外しやすいのは与ダメの大きい大技の場面なので、与ダメでは全問正解の6〜7割ほどになる）
 const ULT_HIT = 2; // 討伐: ボスの大技（巻物が要る場面）を外したときの被ダメージの倍率（倒れることがある） // 連携詠唱の大魔法: 参加者全員が巻物の必殺技を当てたときの合計の何倍か
+const CHAIN_FINISH = 0.8; // 大魔法が決まる討伐: 大魔法の直前に残る体力（大魔法のダメージの何倍か。1より小さいので、必ず倒しきる）
 const CHAIN_FIZZLE = 0.25; // 詠唱が途切れたとき（あなたが外した）: 正解者の力の合計 × この倍率（大魔法の1割に満たない）
 // ---- 連携詠唱（scene 'chain'）----
 // 時間の割り振り（ウェーブ内の進行度）。一列に並ぶ → 一節ずつ唱える → 大魔法が落ちる（失敗なら、そのあと総攻撃）
@@ -360,6 +361,20 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             avgLatencyMs: Math.round(rs.reduce((a, r) => a + r.latencyMs, 0) / Math.max(1, rs.length)),
         };
     });
+    // 討伐の最後が連携詠唱で、大魔法が決まる（見ている人も正しく唱えられる）とき: 大魔法が「倒しきる一撃」になるよう、ボスの体力を上げ直す。
+    // ふつうに計算した体力だと、強い討伐隊は最後の回の前に削りきってしまい（体力1で踏みとどまる）、
+    // 「倒しきるには、伝説の大呪しかない」と言いながら、大魔法の大ダメージが体力の減りに表れない。
+    // 大魔法の前に、大魔法の CHAIN_FINISH 倍の体力が残るようにする（上げるだけ。勝ち負けは変わらない: 大魔法で必ず倒れる）
+    if (bossHpOverride === undefined && waves.length && isChainCase(cases[waves.length - 1])) {
+        const lastWave = waves[waves.length - 1];
+        const ch = lastWave.events.find((e) => e.type === 'chain');
+        if (ch?.full && ch.dmg > 0) {
+            const before = waves.slice(0, -1).reduce((a, wv) => a + wv.events.reduce((b, e) => b + (e.type === 'attack' ? e.dmg : 0), 0), 0);
+            const want = Math.round(before + ch.dmg * CHAIN_FINISH);
+            if (want > bossMax)
+                return simulateBattle(entrants, casesIn, seed, mode, want, opts);
+        }
+    }
     return {
         version: 3, mode, seed, arena: { ...ARENA }, boss: { name: tl('ドラゴン'), maxHp: bossMax, ...BOSS_POS },
         cases, fighters, waves, standings,

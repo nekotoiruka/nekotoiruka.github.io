@@ -1,4 +1,4 @@
-import { bump, clamp01, ease, lerp } from './arena-common.js';
+import { bump, chainTiming, clamp01, ease, lerp } from './arena-common.js';
 import { skillLook } from '../shared/build.js';
 import { TOOL_BY_ID } from '../shared/catalog.js';
 import { SKILL_WEIGHT } from '../shared/stats.js';
@@ -230,13 +230,13 @@ export function bubble(ctx, text, wx, wy, ok) {
     });
 }
 // ダメージの数字: ポンと大きく飛び出して弾み、縮んで消える。会心は金色で揺れ、「CRITICAL」の文字つき
-export function damageNum(wx, wy, value, age01, crit, kind) {
+export function damageNum(wx, wy, value, age01, crit, kind, o = {}) {
     const p = this.proj(wx, wy);
     const k = age01;
     const pop = k < 0.12 ? 1 + (1 - k / 0.12) * (crit ? 1.2 : 0.7) : k < 0.22 ? 1 - Math.sin(((k - 0.12) / 0.1) * Math.PI) * 0.12 : 1;
     const rise = k < 0.2 ? -Math.sin((k / 0.2) * Math.PI / 2) * 10 : -10 + (k - 0.2) * 4;
     const alpha = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
-    const base = kind === 'boss' ? (crit ? 15 : 11) : 10;
+    const base = (kind === 'boss' ? (crit ? 15 : 11) : 10) * (o.scale ?? 1);
     const size = Math.round(base * pop * (1 + (this.cam.z - 1) * 0.25));
     const sx = crit && k < 0.3 ? Math.sin(this.frame * 2.1) * 1.5 : 0;
     this.uiTop.push(() => {
@@ -246,10 +246,19 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = `bold ${size}px ${PIXEL_FONT}`;
-        const x = Math.round(p.x + sx), y = Math.round(p.y + rise);
-        const text = kind === 'boss' ? String(Math.round(value)) : `-${Math.round(value)}`;
+        const num = o.comma ? String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(Math.round(value));
+        const text = kind === 'boss' ? num : `-${num}`;
+        // 大きな数字は、画面からはみ出さないように（カメラが寄っているとき、ボスの近くは画面のはしになる）
+        let x = Math.round(p.x + sx), y = Math.round(p.y + rise);
+        if (o.scale) {
+            const { w: AW, h: AH } = this.script.arena;
+            ctx.font = `bold ${size}px ${PIXEL_FONT}`;
+            const hw = ctx.measureText(text).width / 2 + 4, hh = size / 2 + 4;
+            x = Math.round(Math.max(hw, Math.min(AW - hw, x)));
+            y = Math.round(Math.max(hh + 12, Math.min(AH - hh, y)));
+        }
         ctx.lineJoin = 'round';
-        ctx.lineWidth = crit ? 4 : 3;
+        ctx.lineWidth = Math.max(crit ? 4 : 3, size / 6);
         ctx.strokeStyle = crit ? '#5a1000' : '#14101e';
         ctx.strokeText(text, x, y);
         if (crit) {
@@ -262,7 +271,7 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
         else
             ctx.fillStyle = kind === 'boss' ? '#ffffff' : '#ff6b6b';
         ctx.fillText(text, x, y);
-        if (crit && k < 0.7) {
+        if (crit && k < 0.7 && o.label !== false) {
             ctx.font = `bold 7px ${PIXEL_FONT}`;
             ctx.lineWidth = 2.5;
             ctx.strokeStyle = '#5a1000';
@@ -362,5 +371,15 @@ export function hpBar(ctx, v) {
     const k = v.hp / 100;
     ctx.fillStyle = k > 0.5 ? '#63c74d' : k > 0.25 ? '#feae34' : '#e43b44';
     ctx.fillRect(x + 1, y + 1, Math.max(0, Math.round(14 * k)), 1);
+}
+// ---- 連携詠唱の大魔法のダメージ（1万を超えることもある、討伐の最後の一撃）----
+// ほかのダメージ数字と同じ所（ボスの体の右上あたり＝反撃の数字が散らばる範囲のまん中）に、同じ出方で。色は会心と同じ。
+// 大きさだけ2倍、CRITICAL の文字はつけない（ケタの多さで伝わる）。3ケタごとにカンマ。
+// 出る瞬間は、光の柱が落ちてから chainTiming.delay あと（体力の減り・ボスが崩れるのと同じ瞬間）
+export function chainDmg(c, phase) {
+    const age = phase - c.impact - chainTiming.delay;
+    if (age < 0 || age > 0.22 || c.dmg <= 0)
+        return;
+    this.damageNum(this.bossBody.x, this.bossBody.y - 28, c.dmg, age / 0.22, true, 'boss', { scale: 2, label: false, comma: true });
 }
 //# sourceMappingURL=arena-hud.js.map
