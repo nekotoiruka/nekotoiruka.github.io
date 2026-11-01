@@ -1147,3 +1147,29 @@ main p.muted, main p .muted { color: var(--read); }
 .senpai-says .senpai-bubble::before { left: -12px; top: 26px; border: 9px solid transparent; border-right-color: var(--info); border-left: 0; }
 .senpai-says .senpai-bubble::after { content: none; }
 .senpai-tip::before { color: var(--info); }
+
+/* --- デザインシステムの残り（2026-11-01）--- */
+/* 募集要項の「冒険の備え」: 紹介ページと同じドット絵のアイコンと、枠の色 */
+.mech-card { --k: var(--line); background: var(--win); box-shadow: 0 0 0 2px var(--k); }
+.mech-card.kit-kokoroe { --k: var(--sonae-kokoroe); } .mech-card.kit-dougu { --k: var(--sonae-dougu); } .mech-card.kit-makimono { --k: var(--sonae-makimono); }
+.mech-card.kit-nisshi { --k: var(--sonae-nisshi); } .mech-card.kit-kekkai { --k: var(--sonae-kekkai); } .mech-card.kit-otomo { --k: var(--sonae-otomo); }
+.mech-head { gap: 10px; }
+.mech-icon { flex: none; }
+/* 切り替えボタン（速さ・スロー演出など）: 塗らずに、橙の文字と枠 */
+.btn-speed.on, .card-actions .btn.on, .lp-sound[aria-pressed="true"] { background: var(--win); color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+/* 討伐に加わる案内: 主ボタンを横いっぱいの帯にしない */
+.join-cta .btn-primary { width: auto; margin: 0; padding: 8px 18px; }
+/* 見た目の選択: 青みのない地に。選んだものは橙の枠だけ */
+.body-btn { background: var(--win); }
+.body-btn.on { background: var(--win); box-shadow: 0 0 0 3px var(--accent); }
+/* 先輩冒険者の助言の一覧: 左の色の線をやめ、印の色だけで分ける。線の枠のタイルに */
+.coach-list li, .coach-warn, .coach-tip, .coach-good { background: var(--win); box-shadow: 0 0 0 2px var(--line); }
+/* 入力欄（資料室の検索など）: 白くしない */
+input[type=search], .lib-search { font-family: var(--font); font-size: 14px; color: var(--ink); background: var(--win); border: 0; box-shadow: 0 0 0 2px var(--line); padding: 6px 10px; }
+input[type=search]:focus, .lib-search:focus { outline: 2px solid var(--accent); }
+input::placeholder { color: var(--muted); }
+/* 「あなた」の目印: お供の色（金）と重ならないよう、白い札に */
+:root { --you: #ece9f6; }
+.lp-you { background: var(--you); color: #12152a; border-radius: 0; }
+.roster-item.mine { background: rgba(236, 233, 246, .08); box-shadow: inset 3px 0 0 var(--you); }
+.roster-item.mine .roster-name::before { color: var(--you); }

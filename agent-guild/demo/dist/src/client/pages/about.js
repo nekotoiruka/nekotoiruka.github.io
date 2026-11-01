@@ -9,7 +9,7 @@ import { burst, BODY_STYLE, fxColors } from '../fx.js';
 import { elderBeard, GM_GEAR, GM_LOOK } from '../guildmaster.js';
 import { drawFamiliarAt, drawHero, lookOf, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
 import { setSfx } from '../sfx.js';
-import { outlined } from '../sprites.js';
+import { kitIcon } from '../kiticons.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
 import { poseFor } from '../chibi.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
@@ -102,43 +102,6 @@ function bossPose(t, ph, angry = 0) {
         mouth: roar > 0.2 ? 2 : 0,
         eye: roar > 0.2 ? 'angry' : 'open',
     };
-}
-// ---------------------------------------------------------------------------
-// 持ち物（心得・道具・巻物・冒険日誌・結界）のドット絵アイコン
-// ---------------------------------------------------------------------------
-const ICONS = {
-    kokoroe: {
-        grid: ['wwwwwwwww', 'wkkkkkkww', 'wwwwwwwww', 'wkkkkkwww', 'wwwwwwwww', 'wkkkkkkww', 'wwwwwwwww', 'wkkkwwrrw', 'wwwwwwrrw'],
-        colors: { w: '#fff1d6', k: '#8a7a9a', r: '#e43b44' }, outline: '#5a4a3a',
-    },
-    dougu: {
-        grid: ['...bb...', '..b..b..', '.ffffff.', 'ffllffff', 'fflfffff', 'ffffyfff', 'ffffffff', '.ffffff.'],
-        colors: { b: '#8b5a2b', f: '#c98b4a', l: '#e8b878', y: '#feae34' }, outline: '#4a2a12',
-    },
-    otomo: {
-        grid: ['....hh....', '...hssh...', 'ww.sese.ww', 'wwwsssswww', '.wwddddww.', '..wddddw..', '...dddd...', '....ss....'],
-        colors: { h: '#ffd166', s: '#ffe0c8', e: '#2b1d3e', w: '#bfe9ff', d: '#ff9ce6' }, outline: '#3a4a7a',
-    },
-    makimono: {
-        grid: ['wwwwwwwwww', '.dffffffd.', '.flllllff.', '.ffffffff.', '.flllllff.', '.ffffffff.', '.dffffffd.', 'wwwwwwwwww'],
-        colors: { w: '#c98b4a', f: '#fff1d6', l: '#c77dff', d: '#e8d8c0' }, outline: '#4a2a12',
-    },
-    nisshi: {
-        grid: ['ffffffff.', 'fllllllfw', 'flyyyylfw', 'fllllllfw', 'flyyylffw', 'fllllllfw', 'ffffffffw', '.wwwwwwww', '...r.....', '...r.....'],
-        colors: { f: '#3a7bd5', l: '#5fa8ff', y: '#d8f6ff', w: '#fff1d6', r: '#e43b44' }, outline: '#14305a',
-    },
-    kekkai: {
-        grid: ['...ffff...', '.ffllllff.', 'fll....llf', 'fl..ww..lf', 'fl.wllw.lf', 'fl..ww..lf', 'fll....llf', '.ffllllff.', '...ffff...'],
-        colors: { f: '#5fcde4', l: '#bff3ff', w: '#ffffff' }, outline: '#1d4e6b',
-    },
-};
-function iconCanvas(id, scale = 4, label = '') {
-    const ic = ICONS[id];
-    const sp = outlined(`lp-icon:${id}`, ic.grid, ic.colors, ic.outline);
-    const c = pixelCanvas(sp.width * scale, sp.height * scale, 'lp-icon', label);
-    const ctx = ctx2d(c);
-    ctx.drawImage(sp, 0, 0, sp.width * scale, sp.height * scale);
-    return c;
 }
 // ---------------------------------------------------------------------------
 // キャラ
@@ -761,7 +724,7 @@ export async function renderAbout(root, opts = {}) {
     ];
     const howto = h('section', { class: 'lp-sec', id: 'lp-howto' }, h('h2', {}, tl('遊び方')), h('ol', { class: 'lp-steps' }, ...steps.map(([k, t, body]) => h('li', { class: 'lp-step' }, stepScene(k, ticker), h('h3', {}, t), h('p', {}, body)))), h('h3', { class: 'lp-sub' }, tl('冒険の備え')), // 持たせる物だけでなく、連れていくお供もあるので「備え」
     // 備えごとに枠の色を変える（準備画面の見出し・冒険の記録でも同じ色を使う）
-    h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', { class: `lp-kit-${id}` }, iconCanvas(id, 4, name), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
+    h('ul', { class: 'lp-kit' }, ...kit.map(([id, name, ai, d]) => h('li', { class: `lp-kit-${id}` }, kitIcon(id, 4, name, 'lp-icon'), h('b', {}, name), h('span', { class: 'lp-ai' }, ai), h('p', {}, d)))));
     // --- 討伐の再生 ---
     const demo = h('section', { class: 'lp-sec', id: 'lp-demo' }, h('h2', {}, tl('実際の討伐')), h('p', { class: 'lp-intro' }, tl(`見本の討伐「{0}」。討伐隊{1}人の記録です。ボスが動くたびに、冒険者それぞれのAIが「どう動くか」を答え、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。`, data.task.title, full.fighters.length)), mainDemo(full, ticker, [best]));
     // --- 演出のこだわり ---
