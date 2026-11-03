@@ -8,7 +8,16 @@ export function updateCamera(c) {
     // --- カメラ: 普段は全体、注目の反撃と決着はズーム ---
     let tz = 1, tx = AW / 2, ty = AH / 2;
     // 呪文の打ち消し・奥義・隙の大技は、画面全体で見せるのでズームしない
-    const wide = ['spell', 'ougi', 'rush', 'summon', 'parry', 'seal', 'awaken', 'opening', 'chain'].includes(this.sceneOf(w) ?? '');
+    const ov = this.camOverride;
+    if (ov) { // 紹介ページの見本の窓: カメラを決め打ち（寄らない／決めた冒険者に寄ったまま）
+        if (ov.mode === 'follow' && views[ov.f]) {
+            const v = views[ov.f];
+            tz = 1.4;
+            tx = (v.x + this.bossBody.x) / 2;
+            ty = (v.y + this.bossBody.y) / 2 - 12;
+        }
+    }
+    const wide = !!ov || ['spell', 'ougi', 'rush', 'summon', 'parry', 'seal', 'awaken', 'opening', 'chain'].includes(this.sceneOf(w) ?? '');
     if (spot && !wide) {
         const g = Math.min(1, bump(phase, spot.at.t - 0.16, spot.at.t + 0.08) * 1.5);
         if (g > 0) {
@@ -20,7 +29,7 @@ export function updateCamera(c) {
     }
     // 自分の冒険者を追う: 判断する瞬間・攻撃を受ける瞬間（幻術の回は声が届くまで）に寄る
     const me = [...this.mine].find((f) => !s.fighters[f].off && views[f]?.alive);
-    if (me !== undefined && !chain && !(spot && bump(phase, spot.at.t - 0.16, spot.at.t + 0.08) > 0)) {
+    if (me !== undefined && !ov && !chain && !(spot && bump(phase, spot.at.t - 0.16, spot.at.t + 0.08) > 0)) {
         const v = views[me], st = strikeOf.get(me);
         const sc = this.sceneOf(w);
         const shots = [];
@@ -42,7 +51,7 @@ export function updateCamera(c) {
     }
     // 巻物の大技カウンター: カメラが主役を追う（溜め → 跳躍 → 着弾）
     let camK = 0.07;
-    if (ult?.f !== undefined && views[ult.f]?.alive && !this.ultQuiet(w)) { // ほかの人の控えめな大技では、カメラは寄らない
+    if (!ov && ult?.f !== undefined && views[ult.f]?.alive && !this.ultQuiet(w)) { // ほかの人の控えめな大技では、カメラは寄らない
         const c = ultCam(ult.scene, phase, { x: views[ult.f].x, y: views[ult.f].y }, this.bossFoot, this.bossBody, AW, AH, this.ultWeapon(ult.f));
         if (c) {
             tz = lerp(tz, c[1], c[0]);
@@ -52,7 +61,7 @@ export function updateCamera(c) {
         }
     }
     // 連携詠唱: 唱えている人に少し寄る（あなたの番はもっと寄る）。外した人の番は、その人の頭のまわりへ
-    if (chain) {
+    if (chain && !ov) {
         const c = chain.view;
         const i = Math.floor((phase - c.start) / c.verse);
         const lastI = c.full ? c.len - 1 : c.upto;
@@ -73,7 +82,7 @@ export function updateCamera(c) {
         }
     }
     const fin = this.finisher(w);
-    if (fin !== null) {
+    if (fin !== null && !ov) {
         const g = bump(phase, fin - 0.12, fin + 0.2);
         if (g > 0 && down >= 0) {
             tz = lerp(tz, 1.5, g);

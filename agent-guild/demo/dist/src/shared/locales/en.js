@@ -1544,7 +1544,6 @@ const d = {
     "必殺技で、大技ごと叩き潰した！": "Crushed the special attack with an ultimate move!",
     "必殺技": "Ultimate moves",
     "ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。": "At the decisive moment, an ultimate move erupts — signature strike, flurry, summon, counter, seal, awakening — a different one each time.",
-    "ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。": "Slip past the boss's attack and strike right back. Land a critical hit and the screen shakes as the damage number leaps.",
     "武器ごとの技": "Moves by weapon",
     "斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。": "Some slash, some shoot, some cast — how you strike back depends on the weapon in hand. Each of the 16 weapons has its own way to dodge and attack.",
     "討伐対象": "TARGET",
@@ -1734,6 +1733,7 @@ const d = {
     "犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。": "The thick record of snowfield beast tracks kept by the dog-sledders' guild. For each track shape and arrangement, it lists how to drive the beast off.",
     "：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。": ": promises to avoid wrong answers, e.g. “pick action names from the ones you were taught” or “don't guess when unsure — check”.",
     "戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。": "Fake voices cut into the battle, I hear. They work the instant they're heard. You need something that stops them before they reach the ears.",
+    "ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。": "The way to dodge changes with each kind of boss attack. Once you've read it, strike right back.",
 };
 export default d;
 //# sourceMappingURL=en.js.map

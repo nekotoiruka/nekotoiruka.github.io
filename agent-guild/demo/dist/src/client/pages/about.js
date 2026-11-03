@@ -12,6 +12,7 @@ import { setSfx } from '../sfx.js';
 import { kitIcon } from '../kiticons.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
 import { poseFor } from '../chibi.js';
+import { WEAPON_LABELS } from '../../shared/catalog.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 // ---------------------------------------------------------------------------
@@ -553,7 +554,7 @@ function mainDemo(script, ticker, mine = []) {
     const r = new ArenaRenderer(canvas, script);
     r.muted = true; // 音は最初は消しておく
     r.mine = new Set(mine);
-    let time = 0, playing = !reduced;
+    let time = 0, playing = false; // はじめは止めておき、再生ボタンで動かす
     const total = r.totalTime;
     const wn = h('span', { class: 'lp-demo-wave' });
     const title = h('span', { class: 'lp-demo-case' });
@@ -590,6 +591,8 @@ function mainDemo(script, ticker, mine = []) {
         r.draw(time);
         hud();
     }, () => playing);
+    r.draw(time); // 止まっていても、はじめの1コマを見せる
+    hud();
     return h('div', { class: 'lp-demo' }, h('div', { class: 'lp-demo-hud' }, wn, title), h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'controls' }, playBtn, seek, soundBtn), h('p', { class: 'lp-sound-note' }, tl('iPhone などで音が出ないときは、消音（マナー）モードを切ってから「音：あり」を押してください。')));
 }
 function clipDirector(ticker) {
@@ -680,6 +683,50 @@ function clip(script, w, mine, ticker, dir, label, from = 0.08, to = 0.92) {
     }, () => dir.isActive(st));
     return wrap;
 }
+function reel(script, segs, ticker, dir, label) {
+    const canvas = h('canvas', { class: 'arena-canvas pixel', role: 'img', 'aria-label': label });
+    const r = new ArenaRenderer(canvas, script);
+    r.muted = true;
+    r.mine = new Set();
+    const tag = h('span', { class: 'lp-clip-tag', 'aria-hidden': 'true' });
+    let i = 0, time = 0;
+    const enter = (k) => {
+        i = k;
+        const sg = segs[i];
+        r.camOverride = sg.cam;
+        r.solo = sg.solo ?? null;
+        r.frame = 0;
+        time = sg.w + sg.from;
+        tag.textContent = sg.tag;
+    };
+    enter(0);
+    r.draw(segs[0].w + Math.min(segs[0].to, segs[0].from + 0.3)); // 止まっていても、見どころの1コマ
+    const mark = h('span', { class: 'lp-clip-mark', 'aria-hidden': 'true' });
+    const btn = h('button', { class: 'lp-clip-btn', type: 'button' }, mark);
+    const wrap = h('div', { class: 'canvas-wrap lp-clip' }, canvas, tag, btn);
+    const st = {
+        el: wrap, near: false,
+        sync: () => {
+            const on = dir.isActive(st);
+            wrap.classList.toggle('is-playing', on);
+            mark.textContent = on ? '❚❚' : tl('▶ 再生');
+            btn.setAttribute('aria-label', tl(`{0}を{1}`, label, on ? tl('一時停止') : tl('再生')));
+        },
+    };
+    btn.addEventListener('click', () => dir.toggle(st));
+    dir.add(st);
+    st.sync();
+    ticker.add(canvas, (_t, dt) => {
+        if (dt <= 0)
+            return;
+        const sl = segs[i].slow, ph = time - segs[i].w;
+        time = waveTime(r, time, sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt, 3.4);
+        if (time >= segs[i].w + segs[i].to)
+            enter((i + 1) % segs.length);
+        r.draw(time);
+    }, () => dir.isActive(st));
+    return wrap;
+}
 // ---------------------------------------------------------------------------
 // ページ本体
 // ---------------------------------------------------------------------------
@@ -758,27 +805,46 @@ export async function renderAbout(root, opts = {}) {
         const e = (ev.find(mineGuarded) ?? ev.find(guarded) ?? ev.find(calm));
         fx.push({ title: tl('幻術と結界'), body: tl('ボスは偉い人の声をまねて、もっともらしい偽の命令を混ぜてくる。あやしい声が、光の壁にはじかれて砕け散る。'), w: illW, mine: [e.f] });
     }
-    // 見切りと反撃（会心もここで見せる）: あなたがかわして会心を出した場面を優先
-    const isCrit = (e, f) => e.type === 'attack' && !!e.crit && (f === undefined || e.f === f);
-    const okBy = (wv, f) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.success);
+    // 見切りと反撃: ボスの攻撃の種類ごとに、討伐隊のかわし方と反撃を順に見せる（カメラは寄らずに全体）。
+    // 札はボスの攻撃（場面の見出し）だけ。かわし方の名前は答えになるので出さない
     const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
-    let breathW = full.waves.findIndex((wv) => plain(wv) && okBy(wv, best) && wv.events.some((e) => isCrit(e, best)));
-    if (breathW < 0)
-        breathW = full.waves.findIndex((wv) => plain(wv) && okBy(wv, best));
-    if (breathW < 0)
-        breathW = full.waves.findIndex((wv) => plain(wv) && wv.events.some((e) => e.type === 'strike' && e.success));
-    if (breathW >= 0)
-        fx.push({ title: tl('見切りと反撃'), body: tl('ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。'), w: breathW, mine: [best] });
-    // 武器ごとの技: 正しく動けた冒険者の武器がいちばん多くそろう場面（反撃の動きが武器ごとに違うのを見せる）
+    const okN = (wv) => wv.events.filter((e) => e.type === 'strike' && e.success).length;
+    const dodge = [];
+    for (const sc of ['breath', 'claw', 'dive', 'tail']) {
+        // その攻撃の最初の場面（正しく動けた人が多いもの。少なすぎるときは、いちばん多い場面）
+        const ws = full.waves.map((wv, i) => ({ wv, i })).filter(({ wv }) => full.cases[wv.caseIndex]?.scene === sc);
+        const most = Math.max(0, ...ws.map(({ wv }) => okN(wv)));
+        const bw = ws.find(({ wv }) => okN(wv) >= most - 1)?.i ?? -1;
+        // かわす瞬間（攻撃が届く前後）は、スローモーションで見せる（約3分の1の速さ）
+        if (bw >= 0 && most > 0)
+            dodge.push({ w: bw, from: 0.2, to: 0.95, slow: [0.34, 0.6, 0.35], tag: full.cases[full.waves[bw].caseIndex]?.title ?? '', cam: { mode: 'wide' } });
+    }
+    const dodgeTitle = tl('見切りと反撃');
+    // 武器ごとの技: 武器のちがう冒険者を1人ずつ舞台に立たせて寄り、かわしてから反撃するまでを順に見せる（札は武器の名前）
     const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
-    const kinds = (wv) => new Set(wv.events.filter((e) => e.type === 'strike' && e.success && !full.fighters[e.f]?.off).map((e) => weaponOf[e.f])).size;
-    let wpW = -1, wpN = 1;
-    full.waves.forEach((wv, i) => { if (i !== breathW && plain(wv) && kinds(wv) > wpN) {
-        wpW = i;
-        wpN = kinds(wv);
-    } });
-    if (wpW >= 0)
-        fx.push({ title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), w: wpW, mine: [] });
+    const wpSegs = [];
+    const seen = new Set();
+    // 見せたい順（近接・飛び道具・魔法がまじるように）。見本にない武器は飛ばす
+    const WP_ORDER = ['sword', 'bow', 'wand', 'spear', 'scythe', 'blaster', 'fan', 'axe', 'katana', 'book', 'hammer', 'dagger', 'pan', 'umbrella', 'guitar', 'shield'];
+    for (const k of WP_ORDER) {
+        if (wpSegs.length >= 6 || seen.has(k))
+            continue;
+        const f = weaponOf.findIndex((x, i) => x === k && !full.fighters[i].off);
+        if (f < 0)
+            continue;
+        // その冒険者が正しく動けた、ふつうの攻撃の場面（できるだけ前の場面とちがう場面）
+        const cand = full.waves.map((wv, i) => ({ wv, i })).filter(({ wv }) => plain(wv) && wv.events.some((e) => e.type === 'strike' && e.f === f && e.success) && wv.events.some((e) => e.type === 'attack' && e.f === f));
+        if (!cand.length)
+            continue;
+        const pick = cand[wpSegs.length % cand.length];
+        const at = pick.wv.events.find((e) => e.type === 'attack' && e.f === f);
+        seen.add(k);
+        wpSegs.push({ w: pick.i, from: Math.max(0.34, at.t - 0.18), to: at.t + 0.1, tag: WEAPON_LABELS[k], cam: { mode: 'follow', f }, solo: f });
+    }
+    if (dodge.length)
+        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。'), segs: dodge });
+    if (wpSegs.length)
+        fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: wpSegs });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
     // 「討伐の瞬間」の窓と入れ替える（窓は6つのまま）
     // 窓には、7人が交代で唱えて大魔法が決まるところ（あなたが最後の第7節）を見せる。
@@ -814,7 +880,7 @@ export async function renderAbout(root, opts = {}) {
         fx.push({ title: tl('討伐の瞬間'), body: tl('とどめの連撃で、ボスが地響きとともに崩れ落ちる。最後まで戦い抜いた冒険者たちに、勝利のファンファーレ。'), w: downW, mine: [], from: Math.max(0, firstAtk - 0.45), to: dt + 0.75 });
     }
     const clips = clipDirector(ticker);
-    const effects = h('section', { class: 'lp-sec', id: 'lp-fx' }, h('h2', {}, tl('演出のこだわり')), h('p', { class: 'lp-intro' }, tl('見本の討伐から、見どころの場面だけを切り出しました。画面のまん中に来た窓が、くり返し動きます。窓をクリック（タップ）すると、一時停止・再生。')), h('div', { class: 'lp-fx-grid' }, ...fx.map((x) => h('figure', { class: 'lp-fx win' }, clip(x.sc ?? full, x.w, x.mine, ticker, clips, x.title, x.from, x.to), h('figcaption', {}, h('b', {}, x.title), h('span', {}, x.body))))));
+    const effects = h('section', { class: 'lp-sec', id: 'lp-fx' }, h('h2', {}, tl('演出のこだわり')), h('p', { class: 'lp-intro' }, tl('見本の討伐から、見どころの場面だけを切り出しました。画面のまん中に来た窓が、くり返し動きます。窓をクリック（タップ）すると、一時停止・再生。')), h('div', { class: 'lp-fx-grid' }, ...fx.map((x) => h('figure', { class: 'lp-fx win' }, x.segs ? reel(full, x.segs, ticker, clips, x.title) : clip(x.sc ?? full, x.w, x.mine, ticker, clips, x.title, x.from, x.to), h('figcaption', {}, h('b', {}, x.title), h('span', {}, x.body))))));
     // --- キャラ図鑑 ---
     const card = (lk, name, gear = NO_GEAR, i = 0) => {
         const c = pixelCanvas(PORTRAIT_W, PORTRAIT_H, 'lp-char-canvas', name);

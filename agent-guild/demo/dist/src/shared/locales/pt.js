@@ -1544,7 +1544,6 @@ const d = {
     "必殺技で、大技ごと叩き潰した！": "Esmagou o ataque especial com um golpe supremo!",
     "必殺技": "Golpes supremos",
     "ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。": "No momento decisivo, explode um golpe supremo: golpe mestre, rajada, invocação, contragolpe, selo, despertar — um diferente a cada vez.",
-    "ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。": "Desvie do ataque do chefe e revide na hora. Num crítico, a tela treme e o número de dano salta.",
     "武器ごとの技": "Golpes por arma",
     "斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。": "Uns cortam, outros atiram, outros lançam magia — o contra-ataque depende da arma em mãos. Cada uma das 16 armas tem seu jeito de esquivar e atacar.",
     "討伐対象": "ALVO",
@@ -1734,6 +1733,7 @@ const d = {
     "犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。": "O grosso registro de pegadas das feras do campo nevado mantido pela guilda dos trenós de cães. Para cada forma e disposição de pegadas, traz como espantá-la.",
     "：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。": ": combinados para não errar, como «escolha os nomes de ação entre os que lhe ensinaram» ou «na dúvida, não chute: confira».",
     "戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。": "Dizem que vozes falsas se intrometem na batalha. Elas fazem efeito no instante em que são ouvidas. Você precisa de algo que as pare antes de chegarem aos ouvidos.",
+    "ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。": "O jeito de esquivar muda a cada tipo de ataque do chefe. Leu o golpe, contra-ataca na hora.",
 };
 export default d;
 //# sourceMappingURL=pt.js.map

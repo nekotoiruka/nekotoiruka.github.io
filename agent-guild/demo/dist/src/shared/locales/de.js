@@ -1544,7 +1544,6 @@ const d = {
     "必殺技で、大技ごと叩き潰した！": "Den Spezialangriff mit einer Spezialtechnik zerschmettert!",
     "必殺技": "Spezialtechniken",
     "ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。": "Im entscheidenden Moment bricht eine Spezialtechnik los – Geheimschlag, Wirbel, Beschwörung, Konter, Siegel, Erwachen –, jedes Mal eine andere.",
-    "ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。": "Weiche dem Angriff des Bosses aus und schlag sofort zurück. Bei einem kritischen Treffer bebt der Bildschirm und die Schadenszahl springt.",
     "武器ごとの技": "Techniken je Waffe",
     "斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。": "Manche schlagen zu, manche schießen, manche zaubern – wie du zurückschlägst, hängt von der Waffe ab. Jede der 16 Waffen hat ihre eigene Art auszuweichen und anzugreifen.",
     "討伐対象": "ZIEL",
@@ -1734,6 +1733,7 @@ const d = {
     "犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。": "Das dicke Verzeichnis der Tierspuren des Schneefelds, geführt von der Hundeschlittengilde. Zu jeder Spurform und Anordnung nennt es, wie man das Tier vertreibt.",
     "：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。": ": Vereinbarungen gegen falsche Antworten, etwa „Aktionsnamen aus den gelernten wählen“ oder „bei Unsicherheit nicht raten, sondern prüfen“.",
     "戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。": "Man hört, dass sich falsche Stimmen in den Kampf drängen. Die wirken, sobald man sie hört. Du brauchst etwas, das sie stoppt, bevor sie die Ohren erreichen.",
+    "ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。": "Je nach Angriffsart des Bosses ändert sich, wie man ausweicht. Hat man ihn durchschaut, folgt sofort der Gegenangriff.",
 };
 export default d;
 //# sourceMappingURL=de.js.map

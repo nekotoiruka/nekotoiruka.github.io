@@ -1544,7 +1544,6 @@ const d = {
     "必殺技で、大技ごと叩き潰した！": "¡Aplastaste el ataque especial con una técnica definitiva!",
     "必殺技": "Técnicas definitivas",
     "ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。": "En el momento decisivo estalla una técnica definitiva: golpe maestro, ráfaga, invocación, contragolpe, sello, despertar… cada vez una distinta.",
-    "ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。": "Esquiva el ataque del jefe y contraataca al instante. Con un crítico, la pantalla tiembla y el número de daño salta.",
     "武器ごとの技": "Técnicas por arma",
     "斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。": "Unos tajan, otros disparan, otros lanzan hechizos: tu contraataque depende del arma que lleves. Cada una de las 16 armas tiene su forma de esquivar y atacar.",
     "討伐対象": "OBJETIVO",
@@ -1734,6 +1733,7 @@ const d = {
     "犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。": "El grueso registro de huellas de las bestias del campo nevado que lleva el gremio de trineos de perros. Para cada forma y disposición de huellas, recoge cómo ahuyentarla.",
     "：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。": ": promesas para no fallar, como «elige los nombres de acción entre los que te enseñaron» o «si dudas, no adivines: comprueba».",
     "戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。": "Dicen que en la batalla se cuelan voces falsas. Hacen efecto en cuanto se oyen. Necesitas algo que las detenga antes de llegar a los oídos.",
+    "ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。": "La forma de esquivar cambia con cada tipo de ataque del jefe. En cuanto lo lees, contraatacas sin perder un instante.",
 };
 export default d;
 //# sourceMappingURL=es.js.map

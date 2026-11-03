@@ -1544,7 +1544,6 @@ const d = {
     "必殺技で、大技ごと叩き潰した！": "Tu as écrasé l'attaque spéciale avec une technique ultime !",
     "必殺技": "Techniques ultimes",
     "ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。": "Au moment décisif, une technique ultime éclate : coup secret, rafale, invocation, contre, sceau, éveil — une différente à chaque fois.",
-    "ボスの攻撃をひらりとかわし、すかさず反撃。会心が出ると画面が揺れ、ダメージの数字が大きく跳ねる。": "Esquive l'attaque du boss et riposte aussitôt. Sur un coup critique, l'écran tremble et le chiffre des dégâts bondit.",
     "武器ごとの技": "Techniques par arme",
     "斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。": "Certains tranchent, d'autres tirent, d'autres lancent des sorts : ta riposte dépend de l'arme en main. Chacune des 16 armes a sa façon d'esquiver et d'attaquer.",
     "討伐対象": "CIBLE",
@@ -1734,6 +1733,7 @@ const d = {
     "犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。": "L'épais registre des traces des bêtes de la plaine enneigée tenu par la guilde des traîneaux à chiens. Pour chaque forme et disposition de traces, il donne la façon de la chasser.",
     "：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。": " : engagements pour éviter les erreurs, comme « choisis les noms d'action parmi ceux qu'on t'a appris » ou « en cas de doute, ne devine pas : vérifie ».",
     "戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。": "Il paraît que de fausses voix s'invitent dans la bataille. Elles agissent dès qu'on les entend. Il te faut de quoi les stopper avant qu'elles n'atteignent les oreilles.",
+    "ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。": "La façon d'esquiver change selon le type d'attaque du boss. Une fois l'attaque lue, on riposte aussitôt.",
 };
 export default d;
 //# sourceMappingURL=fr.js.map

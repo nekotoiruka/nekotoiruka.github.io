@@ -761,6 +761,8 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-clip-mark { font-size: 16px; padding: 6px 16px; background: rgba(10, 10, 24, 0.85); box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px rgba(10, 10, 24, 0.85); }
 .lp-clip.is-playing .lp-clip-btn { background: none; place-items: end end; }
 .lp-clip.is-playing .lp-clip-mark { font-size: 10px; padding: 1px 6px; margin: 0 6px 6px 0; box-shadow: 0 0 0 1px var(--line); opacity: .8; }
+.lp-clip-tag { position: absolute; left: 6px; top: 6px; z-index: 1; font-size: 12px; line-height: 1.4; padding: 2px 8px; color: var(--accent); background: rgba(10, 10, 24, 0.85); box-shadow: 0 0 0 1px var(--accent); pointer-events: none; } /* 紹介ページのつなぎ窓の札（ボスの攻撃・武器の名前） */
+.lp-clip-tag:empty { display: none; }
 .lp-what { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
 .lp-what h3 { margin-top: 0; }
 .lp-fx figcaption { padding: 12px 6px 0; display: grid; gap: 4px; }

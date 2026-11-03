@@ -46,6 +46,10 @@ export class ArenaRenderer {
     colors;
     evades;
     selected = null;
+    /** 紹介ページの見本の窓で、カメラの動きを決め打ちする。wide: 寄らずに全体（注目の暗転もしない）／follow: その冒険者とボスのあいだに寄ったまま */
+    camOverride = null;
+    /** 紹介ページの見本の窓で、この冒険者だけを舞台に立たせる（ほかの冒険者と、その数字は描かない） */
+    solo = null;
     hovered = null;
     mine = new Set();
     mineLabel = tl('あなた');
@@ -282,7 +286,10 @@ export class ArenaRenderer {
     }
     // 注目キャラ: 選択中 → 自分 → このウェーブの MVP の順で、反撃でツール・スキル・仲間を使ったキャラ
     spotlight(w) {
-        const key = w * 1000 + (this.selected ?? 999);
+        if (this.camOverride?.mode === 'wide')
+            return null;
+        const sel = this.camOverride?.mode === 'follow' ? this.camOverride.f : this.selected;
+        const key = w * 1000 + (sel ?? 999);
         if (this.spotCache.has(key))
             return this.spotCache.get(key);
         const wv = this.script.waves[w];
@@ -297,12 +304,12 @@ export class ArenaRenderer {
                 atks.set(e.f, e);
         }
         const mvp = wv.events.find((e) => e.type === 'mvp');
-        const cands = [this.selected, ...[...this.mine], mvp ? mvp.f : null].filter((x) => x !== null && !this.script.fighters[x].off);
+        const cands = [sel, ...[...this.mine], mvp ? mvp.f : null].filter((x) => x !== null && !this.script.fighters[x].off);
         let out = null;
         for (const c of cands) {
             const st = strikes.get(c), at = atks.get(c);
             // 自分のキャラは、道具を使っていなくても毎回注目する
-            if (st && at && (this.mine.has(c) || st.used.skills.length || st.used.tools.length)) {
+            if (st && at && (this.mine.has(c) || c === sel || st.used.skills.length || st.used.tools.length)) {
                 out = { f: c, st, at };
                 break;
             }
@@ -404,7 +411,7 @@ export class ArenaRenderer {
         const { w, phase, wv, outro } = this.split(time);
         const { w: AW, h: AH } = s.arena;
         const views = this.state(time);
-        const vis = views.filter((v) => !s.fighters[v.f].off); // 舞台に立っているキャラだけ描く
+        const vis = views.filter((v) => !s.fighters[v.f].off && (this.solo === null || v.f === this.solo)); // 舞台に立っているキャラだけ描く
         const strikeOf = new Map();
         const attackOf = new Map();
         const hits = new Map();
@@ -413,8 +420,8 @@ export class ArenaRenderer {
         for (const e of wv.events) {
             if (e.type === 'strike')
                 strikeOf.set(e.f, e);
-            if (e.type === 'attack')
-                attackOf.set(e.f, e);
+            if (e.type === 'attack' && (this.solo === null || e.f === this.solo))
+                attackOf.set(e.f, e); // ひとりだけ立たせるときは、ボスの被弾の光もその人の反撃だけ
             if (e.type === 'hit')
                 hits.set(e.f, e);
             if (e.type === 'evade')
@@ -611,6 +618,8 @@ export class ArenaRenderer {
         if (chain?.view.full && outro === 0)
             this.chainDmg(chain.view, phase); // 大魔法のダメージ
         for (const e of outro > 0 ? [] : wv.events) {
+            if (this.solo !== null && 'f' in e && typeof e.f === 'number' && e.f !== this.solo)
+                continue;
             const age = phase - e.t;
             if (age < 0 || age > 0.22)
                 continue;
