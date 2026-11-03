@@ -121,10 +121,39 @@ export function mineBand(ctx, w, phase, strikeOf, scene) {
     sceneBanner(ctx, scene, '', ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, line, st.success && !mpOut ? '#6ab8ff' : '#ff8a8a');
 }
 // --- 画面上部: ボスの体力 ---
+// 自分の反撃が当たるたび、光の粒がボスから体力バーへ飛び、届いた所が白く光って削れる（毎回。仲間の反撃では飛ばさない）。
+// 粒が届くまでは、削れる分をうすく残しておく（「自分の一撃がここを削った」が目で追えるように）
+const SHARE_FLY = 0.09, SHARE_STAG = 0.006, SHARE_N = 12, SHARE_LAND = 0.01 + SHARE_FLY, SHARE_GLOW = 0.12;
+function shareHits(r, time, bx, bw) {
+    const s = r.script, out = [];
+    if (r.intro || !r.mine.size || time >= s.waves.length)
+        return out;
+    const w = Math.min(Math.floor(Math.max(0, time)), s.waves.length - 1);
+    for (const wi of [w - 1, w]) {
+        if (wi < 0)
+            continue;
+        for (const e of r.wave(wi).events) {
+            if (e.type !== 'attack' || !r.mine.has(e.f) || e.dmg <= 0)
+                continue;
+            const age = time - (wi + e.t);
+            if (age < 0 || age > SHARE_LAND + SHARE_N * SHARE_STAG + SHARE_GLOW)
+                continue;
+            const before = r.bossHp(wi + e.t - 1e-6), after = r.bossHp(wi + e.t);
+            if (before <= after)
+                continue;
+            const max = s.boss.maxHp;
+            // 粒が出るのは、反撃の火花と同じ所（hitSpark）
+            const from = r.proj(r.bossBody.x + (e.f % 3) * 6 - 6, r.bossBody.y - 8 + (e.f % 4) * 4);
+            out.push({ age, x0: bx + (bw * after) / max, x1: bx + (bw * before) / max, from });
+        }
+    }
+    return out;
+}
 export function bossBar(time) {
     const ctx = this.ctx, s = this.script;
     const hp = this.bossHp(time), k = hp / s.boss.maxHp;
     const x = 96, y = 6, w = 192;
+    const fill = k > 0.5 ? '#c77dff' : k > 0.2 ? '#ff8a3a' : '#ff3b3b';
     ctx.save();
     ctx.fillStyle = 'rgba(13,16,34,0.85)';
     ctx.fillRect(x - 4, y - 2, w + 8, 17);
@@ -134,11 +163,61 @@ export function bossBar(time) {
     ctx.fillText(s.boss.name, x, y + 4);
     ctx.fillStyle = '#2a1630';
     ctx.fillRect(x, y + 9, w, 4);
-    ctx.fillStyle = k > 0.5 ? '#c77dff' : k > 0.2 ? '#ff8a3a' : '#ff3b3b';
+    ctx.fillStyle = fill;
     ctx.fillRect(x, y + 9, Math.round(w * k), 4);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#c9ced8';
     ctx.fillText(`${Math.ceil(hp)} / ${s.boss.maxHp}`, x + w, y + 4);
+    // 自分の削り: 届くまではうすく残し、届いたら白く光らせる
+    const hits = shareHits(this, time, x, w);
+    for (const h of hits) {
+        const x0 = Math.round(h.x0), cw = Math.max(1, Math.round(h.x1) - x0);
+        if (h.age < SHARE_LAND) {
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = fill;
+            ctx.fillRect(x0, y + 9, cw, 4);
+        }
+        else {
+            // 1回の削りはバーの数ドットしかないので、届いた所を少し広めに白く光らせる（削れた幅は変えない）
+            const g = clamp01((h.age - SHARE_LAND) / SHARE_GLOW), a = 1 - g;
+            const mid = (h.x0 + h.x1) / 2, gw = Math.max(cw, 10) * (1 + g * 0.6);
+            ctx.globalAlpha = a * 0.55;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(mid - gw / 2), y + 7, Math.round(gw), 8);
+            ctx.globalAlpha = a;
+            ctx.fillRect(x0, y + 8, cw, 6);
+            ctx.fillRect(Math.round(mid), Math.round(y + 7 - 4 * a), 1, Math.round(8 + 8 * a)); // 縦の光の筋
+        }
+    }
+    // 光の粒: ボスから、削れる所へ弧を描いて飛ぶ
+    for (const h of hits) {
+        const tx = (h.x0 + h.x1) / 2, ty = y + 11;
+        const cx = lerp(h.from.x, tx, 0.35), cy = Math.min(h.from.y, ty) - 20;
+        for (let i = 0; i < SHARE_N; i++) {
+            const q0 = (h.age - 0.01 - i * SHARE_STAG) / SHARE_FLY;
+            if (q0 <= 0 || q0 >= 1)
+                continue;
+            const q = ease(q0);
+            const jx = ((i * 7) % 5) - 2, jy = ((i * 3) % 5) - 2; // 出どころを少しばらす
+            const sx = h.from.x + jx, sy = h.from.y + jy;
+            const px = (1 - q) * (1 - q) * sx + 2 * (1 - q) * q * (cx + jx * 3) + q * q * tx;
+            const py = (1 - q) * (1 - q) * sy + 2 * (1 - q) * q * cy + q * q * ty;
+            // 尾を引く光の粒（2ドットの芯＋うすい縁）。暗い背景でも見えるように
+            const back = ease(Math.max(0, q0 - 0.12));
+            const bx2 = (1 - back) * (1 - back) * sx + 2 * (1 - back) * back * (cx + jx * 3) + back * back * tx;
+            const by2 = (1 - back) * (1 - back) * sy + 2 * (1 - back) * back * cy + back * back * ty;
+            ctx.globalAlpha = 0.35;
+            ctx.fillStyle = '#ffd166';
+            ctx.fillRect(Math.round((px + bx2) / 2), Math.round((py + by2) / 2), 1, 1);
+            ctx.fillRect(Math.round(bx2), Math.round(by2), 1, 1);
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = '#fff3c4';
+            ctx.fillRect(Math.round(px) - 1, Math.round(py) - 1, 4, 4);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+        }
+    }
     ctx.restore();
 }
 // ボスの攻撃名と狙う列（構えの間だけ）

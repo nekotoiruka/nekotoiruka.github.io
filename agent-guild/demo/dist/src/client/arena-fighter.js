@@ -778,46 +778,74 @@ export function aura(ctx, x, y, f, st, phase) {
     this.lights.push({ x, y: y - 12, r: 20, a: 0.45 * k, col: ok ? '#7bed9f' : '#ff5a6e' });
 }
 // お供（サブエージェント）: いつもは主のそばで待つ（ボスへは飛んでいかない。主の回避の動きにも巻きこまない）。
-// 主がお供に頼んだ場面（冒険の記録の companion）でだけ、答える前に書庫へ飛んでいき、本を抱えて戻ってくる。
-// ふわふわの揺れは、冒険者ごとにずらす
-const PET_GO = 0.01;
+// 主がお供に頼んだ場面（冒険の記録の companion）でだけ、その場で2つのことをする。お供はそばを離れない（道具はお供が持っている）。
+//  1. 依頼を受けたとき: 一瞬ぴょんと跳ねて、頭の上で小さな本をめくる（等速で約0.5秒）
+//  2. 答えを返すとき: 主の肩口で小さくきらっと光る。そのあと主が答えて動く（主は strike の 0.03 前から動きはじめる）
+// ゲージや数字は出さない。答えるのが早い主は、本と光を短くして、主が動く前に収める
+const PET_ASK = 0.01; // 依頼を受ける時刻（場面のはじめ）
+const PET_HOP = 0.018, PET_READ = 0.058; // 場面のはじめは 0.7 倍速なので、0.058 ≒ 等速で 0.5 秒
+const PET_GLINT = 0.035; // 肩口の光（約0.3秒）
+const HERO_LEAD = 0.03; // 主が答える動き（cast）は strike の 0.03 前から
 export function petFx(ctx, v, pet, ax, ay, st, phase, o) {
     const fr = this.frame + v.f * 17;
     const home = familiarHome(0, true, fr, pet.kind);
-    let px = home.x, py = home.y, book = 0;
-    if (st && (st.used.companion ?? 0) > 0 && v.alive) {
-        const end = Math.max(PET_GO + 0.06, st.t);
-        const k = (phase - PET_GO) / (end - PET_GO);
-        if (k > 0 && k < 1) {
-            // 書庫へ（右上の画面の外）→ 本を抱えて戻る
-            const out = k < 0.4 ? ease(k / 0.4) : k < 0.6 ? 1 : 1 - ease((k - 0.6) / 0.4);
-            px += out * 70;
-            py += -out * 80 - Math.sin(Math.min(1, k / 0.4) * Math.PI) * 6;
-            book = k >= 0.5 ? 1 : 0;
-        }
-        else if (phase >= end && phase < end + 0.05) {
-            book = 1 - (phase - end) / 0.05;
-            py -= Math.sin(((phase - end) / 0.05) * Math.PI) * 3;
-        }
+    let hop = 0, read = -1, glint = -1;
+    if (st && (st.used.companion ?? 0) > 0 && v.alive && !o.busy) {
+        const g1 = st.t - HERO_LEAD; // ここまでに光を終える
+        const avail = Math.max(0.02, g1 - PET_ASK);
+        const readLen = Math.min(PET_READ, avail * 0.62), glintLen = Math.min(PET_GLINT, avail - readLen);
+        const hopLen = Math.min(PET_HOP, readLen * 0.4);
+        const k = phase - PET_ASK;
+        if (k >= 0 && k < hopLen)
+            hop = Math.sin((k / hopLen) * Math.PI) * 5;
+        if (k >= hopLen * 0.6 && k < readLen)
+            read = (k - hopLen * 0.6) / (readLen - hopLen * 0.6);
+        const g0 = g1 - glintLen;
+        if (phase >= g0 && phase < g1)
+            glint = (phase - g0) / glintLen;
     }
     const sp = familiarSprite(pet.kind, pet.color, Math.floor(fr / 9), true);
-    const cx = ax + px + 5, top = ay + 1 + py;
+    const cx = ax + home.x + 5, top = ay + 1 + home.y - hop;
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, o.alpha));
+    const base = ctx.globalAlpha;
     ctx.drawImage(sp, Math.round(cx - sp.width / 2), Math.round(top));
-    if (book > 0) {
-        // 抱えた本（分厚い系譜）
-        ctx.globalAlpha *= Math.min(1, book * 2);
-        const bx = Math.round(cx - 4), by = Math.round(top - 6);
+    if (read >= 0) {
+        // 小さな本（お供の頭の上）。ぱっと開いて、ページを2枚めくり、閉じる
+        const fade = Math.min(1, read / 0.1, (1 - read) / 0.1);
+        ctx.globalAlpha = base * fade;
+        const bx = Math.round(cx) - 4, by = Math.round(top) - 6;
         ctx.fillStyle = '#2a1830';
-        ctx.fillRect(bx - 1, by - 1, 10, 8);
+        ctx.fillRect(bx - 1, by - 1, 10, 6); // 縁
         ctx.fillStyle = '#7a3a8a';
-        ctx.fillRect(bx, by, 8, 6);
+        ctx.fillRect(bx, by + 3, 8, 1); // 表紙の下端
         ctx.fillStyle = '#f4ead2';
-        ctx.fillRect(bx + 1, by + 1, 6, 1);
-        ctx.fillRect(bx + 1, by + 4, 6, 1);
+        ctx.fillRect(bx, by, 4, 3);
+        ctx.fillRect(bx + 4, by, 4, 3); // 見開き
+        ctx.fillStyle = '#b8a888';
+        ctx.fillRect(bx + 1, by + 1, 2, 1);
+        ctx.fillRect(bx + 5, by + 1, 2, 1); // 行
+        ctx.fillStyle = '#7a3a8a';
+        ctx.fillRect(bx + 4, by, 1, 4); // 背
+        const turn = (read * 2) % 1;
+        if (read > 0.08 && read < 0.92) {
+            // めくれるページ: 右から左へ、背を軸に立ち上がって倒れる
+            const lift = Math.sin(turn * Math.PI), w = Math.max(1, Math.round(4 * Math.abs(Math.cos(turn * Math.PI))));
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(turn < 0.5 ? bx + 4 : bx + 4 - w, Math.round(by - lift * 2), w, 3);
+        }
+    }
+    // 肩口の光（主の、お供がいる側の肩）: 小さな十字の光が、ふくらんで消える
+    if (glint >= 0) {
+        const gx = Math.round(ax + 7), gy = Math.round(ay - 10); // 顔にかからない、肩のはし
+        const r = Math.round(1 + Math.sin(glint * Math.PI) * 4), a = glint < 0.25 ? glint / 0.25 : 1 - (glint - 0.25) / 0.75;
+        ctx.globalAlpha = base * a;
         ctx.fillStyle = '#ffd166';
-        ctx.fillRect(bx + 3, by + 2, 2, 2);
+        ctx.fillRect(gx - r, gy, r * 2 + 1, 1);
+        ctx.fillRect(gx, gy - r, 1, r * 2 + 1);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(gx, gy, 1, 1);
+        this.lights.push({ x: gx, y: gy, r: 12, a: 0.5 * a, col: '#ffd166' });
     }
     ctx.restore();
 }
