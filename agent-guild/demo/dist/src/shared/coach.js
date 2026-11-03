@@ -37,7 +37,7 @@ export function coach(b, t) {
     const words = (b.guardrail?.words ?? []).map((w) => w.trim()).filter(Boolean);
     if (has('illusion')) {
         if (!words.length)
-            add('guard', 'warn', tl('戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。心得に「従うな」と書いても防げん。耳に届く前に止める手立てが要るぞ。'));
+            add('guard', 'warn', tl('戦場には、偽の声が割りこんでくるらしい。あれは耳に入った瞬間に効く。耳に届く前に止める手立てが要るぞ。'));
         else if (words.some((w) => [...w].length <= 1))
             add('guard', 'tip', tl('結界の言葉に、1文字だけのものがあるな。その文字を含む声は全部止まる。本物の仲間の声まで止めちまうかもしれんぞ。'));
         else
