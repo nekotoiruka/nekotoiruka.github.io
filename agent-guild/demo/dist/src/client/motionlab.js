@@ -14,6 +14,7 @@ let TX = 26, TY = 46; // 吸血鬼の胸のあたり（腕の少し奥）
 let QUIET = false; // 主役以外: 画面全体の閃光・揺れ・カットインを出さない
 let BOSS_KIND = 'vampire';
 let PAIR_REACH = false; // ボスの攻撃を迎え撃つ（斬りはらう・打ち砕く・撃ち落とす）とき: 当てる先を、目の前の飛んでくるものにする
+let DRAWN = null; // 最後に描いた冒険者の足もと（drawInArena が返す）
 let LIFT = null; // 近接の反撃で、元の列から寄せる分（drawInArena）
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const liftAt = (x) => (LIFT ? R(LIFT.dy * (1 - clamp01((LIFT.from - x) / Math.max(1, LIFT.from - LIFT.to)))) : 0);
@@ -30,6 +31,8 @@ const R = Math.round;
 const TAU = Math.PI * 2;
 let REDUCED = false;
 export function setReduced(v) { REDUCED = v; }
+/** 見本帳のページで、後ろに立つボスを選ぶ */
+export function setBossKind(k) { BOSS_KIND = k; }
 // 決まった乱数（毎回同じ絵になる）
 function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 // ---------------------------------------------------------------- 色（3〜5色の段）
@@ -307,10 +310,15 @@ function makeEnv(c, t, f, L, hc = c) {
     const e = {
         c, t, f, L, weapon: L.look.weapon,
         hero(x, y, action = 'idle', at = 0, o = {}) {
+            const gy = FY + liftAt(x);
             y += liftAt(x);
+            DRAWN = { x, y, ground: gy };
             const img = heroSprite(L, action, at, f, o.flip ?? true);
             const src = o.tint ? tinted(img, o.tint, 'tint:' + o.tint) : img;
             const X = R(x) - 20, Y = R(y) - 36;
+            const ga0 = hc.globalAlpha;
+            if (o.ga !== undefined)
+                hc.globalAlpha = ga0 * o.ga; // 色を重ねるとき（ディザでなく半透明で。網目に見えないように）
             if (o.rot || o.scale) {
                 hc.save();
                 hc.translate(R(x), R(y) - 12);
@@ -323,6 +331,7 @@ function makeEnv(c, t, f, L, hc = c) {
             }
             else
                 drawDither(hc, src, X, Y, o.a ?? 1);
+            hc.globalAlpha = ga0;
         },
         muzzle(x, y, action = 'cast', at = 0.5) {
             y += liftAt(x);
@@ -2145,6 +2154,461 @@ const AWAKEN = [
             flash(e.c, bump(t, 0.64, 0.68) * 0.6, PAL.gold[1]);
         } },
 ];
+// ================================================================ 8. 被弾（外した冒険者が、ボスの攻撃を受ける）
+// 方針: 動きで見せず、状態で見せる。後ろへ下がる・すべる・浮く・回るは、成功の動き（回避・ガード・ジャンプ）がもう使っているので、
+// 被弾は「赤く光る」「尻もち」「目を回す星」「体の見た目が変わる」で見せる。画面の外まで飛ばされるのだけは例外（成功の動きは画面の外へ出ない）。
+// 当たるのは 0.4。反撃（ほかの人の攻撃）が終わる 0.86 ごろまで、目を回したり動けなかったりしたままにし、0.86〜0.98 で立ち直って戻る
+const HURT_RED = ['#ffffff', '#ffd0d8', '#ff6a8a', '#c81a4a'];
+const HOLD = 0.86; // 立ち直る時刻
+// 当たった瞬間は赤く光る（白い光は、成功のガードが使っている）。2コマずつ赤と白を交互に
+const redHit = (t0, f, from = 0.4, len = 0.05) => (t0 >= from && t0 < from + len ? (f % 4 < 2 ? '#ff4a6a' : '#ffd0d8') : undefined);
+function hitMark(e, x, y, t0, big = false) {
+    star(e.c, x, y, R((big ? 5 : 3) * bump(t0, 0.4, 0.47)), '#ffd0d8', '#ff4a6a');
+    sparks(e.c, x, y, win(t0, 0.4, 0.52), big ? 10 : 6, big ? 16 : 10, HURT_RED, 11);
+}
+// 頭のまわりを回る星（ピヨる）。cx, cy は頭の上
+function dizzy(c, cx, cy, k, f) {
+    if (k <= 0 || k >= 1)
+        return;
+    for (let i = 0; i < 3; i++) {
+        const a = f / 5 + (i * TAU) / 3;
+        const x = cx + Math.cos(a) * 7, y = cy + Math.sin(a) * 2.5;
+        star(c, x, y, Math.sin(a) > 0 ? 2 : 1, '#ffe27a', '#ffffff'); // 手前を回るときは大きく
+    }
+}
+// 尻もちで目を回す（共通の終わり方）。x の所に座り、頭の上で星が回る
+function sitDazed(e, x, t, from, o = {}) {
+    e.hero(x, FY, 'daze', 0, o);
+    dizzy(e.c, x, FY - 26, win(t, from, HOLD), e.f);
+}
+// 立ち直って、元の立ち位置へ歩いて戻る（x0 から HX へ）
+function standBack(e, x0, t) {
+    if (t < HOLD + 0.03) {
+        e.hero(x0, FY, 'guard', 1);
+        return;
+    }
+    const k = ease(win(t, HOLD + 0.03, 0.98));
+    e.hero(lerp(x0, HX, k), FY, k < 1 ? 'walk' : 'idle');
+}
+const bossYell = (t, a = 0.2, b = 0.42) => ({ mouth: t > a && t < b ? 2 : 0, lean: t > a + 0.1 && t < b ? 2 : 0 });
+/** 立っているだけ（見本帳の12人の画面で、正しく動けた人の代わりに置く） */
+export const STAND = { id: 'stand', name: '立つ', note: '', draw(e) { e.hero(HX, FY, 'idle'); } };
+// 魂の絵の案（大技を浴びて、ぺしゃんこの体から抜けかける）。x, y は魂の頭の中心、h は体から離れた高さ、down は吸いこまれる進み具合
+const SOUL_INK = '#2a2a4a', SOUL_FILL = '#f4f8ff', SOUL_SH = '#c8d4f0', SOUL_OL = '#5a6a9a';
+// しずく形のおばけ（頭の丸と、ゆらゆら細くなる尾）
+function ghostShape(c, x, y, f, col, grow, sc = 1) {
+    const r = 5 * sc + grow;
+    disc(c, x, y, r, col);
+    const n = R(9 * sc) + grow;
+    for (let i = 0; i < n; i++) {
+        const w = Math.max(1, R(r * (1 - i / n) * 2));
+        const sx = R(Math.sin((i + f / 3) / 2) * 1.5 * (i / n));
+        P(c, x - w / 2 + sx, y + 1 + i, col, w, 1);
+    }
+}
+function ghostSoul(c, x, y, f, sc = 1, band = false) {
+    ghostShape(c, x, y, f, SOUL_OL, 1, sc);
+    ghostShape(c, x, y, f, SOUL_FILL, 0, sc);
+    P(c, x + R(2 * sc), y - R(2 * sc), SOUL_SH, 2, R(5 * sc)); // 右の陰
+    P(c, x - 2, y - 1, SOUL_INK, 1, 2);
+    P(c, x + 1, y - 1, SOUL_INK, 1, 2); // 目
+    P(c, x - 1, y + 2, SOUL_INK, 2, 1); // 口（ぽかん）
+    if (band) { // 額の三角巾
+        const ty = y - R(5 * sc);
+        P(c, x - 2, ty, SOUL_OL, 5, 1);
+        P(c, x - 2, ty + 1, '#ffffff', 5, 1);
+        P(c, x - 1, ty + 2, '#ffffff', 3, 1);
+        P(c, x, ty + 3, '#ffffff', 1, 1);
+    }
+}
+const SOULS = [
+    { id: 'ghost', name: 'おばけ', note: 'しずく形の白いおばけが、ぽかんと口をあけて体から浮かび上がる。額に三角巾。尾をゆらゆらさせながらただよい、しゅっと体に戻る。', rise: 22,
+        draw(e, x, y, h) { ghostSoul(e.c, x, y - 4, e.f, 1, true); for (let i = 0; i < R(h) - 10; i += 2)
+            P(e.c, HX + R(Math.sin((i + e.f) / 4)), FY - 6 - i, SOUL_SH); } },
+    { id: 'mouth', name: '口からにゅるっと', note: '平たくなった体の口から、小さなおばけがにゅるーっと伸びて出てくる。細いひもでつながったまま、最後はゴムのようにびよんと口に戻る。', rise: 20,
+        draw(e, x, y, h, down) {
+            // 口（体の左はし）から、魂の尾まで、波うつひも
+            const mx = HX - 6, my = FY - 6, ex = x, ey = y + 6;
+            const n = 10;
+            for (let i = 0; i <= n; i++) {
+                const k = i / n;
+                const px = lerp(mx, ex, k) + Math.sin(k * Math.PI * 2 + e.f / 3) * 2 * (1 - down) * Math.sin(k * Math.PI);
+                P(e.c, px, lerp(my, ey, k), i % 2 ? SOUL_FILL : SOUL_SH, 2, 1);
+            }
+            ghostSoul(e.c, x, y, e.f, 0.8);
+            if (down > 0 && down < 0.6) {
+                line(e.c, x - 6, y - 4, x - 9, y - 6, '#ffffff');
+                line(e.c, x + 6, y - 4, x + 9, y - 6, '#ffffff');
+            } // びよん
+        } },
+];
+const HURT = [
+    { id: 'hurt-now', name: 'いまの動き（参考）', note: 'いま本番で使っている被弾。後ろへ最大8ドット下がって戻るだけ。', draw(e) {
+            const t = e.t;
+            e.bg();
+            e.boss({ pose: { mouth: t > 0.2 && t < 0.42 ? 1 : 0 } });
+            incoming(e);
+            const k = win(t, 0.4, 0.72), on = t >= 0.4 && t < 0.72;
+            const dx = on ? Math.pow(Math.sin(Math.pow(k, 0.55) * Math.PI), 1.2) * 8 : 0, dy = on ? -Math.sin(Math.min(1, k * 1.6) * Math.PI) * 4 : 0;
+            e.hero(HX + dx, FY + dy, on ? 'hurt' : 'idle', 0, { tint: t >= 0.4 && t < 0.45 ? '#ffffff' : undefined });
+        } },
+    { id: 'hurt-daze', name: '尻もちピヨり', note: '赤く光って、その場に尻もち。反撃が終わるまで頭の上で星が回り、立ち直って戻る。すべての被弾の土台。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.shake(bump(t0, 0.4, 0.46) * 1);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            incoming({ ...e, t });
+            const x = HX + R(5 * ease(win(t, 0.4, 0.46)));
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.44)
+                e.hero(x, FY - 2, 'hurt', 0, { tint: redHit(t0, e.f) });
+            else if (t < HOLD)
+                sitDazed(e, x, t, 0.44);
+            else
+                standBack(e, x, t);
+            dust(e.c, x, win(t, 0.44, 0.6), 0.7, 2); // 尻もちの土ぼこり
+            hitMark(e, HX - 9, FY - 16, t0);
+        } },
+    { id: 'hurt-fly', name: '画面の外まで吹っ飛ぶ', note: '赤く光って一瞬止まり、そのまま画面の右の外まで飛んでいく。キラーンと光ったあと、汗をかきながら走って戻ってくる。「吹き飛ばされた！」の場面向け。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.06);
+            e.shake(bump(t0, 0.4, 0.5) * 2.5);
+            e.bg();
+            e.boss({ pose: { ...bossYell(t, 0.2, 0.44), lean: t > 0.3 && t < 0.44 ? 4 : 0 } });
+            const k = win(t, 0.2, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1)
+                band(e.c, lerp(TX + 14, HX - 10, easeIn(k)), FY - 14, 7, 14, -1.3, 1.3, PAL.blood, 1, 1.5, false);
+            const out = W + 24; // 画面の外
+            const u = win(t, 0.4, 0.54), back = win(t, 0.7, 0.94);
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.54) { // まっすぐ右へ飛んでいく（低く・速く）
+                const x = lerp(HX, out, easeIn(u)), y = FY - 6 - Math.sin(u * Math.PI) * 6;
+                e.hero(x, y, 'hurt', 0, { tint: redHit(t0, e.f, 0.4, 0.07) });
+                for (let i = 1; i <= 4; i++) {
+                    const ui = Math.max(0, u - i * 0.06);
+                    line(e.c, lerp(HX, out, easeIn(ui)) - 6, FY - 10 - i, lerp(HX, out, easeIn(ui)) - 14, FY - 10 - i, '#ffffff', 1, 0.6 / i);
+                }
+            }
+            else if (t >= 0.7) { // 走って戻る（汗をかき、土ぼこりを立てて）
+                const x = R(lerp(out, HX, ease(back)));
+                e.hero(x, FY - (back < 1 && Math.floor(e.f / 3) % 2 ? 1 : 0), back < 1 ? 'dash' : 'idle');
+                if (back < 1)
+                    for (let i = 0; i < 3; i++)
+                        disc(e.c, x + 8 + i * 5, FY - 1 - (i % 2), 1.6 - i * 0.4, PAL.dust[i % 3], 0.8 - i * 0.2);
+            }
+            // 画面のはしで、キラーン
+            const tw = bump(t, 0.54, 0.64);
+            if (tw > 0)
+                star(e.c, W - 6, FY - 26, R(4 * tw), '#ffffff', '#ffe27a');
+            hitMark(e, HX - 9, FY - 16, t0, true);
+        } },
+    { id: 'hurt-crush', name: 'ぺしゃんこ', note: '上から落ちてきたものにつぶされ、平たくなる。ぽんっと戻って、尻もちで目を回す。岩・踏みつけ・落下向け（石の巨人など）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.05);
+            e.shake(bump(t0, 0.4, 0.5) * 2.5);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            const fall = win(t, 0.2, 0.4);
+            if (!NO_ATTACK && t < 0.4) {
+                disc(e.c, HX, FY, 3 + 6 * fall, '#0a0812', 0.6, 0.3);
+                if (fall > 0) {
+                    const y = lerp(-14, FY - 24, easeIn(fall));
+                    orb(e.c, HX, y, 8, ['#d8c8a8', '#a8987a', '#7a6a52', '#4a3a2a']);
+                }
+            }
+            if (!NO_ATTACK)
+                debris(e.c, HX, FY - 20, win(t, 0.4, 0.62), 10, 20, ['#d8c8a8', '#a8987a', '#7a6a52'], 13, 1, 70);
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.56) { // つぶれた姿（縦を半分に）
+                const img = heroSprite(e.L, 'hurt', 0, e.f, true);
+                const col = redHit(t0, e.f, 0.4, 0.06), src = col ? tinted(img, col, 'tint:' + col) : img;
+                e.c.drawImage(src, 0, 0, 40, 40, R(HX) - 22, R(FY) - 18, 44, 20);
+            }
+            else if (t < 0.6)
+                e.hero(HX, FY - R(Math.sin(win(t, 0.56, 0.6) * Math.PI) * 4), 'guard', 0.3); // ぽんっ
+            else if (t < HOLD)
+                sitDazed(e, HX, t, 0.6);
+            else
+                standBack(e, HX, t);
+            if (t > 0.4 && t < 0.7) {
+                const a = 1 - win(t, 0.56, 0.7);
+                line(e.c, HX - 14, FY, HX - 6, FY - 1, '#0a0812', 1, a);
+                line(e.c, HX + 6, FY - 1, HX + 15, FY, '#0a0812', 1, a);
+            }
+            dust(e.c, HX, win(t, 0.4, 0.6), 1.3, 2);
+        } },
+    { id: 'hurt-scorch', name: '黒こげ', note: '炎に包まれて体が黒くこげ、頭から煙。尻もちで目を回し、けほっと煙を吐く。立ち直るときにすすを払う。炎・雷向け（竜など）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.bg();
+            e.boss({ pose: bossYell(t, 0.18, 0.46) });
+            const k = win(t, 0.22, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 14, HX - 10, easeIn(k));
+                band(e.c, x, FY - 14, 4, 10, -1.1, 1.1, FLAME, 1, 1.2, false);
+                for (let i = 1; i < 5; i++)
+                    P(e.c, x - i * 4, FY - 14 + ((i * 3) % 5) - 2, FLAME[Math.min(4, i)], 2, 1);
+            }
+            const soot = t >= 0.42 ? 0.62 * (1 - win(t, HOLD, HOLD + 0.06)) : 0;
+            const flick = t > HOLD && t < HOLD + 0.04 ? (e.f % 2 ? 1 : -1) : 0; // すすを払う
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.46)
+                e.hero(HX, FY, 'hurt', 0, { tint: redHit(t0, e.f) });
+            else if (t < HOLD)
+                sitDazed(e, HX, t, 0.5);
+            else
+                standBack(e, HX + flick, t);
+            if (soot > 0 && !redHit(t0, e.f)) {
+                const act = t < 0.46 ? 'hurt' : t < HOLD ? 'daze' : 'guard';
+                e.hero(HX + flick, FY, act, act === 'guard' ? 1 : 0, { tint: '#24160f', ga: soot * 1.3 });
+            }
+            if (t > 0.4 && t < 0.52) {
+                const a = 1 - win(t, 0.46, 0.52);
+                for (let i = 0; i < 4; i++)
+                    tongue(e.c, HX - 6 + i * 4, FY, 10 + ((i * 5) % 7), 4, FLAME, i + e.f / 3, a);
+            }
+            for (let i = 0; i < 6; i++) {
+                const s = ((t - 0.44) * 3 + i / 6) % 1;
+                if (t > 0.44 && t < HOLD)
+                    disc(e.c, HX - 2 + (i % 3) * 2 + Math.sin(s * 6 + i) * 2, FY - 22 - s * 16, 1.5 + s * 2, i % 2 ? '#6a6478' : '#8a8498', 1 - s);
+            }
+            const cough = win(t, 0.66, 0.76);
+            if (cough > 0 && cough < 1)
+                disc(e.c, HX - 8 - cough * 6, FY - 14 - cough * 3, 1 + cough * 2.5, '#8a8498', 1 - cough);
+        } },
+    { id: 'hurt-curse', name: '呪いでひざをつく', note: '紫の呪いが体にまとわりつき、ひざをついて動けない。足元に呪いの紋。解けると立ち上がる。呪い・霧・魔法向け（吸血鬼伯爵など）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.bg(t > 0.4 && t < HOLD ? 0.25 : 0);
+            e.boss({ pose: { mouth: t > 0.2 && t < 0.42 ? 1 : 0, eye: 'angry' } });
+            const k = win(t, 0.2, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 10, HX - 8, k), y = lerp(TY, FY - 16, k) + Math.sin(k * 12) * 2;
+                for (let i = 1; i < 6; i++)
+                    P(e.c, x - i * 3, y - Math.sin((k - i * 0.03) * 12) * 2, PAL.shadow[Math.min(3, i >> 1)]);
+                orb(e.c, x, y, 3, PAL.shadow);
+            }
+            const held = t >= 0.42 && t < HOLD;
+            const pulse = 0.35 + 0.25 * Math.sin(e.f / 3);
+            if (held) {
+                const a = Math.min(1, win(t, 0.42, 0.48) * 2) * (1 - win(t, HOLD - 0.06, HOLD));
+                ring(e.c, HX, FY, 12, PAL.shadow[1], 1, a, 0.3);
+                ring(e.c, HX, FY, 8, PAL.shadow[2], 1, a, 0.3);
+                for (let i = 0; i < 6; i++) {
+                    const ang = e.f / 12 + (i * TAU) / 6;
+                    P(e.c, HX + Math.cos(ang) * 10, FY + Math.sin(ang) * 3, PAL.shadow[0]);
+                }
+            }
+            const shiver = held && e.f % 6 < 1 ? 1 : 0;
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.44)
+                e.hero(HX, FY, 'hurt', 0, { tint: redHit(t0, e.f, 0.4, 0.04) });
+            else if (held) {
+                e.hero(HX + shiver, FY + 2, 'guard', 1);
+                e.hero(HX + shiver, FY + 2, 'guard', 1, { tint: PAL.shadow[1], ga: pulse });
+            }
+            else
+                e.hero(HX, FY, 'idle');
+            if (held)
+                for (let i = 0; i < 6; i++) {
+                    const s = ((e.f / 40 + i / 6) % 1);
+                    P(e.c, HX - 8 + ((i * 7) % 16), FY - 2 - s * 24, PAL.shadow[s < 0.5 ? 0 : 1]);
+                }
+            if (t > HOLD && t < HOLD + 0.08)
+                sparks(e.c, HX, FY - 12, win(t, HOLD, HOLD + 0.08), 8, 12, PAL.shadow, 5); // 呪いが解ける
+        } },
+    { id: 'hurt-web', name: '糸でぐるぐる巻き', note: '飛んできた糸に巻かれて、みのむしのように動けない。もぞもぞもがいて、最後に糸を引きちぎる。糸・網向け（大蜘蛛）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            const k = win(t, 0.22, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 10, HX - 6, k), y = lerp(TY, FY - 16, k);
+                line(e.c, TX + 10, TY, x, y, '#e8ecff', 1, 0.8);
+                for (let i = 0; i < 4; i++)
+                    line(e.c, x, y, x + Math.cos(i * 1.6) * 5, y + Math.sin(i * 1.6) * 5, '#ffffff');
+            }
+            const held = t >= 0.42 && t < HOLD;
+            const wig = held ? (Math.floor(e.f / 4) % 4 === 0 ? 1 : Math.floor(e.f / 4) % 4 === 2 ? -1 : 0) : 0; // もぞもぞ
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.44)
+                e.hero(HX, FY, 'hurt', 0, { tint: redHit(t0, e.f, 0.4, 0.04) });
+            else if (held) {
+                e.hero(HX + wig, FY, 'hurt', 0);
+                const wrap = Math.min(1, win(t, 0.42, 0.52) * 1.2); // 下から巻かれていく
+                for (let i = 0; i < 7; i++) {
+                    const y = FY - 2 - i * 3;
+                    if (i / 7 > wrap)
+                        break;
+                    rectD(e.c, HX - 7 + wig, y, 14, 2, '#e8ecff', 0.9);
+                    P(e.c, HX - 7 + wig + ((i * 5) % 12), y, '#ffffff', 2, 1);
+                }
+                if (t > 0.5) {
+                    const s = Math.sin(e.f / 3) > 0.6;
+                    if (s)
+                        P(e.c, HX + 9, FY - 22, '#8ad8ff', 1, 2);
+                } // 汗
+            }
+            else
+                e.hero(HX, FY, t < HOLD + 0.08 ? 'victory' : 'idle', 0.3);
+            if (t > HOLD && t < HOLD + 0.1)
+                debris(e.c, HX, FY - 12, win(t, HOLD, HOLD + 0.1), 10, 16, ['#ffffff', '#e8ecff', '#c8d0e0'], 9, 1.2, 40); // 引きちぎる
+        } },
+    { id: 'hurt-arrow', name: '頭に矢が刺さる', note: '矢が頭にぷすっと刺さり、尻もちで目を回す。矢はびよんびよん揺れたまま。立ち直るときに引っこ抜く。矢・投げ槍向け（ゴブリンなど）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.05);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            const k = win(t, 0.24, 0.4);
+            const hx = HX - 2, hy = FY - 26;
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 10, hx, k), y = lerp(TY - 4, hy, k) - Math.sin(k * Math.PI) * 8;
+                line(e.c, x, y, x - 9, y + 1, '#a07850');
+                P(e.c, x, y - 1, '#d5dbe6', 2, 3);
+                P(e.c, x - 10, y, '#ff6a8a', 2, 2);
+            }
+            const sit = t >= 0.46 && t < HOLD, dy = sit ? 2 : 0;
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.46)
+                e.hero(HX, FY - R(3 * bump(t, 0.4, 0.46)), 'hurt', 0, { tint: redHit(t0, e.f) });
+            else if (sit)
+                sitDazed(e, HX, t, 0.46);
+            else
+                standBack(e, HX, t);
+            // 刺さった矢（頭のてっぺんから左上へ。びよんびよん）
+            if (t >= 0.4 && t < HOLD + 0.04) {
+                const wob = R(Math.sin((t - 0.4) * 80) * 2 * Math.max(0, 1 - (t - 0.4) * 4));
+                const ax = hx + 2, ay = hy + dy + 2 + (t < 0.46 ? -R(3 * bump(t, 0.4, 0.46)) : 0);
+                line(e.c, ax, ay, ax - 9, ay - 6 + wob, '#a07850');
+                P(e.c, ax - 11, ay - 7 + wob, '#ff6a8a', 2, 2);
+                P(e.c, ax - 10, ay - 8 + wob, '#ffd0d8');
+            }
+            if (t >= HOLD + 0.04 && t < HOLD + 0.12) {
+                const s = win(t, HOLD + 0.04, HOLD + 0.12);
+                line(e.c, HX + 6, FY - 30 - s * 10, HX - 3, FY - 36 - s * 10, '#a07850', 1, 1 - s);
+            } // 抜いて放る
+        } },
+    { id: 'hurt-ink', name: '墨まみれ', note: '墨をまともに浴びて全身まっ黒、目だけ白く光る。ぽたぽた垂れる墨。最後にぶるぶるっと振り払う。墨・水向け（クラーケン）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            const INK = ['#5a3a8a', '#2a1a4a', '#140a24'];
+            const k = win(t, 0.24, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 10, HX - 6, k), y = lerp(TY, FY - 18, k) - Math.sin(k * Math.PI) * 6;
+                disc(e.c, x, y, 4, INK[1]);
+                disc(e.c, x - 5, y + 1, 2, INK[0]);
+                P(e.c, x - 1, y - 2, INK[0], 2, 1);
+            }
+            const held = t >= 0.42 && t < HOLD;
+            const shake = t >= HOLD && t < HOLD + 0.05 ? (e.f % 2 ? 2 : -2) : 0; // ぶるぶるっ
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.44)
+                e.hero(HX, FY, 'hurt', 0, { tint: redHit(t0, e.f, 0.4, 0.04) });
+            else if (held) {
+                e.hero(HX, FY, 'pass', 0);
+                e.hero(HX, FY, 'pass', 0, { tint: INK[2], ga: 0.9 });
+                e.ghost(HX, FY, '#b89ae8', 0.3, 'pass'); // 暗い床でも形が見えるよう、ふちだけ明るく
+                const blink = e.f % 70 < 4;
+                if (!blink) {
+                    P(e.c, HX - 1, FY - 14, '#ffffff', 2, 2);
+                    P(e.c, HX + 4, FY - 14, '#ffffff', 2, 2);
+                } // 白い目だけ
+                for (let i = 0; i < 4; i++) {
+                    const s = ((e.f / 30 + i * 0.27) % 1);
+                    P(e.c, HX - 6 + i * 4, FY - 6 + s * 6, INK[1], 1, 2);
+                } // 垂れる墨
+                disc(e.c, HX, FY + 1, 9 * Math.min(1, win(t, 0.44, 0.6) * 1.5), INK[2], 0.8, 0.25); // 足元の墨だまり
+            }
+            else
+                e.hero(HX + shake, FY, t < HOLD + 0.05 ? 'hurt' : 'idle');
+            if (t >= 0.4 && t < 0.48)
+                debris(e.c, HX - 6, FY - 16, win(t, 0.4, 0.48), 8, 12, INK, 3, 1, 30);
+            if (shake)
+                debris(e.c, HX, FY - 12, win(t, HOLD, HOLD + 0.08), 10, 14, INK, 7, 1.5, 30);
+        } },
+    { id: 'hurt-ice', name: '氷漬け', note: '凍てつく息で氷のかたまりに閉じこめられ、ぴくりとも動けない。ひびが入って割れ、出てきたあともガタガタ震える。氷・冷気向け（氷の巨人）。', draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.04);
+            e.bg();
+            e.boss({ pose: bossYell(t) });
+            const k = win(t, 0.2, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1) {
+                const x = lerp(TX + 14, HX - 10, k);
+                for (let i = 0; i < 8; i++) {
+                    const r = rng(i + 3);
+                    P(e.c, x - i * 3 - r() * 4, FY - 20 + r() * 10, PAL.ice[i % 4], 2, 1);
+                }
+                orb(e.c, x, FY - 15, 3, PAL.ice);
+            }
+            const frozen = t >= 0.42 && t < HOLD;
+            const crack = win(t, HOLD - 0.1, HOLD);
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.44)
+                e.hero(HX, FY, 'hurt', 0, { tint: redHit(t0, e.f, 0.4, 0.04) });
+            else if (frozen) {
+                e.hero(HX, FY, 'hurt', 0);
+                e.hero(HX, FY, 'hurt', 0, { tint: '#bfe8ff', ga: 0.5 });
+                const grow = Math.min(1, win(t, 0.42, 0.5) * 1.4), top = R(FY - 30 * grow);
+                rectD(e.c, HX - 10, top, 20, FY - top + 1, '#8ad8ff', 0.45);
+                for (let x = HX - 10; x <= HX + 9; x++) {
+                    P(e.c, x, top, '#e8f8ff');
+                    P(e.c, x, FY, '#3a8ad8');
+                }
+                for (let y = top; y <= FY; y++) {
+                    P(e.c, HX - 10, y, '#d8f8ff');
+                    P(e.c, HX + 9, y, '#3a8ad8');
+                }
+                P(e.c, HX - 7, top + 3, '#ffffff', 2, 6);
+                P(e.c, HX - 4, top + 2, '#ffffff', 1, 3);
+                if (crack > 0) {
+                    line(e.c, HX + 2, top, HX - 2, top + 10 * crack, '#ffffff');
+                    line(e.c, HX - 2, top + 10 * crack, HX + 3, top + 20 * crack, '#ffffff');
+                }
+            }
+            else {
+                const shiver = t < HOLD + 0.1 ? (e.f % 2 ? 1 : -1) : 0; // ガタガタ
+                e.hero(HX + shiver, FY, t < HOLD + 0.1 ? 'guard' : 'idle', 1);
+                if (t < HOLD + 0.1)
+                    e.hero(HX + shiver, FY, 'guard', 1, { tint: '#bfe8ff', ga: 0.4 });
+            }
+            if (t >= HOLD && t < HOLD + 0.1)
+                debris(e.c, HX, FY - 14, win(t, HOLD, HOLD + 0.1), 12, 18, PAL.ice, 4, 1.4, 60); // 割れる
+        } },
+    ...SOULS.map((s) => ({ id: `hurt-soul-${s.id}`, name: `魂が抜けかける（${s.name}）`, note: s.note, draw(e) {
+            const t0 = e.t, t = stop(t0, 0.4, 0.08);
+            e.shake(bump(t0, 0.4, 0.52) * 3);
+            e.bg();
+            e.boss({ pose: { ...bossYell(t, 0.18, 0.44), lean: t > 0.26 && t < 0.44 ? 4 : 0, eye: 'angry' } });
+            const k = win(t, 0.22, 0.4);
+            if (!NO_ATTACK && k > 0 && k < 1)
+                band(e.c, lerp(TX + 14, HX - 10, easeIn(k)), FY - 14, 7, 14, -1.3, 1.3, PAL.blood, 1, 1.5, false);
+            if (t < 0.4)
+                e.hero(HX, FY, 'idle');
+            else if (t < 0.78) {
+                const img = heroSprite(e.L, 'ko', 1, e.f, true);
+                const col = redHit(t0, e.f, 0.4, 0.07), src = col ? tinted(img, col, 'tint:' + col) : img;
+                e.c.drawImage(src, 0, 0, 40, 40, R(HX) - 22, R(FY) - 16, 44, 18);
+                // 抜け出す（0.48〜0.66）→ ただよう → 吸いこまれて戻る（0.7〜0.78）
+                const up = ease(win(t, 0.48, 0.66)), down = easeIn(win(t, 0.7, 0.78));
+                const h = s.rise * up * (1 - down);
+                if (h > 1)
+                    s.draw(e, HX + R(Math.sin(e.f / 6) * 3 * (1 - down)), FY - 8 - h, h, down);
+            }
+            else if (t < HOLD)
+                sitDazed(e, HX, t, 0.78);
+            else
+                standBack(e, HX, t);
+            debris(e.c, HX, FY - 1, win(t, 0.4, 0.56), 8, 16, PAL.dust, 8, 0.8, 50);
+            hitMark(e, HX - 9, FY - 16, t0, true);
+            flash(e.c, bump(t0, 0.4, 0.45) * 0.5, '#ff6a8a');
+        } })),
+];
+/** 被弾の型を id で（討伐画面の、外した人の動き。割り当ては hurtmoves.ts） */
+export const hurtPattern = (id) => HURT.find((p) => p.id === id) ?? null;
 // ガード・回避・ジャンプ・必殺技は、全部の武器から選ぶ（よく使う近接 → 飛び道具 → 魔法の順）
 const ALL_WEAPONS = ['sword', 'katana', 'dagger', 'scythe', 'spear', 'umbrella', 'axe', 'hammer', 'pan', 'shield', 'guitar', 'bow', 'blaster', 'wand', 'book', 'fan'];
 export const CATEGORIES = [
@@ -2156,6 +2620,7 @@ export const CATEGORIES = [
     { id: 'guard', weapons: ALL_WEAPONS, group: '身のこなし', name: 'ガード', lead: 'ボスの攻撃を受け止める', patterns: GUARD },
     { id: 'evade', weapons: ALL_WEAPONS, group: '身のこなし', name: '回避', lead: 'ボスの攻撃をかわす', patterns: EVADE },
     { id: 'jump', weapons: ALL_WEAPONS, group: '身のこなし', name: 'ジャンプ', lead: '跳ぶ・着地する', patterns: JUMP },
+    { id: 'hurt', weapons: ALL_WEAPONS, group: '身のこなし', name: '被弾', lead: '外したとき、ボスの攻撃を受ける', patterns: HURT },
     { id: 'ougi', weapons: ALL_WEAPONS, group: '必殺技', name: '奥義（跳躍）', lead: '高く跳んで、上から決める', patterns: OUGI },
     { id: 'rush', weapons: ALL_WEAPONS, group: '必殺技', name: '乱舞', lead: '息つく間もない連続攻撃', patterns: RUSH },
     { id: 'summon', weapons: ALL_WEAPONS, group: '必殺技', name: '召喚', lead: '大きな力を呼び出す', patterns: SUMMON },
@@ -2260,7 +2725,7 @@ export function crowdSlots() {
     return out;
 }
 let layer = null;
-export function renderCrowd(c, members, timeSec, quietOthers) {
+export function renderCrowd(c, members, timeSec, quietOthers, digitsOn = true) {
     const t = (timeSec % LOOP) / LOOP, f = Math.floor(timeSec * 30);
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.imageSmoothingEnabled = false;
@@ -2311,15 +2776,16 @@ export function renderCrowd(c, members, timeSec, quietOthers) {
     }
     QUIET = false;
     // ダメージの数字: 当たった瞬間にボスの前へ。少しずつ位置をずらし、上へ浮いて消える
-    members.forEach((m, i) => {
-        const age = (((t - hitTimeOf(m)) % 1) + 1) % 1;
-        if (age >= 0.2)
-            return;
-        const crit = !!m.crit, sc = crit ? 2 : 1, x = TX + 4 + ((i * 13) % 34) - 8, y = TY - 26 + ((i * 7) % 22) - R(10 * ease(age / 0.2));
-        if (age > 0.16 && f % 2)
-            return; // 消えぎわはちらつかせる
-        digits(c, String(m.dmg ?? 100), x, y - (age < 0.03 ? 2 : 0), crit ? '#ffe27a' : '#ffffff', sc);
-    });
+    if (digitsOn)
+        members.forEach((m, i) => {
+            const age = (((t - hitTimeOf(m)) % 1) + 1) % 1;
+            if (age >= 0.2)
+                return;
+            const crit = !!m.crit, sc = crit ? 2 : 1, x = TX + 4 + ((i * 13) % 34) - 8, y = TY - 26 + ((i * 7) % 22) - R(10 * ease(age / 0.2));
+            if (age > 0.16 && f % 2)
+                return; // 消えぎわはちらつかせる
+            digits(c, String(m.dmg ?? 100), x, y - (age < 0.03 ? 2 : 0), crit ? '#ffe27a' : '#ffffff', sc);
+        });
     ({ W, H, FY, HX, TX, TY } = keep);
 }
 // ================================================================ 描き直し（見劣りしていた案）
@@ -3708,6 +4174,8 @@ export function drawInArena(c, d) {
         FY = d.reachY;
         LIFT = { dy: lift, from: d.hx, to: REACH_TO };
     }
+    DRAWN = null;
+    const mirror = !d.attack && (d.resp === 'turn' || d.resp === 'turnCut');
     c.save();
     try {
         if (!d.attack && (d.resp === 'turn' || d.resp === 'turnCut')) {
@@ -3724,6 +4192,8 @@ export function drawInArena(c, d) {
         ({ W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO } = keep);
         LIFT = null;
     }
+    const at = DRAWN;
+    return at ? { ...at, x: mirror ? 2 * d.hx - at.x : at.x } : null; // 振り向く型は左右を反転して描いている
 }
 // 型が前へ踏みこむか（近接か）を、いちど小さな絵に描いて冒険者の位置から確かめる（型ごとに覚えておく）
 const MELEE = new Map();

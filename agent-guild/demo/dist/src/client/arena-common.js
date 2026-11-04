@@ -8,6 +8,8 @@ export const win01 = (p, a, b) => clamp01((p - a) / (b - a)); // 区間の進み
 export const bump = (p, a, b) => (p < a || p > b ? 0 : Math.sin(((p - a) / (b - a)) * Math.PI));
 export const KO_TIME = 0.14;
 export const IMPACT = 0.42;
+/** 大魔法のダメージ（数字・体力の減り・ボスが崩れる）が、光の柱が落ちてから何だけ遅れて入るか（進行度）。見本帳（chainlab）で見比べて決める */
+export const chainTiming = { delay: 0.0067 }; // 光の柱が落ちてから、本番の速さで約1秒（着弾の前後は強いスロー。見本帳 chainlab で決めた 2026-11-01）
 // 連携詠唱のテンポ: 各区間を何倍ゆっくり見せるか（節の詠唱・叫び・タメ・着弾・着弾のあと）
 export const CHAIN_TEMPOS = {
     brisk: { label: '速め（前の版）', verse: 1, shout: 1, charge: 1, impact: 1, after: 0.45 },

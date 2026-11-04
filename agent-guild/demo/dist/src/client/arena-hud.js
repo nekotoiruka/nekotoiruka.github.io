@@ -1,4 +1,4 @@
-import { bump, clamp01, ease, lerp } from './arena-common.js';
+import { bump, chainTiming, clamp01, ease, lerp } from './arena-common.js';
 import { skillLook } from '../shared/build.js';
 import { TOOL_BY_ID } from '../shared/catalog.js';
 import { SKILL_WEIGHT } from '../shared/stats.js';
@@ -121,10 +121,39 @@ export function mineBand(ctx, w, phase, strikeOf, scene) {
     sceneBanner(ctx, scene, '', ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, line, st.success && !mpOut ? '#6ab8ff' : '#ff8a8a');
 }
 // --- 画面上部: ボスの体力 ---
+// 自分の反撃が当たるたび、光の粒がボスから体力バーへ飛び、届いた所が白く光って削れる（毎回。仲間の反撃では飛ばさない）。
+// 粒が届くまでは、削れる分をうすく残しておく（「自分の一撃がここを削った」が目で追えるように）
+const SHARE_FLY = 0.09, SHARE_STAG = 0.006, SHARE_N = 12, SHARE_LAND = 0.01 + SHARE_FLY, SHARE_GLOW = 0.12;
+function shareHits(r, time, bx, bw) {
+    const s = r.script, out = [];
+    if (r.intro || !r.mine.size || time >= s.waves.length)
+        return out;
+    const w = Math.min(Math.floor(Math.max(0, time)), s.waves.length - 1);
+    for (const wi of [w - 1, w]) {
+        if (wi < 0)
+            continue;
+        for (const e of r.wave(wi).events) {
+            if (e.type !== 'attack' || !r.mine.has(e.f) || e.dmg <= 0)
+                continue;
+            const age = time - (wi + e.t);
+            if (age < 0 || age > SHARE_LAND + SHARE_N * SHARE_STAG + SHARE_GLOW)
+                continue;
+            const before = r.bossHp(wi + e.t - 1e-6), after = r.bossHp(wi + e.t);
+            if (before <= after)
+                continue;
+            const max = s.boss.maxHp;
+            // 粒が出るのは、反撃の火花と同じ所（hitSpark）
+            const from = r.proj(r.bossBody.x + (e.f % 3) * 6 - 6, r.bossBody.y - 8 + (e.f % 4) * 4);
+            out.push({ age, x0: bx + (bw * after) / max, x1: bx + (bw * before) / max, from });
+        }
+    }
+    return out;
+}
 export function bossBar(time) {
     const ctx = this.ctx, s = this.script;
     const hp = this.bossHp(time), k = hp / s.boss.maxHp;
     const x = 96, y = 6, w = 192;
+    const fill = k > 0.5 ? '#c77dff' : k > 0.2 ? '#ff8a3a' : '#ff3b3b';
     ctx.save();
     ctx.fillStyle = 'rgba(13,16,34,0.85)';
     ctx.fillRect(x - 4, y - 2, w + 8, 17);
@@ -134,11 +163,61 @@ export function bossBar(time) {
     ctx.fillText(s.boss.name, x, y + 4);
     ctx.fillStyle = '#2a1630';
     ctx.fillRect(x, y + 9, w, 4);
-    ctx.fillStyle = k > 0.5 ? '#c77dff' : k > 0.2 ? '#ff8a3a' : '#ff3b3b';
+    ctx.fillStyle = fill;
     ctx.fillRect(x, y + 9, Math.round(w * k), 4);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#c9ced8';
     ctx.fillText(`${Math.ceil(hp)} / ${s.boss.maxHp}`, x + w, y + 4);
+    // 自分の削り: 届くまではうすく残し、届いたら白く光らせる
+    const hits = shareHits(this, time, x, w);
+    for (const h of hits) {
+        const x0 = Math.round(h.x0), cw = Math.max(1, Math.round(h.x1) - x0);
+        if (h.age < SHARE_LAND) {
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = fill;
+            ctx.fillRect(x0, y + 9, cw, 4);
+        }
+        else {
+            // 1回の削りはバーの数ドットしかないので、届いた所を少し広めに白く光らせる（削れた幅は変えない）
+            const g = clamp01((h.age - SHARE_LAND) / SHARE_GLOW), a = 1 - g;
+            const mid = (h.x0 + h.x1) / 2, gw = Math.max(cw, 10) * (1 + g * 0.6);
+            ctx.globalAlpha = a * 0.55;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(mid - gw / 2), y + 7, Math.round(gw), 8);
+            ctx.globalAlpha = a;
+            ctx.fillRect(x0, y + 8, cw, 6);
+            ctx.fillRect(Math.round(mid), Math.round(y + 7 - 4 * a), 1, Math.round(8 + 8 * a)); // 縦の光の筋
+        }
+    }
+    // 光の粒: ボスから、削れる所へ弧を描いて飛ぶ
+    for (const h of hits) {
+        const tx = (h.x0 + h.x1) / 2, ty = y + 11;
+        const cx = lerp(h.from.x, tx, 0.35), cy = Math.min(h.from.y, ty) - 20;
+        for (let i = 0; i < SHARE_N; i++) {
+            const q0 = (h.age - 0.01 - i * SHARE_STAG) / SHARE_FLY;
+            if (q0 <= 0 || q0 >= 1)
+                continue;
+            const q = ease(q0);
+            const jx = ((i * 7) % 5) - 2, jy = ((i * 3) % 5) - 2; // 出どころを少しばらす
+            const sx = h.from.x + jx, sy = h.from.y + jy;
+            const px = (1 - q) * (1 - q) * sx + 2 * (1 - q) * q * (cx + jx * 3) + q * q * tx;
+            const py = (1 - q) * (1 - q) * sy + 2 * (1 - q) * q * cy + q * q * ty;
+            // 尾を引く光の粒（2ドットの芯＋うすい縁）。暗い背景でも見えるように
+            const back = ease(Math.max(0, q0 - 0.12));
+            const bx2 = (1 - back) * (1 - back) * sx + 2 * (1 - back) * back * (cx + jx * 3) + back * back * tx;
+            const by2 = (1 - back) * (1 - back) * sy + 2 * (1 - back) * back * cy + back * back * ty;
+            ctx.globalAlpha = 0.35;
+            ctx.fillStyle = '#ffd166';
+            ctx.fillRect(Math.round((px + bx2) / 2), Math.round((py + by2) / 2), 1, 1);
+            ctx.fillRect(Math.round(bx2), Math.round(by2), 1, 1);
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = '#fff3c4';
+            ctx.fillRect(Math.round(px) - 1, Math.round(py) - 1, 4, 4);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+        }
+    }
     ctx.restore();
 }
 // ボスの攻撃名と狙う列（構えの間だけ）
@@ -230,13 +309,13 @@ export function bubble(ctx, text, wx, wy, ok) {
     });
 }
 // ダメージの数字: ポンと大きく飛び出して弾み、縮んで消える。会心は金色で揺れ、「CRITICAL」の文字つき
-export function damageNum(wx, wy, value, age01, crit, kind) {
+export function damageNum(wx, wy, value, age01, crit, kind, o = {}) {
     const p = this.proj(wx, wy);
     const k = age01;
     const pop = k < 0.12 ? 1 + (1 - k / 0.12) * (crit ? 1.2 : 0.7) : k < 0.22 ? 1 - Math.sin(((k - 0.12) / 0.1) * Math.PI) * 0.12 : 1;
     const rise = k < 0.2 ? -Math.sin((k / 0.2) * Math.PI / 2) * 10 : -10 + (k - 0.2) * 4;
     const alpha = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
-    const base = kind === 'boss' ? (crit ? 15 : 11) : 10;
+    const base = (kind === 'boss' ? (crit ? 15 : 11) : 10) * (o.scale ?? 1);
     const size = Math.round(base * pop * (1 + (this.cam.z - 1) * 0.25));
     const sx = crit && k < 0.3 ? Math.sin(this.frame * 2.1) * 1.5 : 0;
     this.uiTop.push(() => {
@@ -246,10 +325,19 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = `bold ${size}px ${PIXEL_FONT}`;
-        const x = Math.round(p.x + sx), y = Math.round(p.y + rise);
-        const text = kind === 'boss' ? String(Math.round(value)) : `-${Math.round(value)}`;
+        const num = o.comma ? String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') : String(Math.round(value));
+        const text = kind === 'boss' ? num : `-${num}`;
+        // 大きな数字は、画面からはみ出さないように（カメラが寄っているとき、ボスの近くは画面のはしになる）
+        let x = Math.round(p.x + sx), y = Math.round(p.y + rise);
+        if (o.scale) {
+            const { w: AW, h: AH } = this.script.arena;
+            ctx.font = `bold ${size}px ${PIXEL_FONT}`;
+            const hw = ctx.measureText(text).width / 2 + 4, hh = size / 2 + 4;
+            x = Math.round(Math.max(hw, Math.min(AW - hw, x)));
+            y = Math.round(Math.max(hh + 12, Math.min(AH - hh, y)));
+        }
         ctx.lineJoin = 'round';
-        ctx.lineWidth = crit ? 4 : 3;
+        ctx.lineWidth = Math.max(crit ? 4 : 3, size / 6);
         ctx.strokeStyle = crit ? '#5a1000' : '#14101e';
         ctx.strokeText(text, x, y);
         if (crit) {
@@ -262,7 +350,7 @@ export function damageNum(wx, wy, value, age01, crit, kind) {
         else
             ctx.fillStyle = kind === 'boss' ? '#ffffff' : '#ff6b6b';
         ctx.fillText(text, x, y);
-        if (crit && k < 0.7) {
+        if (crit && k < 0.7 && o.label !== false) {
             ctx.font = `bold 7px ${PIXEL_FONT}`;
             ctx.lineWidth = 2.5;
             ctx.strokeStyle = '#5a1000';
@@ -362,5 +450,15 @@ export function hpBar(ctx, v) {
     const k = v.hp / 100;
     ctx.fillStyle = k > 0.5 ? '#63c74d' : k > 0.25 ? '#feae34' : '#e43b44';
     ctx.fillRect(x + 1, y + 1, Math.max(0, Math.round(14 * k)), 1);
+}
+// ---- 連携詠唱の大魔法のダメージ（1万を超えることもある、討伐の最後の一撃）----
+// ほかのダメージ数字と同じ所（ボスの体の右上あたり＝反撃の数字が散らばる範囲のまん中）に、同じ出方で。色は会心と同じ。
+// 大きさだけ2倍、CRITICAL の文字はつけない（ケタの多さで伝わる）。3ケタごとにカンマ。
+// 出る瞬間は、光の柱が落ちてから chainTiming.delay あと（体力の減り・ボスが崩れるのと同じ瞬間）
+export function chainDmg(c, phase) {
+    const age = phase - c.impact - chainTiming.delay;
+    if (age < 0 || age > 0.22 || c.dmg <= 0)
+        return;
+    this.damageNum(this.bossBody.x, this.bossBody.y - 28, c.dmg, age / 0.22, true, 'boss', { scale: 2, label: false, comma: true });
 }
 //# sourceMappingURL=arena-hud.js.map

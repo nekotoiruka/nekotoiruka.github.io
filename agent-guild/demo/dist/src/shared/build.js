@@ -458,7 +458,7 @@ avatar:
   body: knight
   palette: "#3a7bd5"
   hair: "#f2c14e"
-  weapon: auto
+  weapon: sword
 kodawari: ""
 
 main:
