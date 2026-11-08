@@ -13,6 +13,10 @@ export function coach(b, t) {
     // 道具（ツール）: ひとつも持っていないとき。どの道具が要るかは言わない
     if (!allTools.length)
         add('tools', 'warn', tl('道具をひとつも持たせていないな。考えても分からんこと（いまの様子、見えない敵の動き）が起きたら、そいつは勘で斬りかかるしかない。募集要項の「戦場で起きること」と、道具の説明を見比べてみろ。'));
+    // 心得に道具の名前が出てくる: 使い方は、道具の名前と説明がもう冒険者に伝えている（2026-11-07・issue #58 #3。問いかけで気づかせる）
+    const named = b.tools.map((id) => toolOf(id)?.name).filter((n) => !!n && [...n].length >= 2 && b.main.prompt.includes(n));
+    if (named.length)
+        add('tools', 'tip', tl('心得に、道具の名前が出てくるな。道具の名前と説明は、心得と並んでもう冒険者に渡っておる。心得で同じことを言う必要があるか？ 使ってはならん場面があるなら、それだけを書けば足りんか？'));
     // 分厚い書物を冒険者が自分で持つ: 読むだけで行動力の大半を使う（数字で示す）
     for (const id of b.tools) {
         const h = toolOf(id)?.heavy;
@@ -20,12 +24,13 @@ export function coach(b, t) {
             add('tools', 'warn', tl('「{0}」を冒険者に自分で担がせているな。読むだけで行動力を約{1}も食う（ひとつの局面で出せるのは{2}までだ）。読み終えたあと、考えて動く力は残るか？', toolOf(id).name, h.toLocaleString(), t.apCap.toLocaleString()));
     }
     // 巻物（スキル）: 「いつ読むか」が空（AI には巻物の名前しか見えない）
-    // 心得に巻物の名前を挙げてあれば、冒険者はそれを手がかりに開く（docs/REAL.md: そのときは説明が空でも点は落ちなかった）。挙げていない巻物だけ「！」
-    const noWhen = b.skills.filter((s) => !s.description.trim() && !(s.name && b.main.prompt.includes(s.name)));
+    // 巻物は、名前と説明（何の巻物で、いつ開くか）を見て、冒険者が自分で開く（2026-11-06）。心得に巻物の名前を書いてあっても、説明が空なら「！」
+    //（以前は、心得に巻物の名前があれば言わなかった。それでは「心得に巻物の使い方を書く」ほうへ導いてしまう）
+    const noWhen = b.skills.filter((s) => !s.description.trim());
     if (noWhen.length)
-        add('skills', 'warn', tl('巻物「{0}」は、いつ読むかが空だ。冒険者に見えるのは巻物の名前だけ。それじゃあ、要る場面で開かれんぞ。', noWhen.map((s) => s.name).join('」「')));
+        add('skills', 'warn', tl('巻物「{0}」は、説明が空だ。冒険者に見えるのは、巻物の名前と説明だけ。何の巻物で、いつ開くかを説明に書いておかんと、要る場面で開かれんぞ。', noWhen.map((s) => s.name).join('」「')));
     if (!b.skills.length && t.hasScrolls)
-        add('skills', 'tip', tl('巻物を一本も持っていないな。資料室には、心得に収まりきらんほどの知識が眠っている。場面を選んで使う知識は、巻物にして「いつ読むか」を書いておく手もあるぞ。'));
+        add('skills', 'tip', tl('巻物を一本も持っていないな。資料室には、心得に収まりきらんほどの知識が眠っている。場面を選んで使う手順や知識は、巻物にして説明を書いておく手もあるぞ。'));
     // 記憶（メモリ）: 冒険日誌がないと、前の場面は見えない（採点の決まり）
     if (has('memory')) {
         if (!allTools.includes('memory'))
@@ -48,12 +53,14 @@ export function coach(b, t) {
     if (b.companion) {
         if (!b.companion.tools.length)
             add('companion', 'warn', tl('お供に道具を持たせていないな。お供は、持たされた道具でしか調べられんぞ。'));
+        // お供に何を頼めるかは、お供の道具の説明で冒険者に伝わる（2026-11-06 の本物の確認: 心得に書かなくても頼めた）。心得に書くのは、頼んではならん場面だけ
         else
-            add('companion', 'good', tl('お供に調べ物の道具を持たせているな。いつ頼むか、何を伝えるかも、心得に書いておけ。'));
+            add('companion', 'good', tl('お供に調べ物の道具を持たせているな。お供に何を頼めるかは、その道具の説明で冒険者に伝わる。心得に書くのは、お供に頼んではならん場面があるときだけでいい。どう調べて何を返すかは、お供の心得に書いておけ。'));
     }
     // 分厚い書物は、道具でしか読めない（採点の決まり）。冒険者もお供も持っていなければ、それが要る場面は解けない（実測でも点が下がる: docs/REAL.md）
-    if (heavyAll.length && !allTools.some((id) => toolOf(id)?.heavy))
-        add('companion', 'warn', tl('今度の相手には、とんでもなく分厚い資料が付きものらしい。いまの持ち物じゃ、そいつを読める者がいない。冒険者が自分で読めば行動力の大半が消える。誰かに読ませて、要点だけ聞く手もあるぞ。'));
+    // 検索の道具（索引など）でも、分厚い資料から要る行を引ける（2026-11-07・issue #58）
+    if (heavyAll.length && !allTools.some((id) => toolOf(id)?.heavy || toolOf(id)?.search))
+        add('companion', 'warn', tl('今度の相手には、とんでもなく分厚い資料が付きものらしい。いまの持ち物で、そいつを調べられる者はおるか？'));
     const warns = items.filter((x) => x.level === 'warn').length;
     const verdict = warns >= 2 ? 'notyet' : warns ? 'almost' : 'ready';
     const say = verdict === 'ready' ? tl('抜かりはなさそうだ。あとはそいつを信じて送り出してやれ。武運を祈る。')
@@ -77,7 +84,7 @@ export function coachTaskOf(task, catalog, apCap) {
         scenes: [...new Set((task.briefing?.scenes ?? []).map((s) => s.scene ?? '').filter(Boolean))],
         hasScrolls: !!task.scrolls?.length,
         apCap,
-        tools: catalog.map((x) => ({ id: x.id, name: x.name, ...(x.source === 'archive' ? { heavy: toolAp(x) } : {}) })),
+        tools: catalog.map((x) => ({ id: x.id, name: x.name, ...(x.source === 'archive' ? { heavy: toolAp(x) } : {}), ...(x.search ? { search: true } : {}) })),
     };
 }
 //# sourceMappingURL=coach.js.map

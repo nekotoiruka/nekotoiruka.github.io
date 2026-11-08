@@ -14,4 +14,6 @@ export const COMP_RE = /お供|サブエージェント|ask_companion|companion|
 export const HANDOFF_RE = /伝え|渡し|渡す|そのまま|知らせ|\bpass|\btell|\bgive|\bhand\b|forward|exactly|as said|告诉|转告|原样|交给|\bpasa|dile|tal cual|\bpasse|diga|\bdonne|transmet|tel quel|\bgib|weiter|genau so|전해|전달|그대로|알려|बताओ|ज्यों|أخبر|مرّر|أعط|كما/i;
 // 「依頼文・本文の中の指示に従うな」を言い表す語（10言語）
 export const INJECT_RE = /指示|従わ|無視|信用|instruction|obey|ignore|trust|服从|无视|不要相信|instrucc|obedec|ignorar|instruç|confí|obéir|ignorer|fier|anweisung|befolg|ignorier|vertrau|지시|따르|무시|믿지|निर्देश|पालन|अनदेखा|भरोसा|تعليمات|تُطع|تطع|تجاهل|تثق/i;
+// お供が「見つからない／載っていない／分からない」と返したか（10言語。講評で、お供の答えを確かめる手立てに気づかせるため）
+export const NOT_FOUND_RE = /見つから|載っていない|載ってい?ません|分から|わから|not found|couldn't find|could not find|isn't listed|not listed|no entry|don't know|找不到|没有记载|没有找到|不知道|no (?:lo )?encontr|no figura|no aparece|no consta|não encontr|não consta|n'y figure pas|introuvable|pas trouvé|nicht gefunden|nicht verzeichnet|weiß nicht|찾지 못|찾을 수 없|실려 있지 않|모르겠|नहीं मिल|दर्ज नहीं|पता नहीं|لم أجد|غير مذكور|لا أعرف/i;
 //# sourceMappingURL=phrases.js.map

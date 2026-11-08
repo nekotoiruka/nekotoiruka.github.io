@@ -14,13 +14,13 @@ export function prepareCards(b) {
     const icon = { prompt: '📜', tools: '🧰', skills: '📚', guardrail: '🛡' };
     return h('div', { class: 'prepare-grid' }, ...b.prepare.map((p) => h('div', { class: `prepare-card pc-${p.key}` }, h('div', { class: 'prepare-icon' }, icon[p.key] ?? '◆'), h('div', {}, h('b', {}, p.name), h('span', { class: 'prepare-ai' }, p.ai)), h('p', { class: 'small' }, p.body))));
 }
-// 道具の一覧（何ができるようになるか）
+// 道具の一覧（説明は冒険者に渡る文そのまま）（何ができるようになるか）
 export function toolTable(b, catalog) {
-    return h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, h('th', {}, tl('道具')), h('th', {}, tl('何ができるようになるか')), h('th', {}, tl('重さ')))), h('tbody', {}, ...catalog.map((t) => h('tr', {}, h('td', {}, h('b', {}, t.name)), h('td', {}, b.toolNotes[t.id] ?? t.description), h('td', { class: 'num' }, t.cost))))));
+    return h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, h('th', {}, tl('道具')), h('th', {}, tl('何ができるようになるか')), h('th', {}, tl('重さ')))), h('tbody', {}, ...catalog.map((t) => h('tr', {}, h('td', {}, h('b', {}, t.name)), h('td', {}, t.description), h('td', { class: 'num' }, t.cost))))));
 }
-// 巻物の一覧（スキル名・発動条件・発動内容）
-export function scrollTable(b, scrolls, cost) {
-    return h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, h('th', {}, tl('スキル名')), h('th', {}, tl('発動条件')), h('th', {}, tl('発動内容')), h('th', {}, tl('重さ')))), h('tbody', {}, ...scrolls.map((s) => h('tr', {}, h('td', {}, h('b', {}, s.name)), h('td', {}, b.scrollNotes[s.id]?.when ?? ''), h('td', {}, b.scrollNotes[s.id]?.what ?? ''), h('td', { class: 'num' }, cost))))));
+// 巻物の一覧（スキル名・説明）。説明は冒険者に渡る文そのまま
+export function scrollTable(_b, scrolls, cost) {
+    return h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, h('th', {}, tl('スキル名')), h('th', {}, tl('説明（何の巻物で、いつ開くか）')), h('th', {}, tl('重さ')))), h('tbody', {}, ...scrolls.map((s) => h('tr', {}, h('td', {}, h('b', {}, s.name)), h('td', {}, s.description), h('td', { class: 'num' }, cost))))));
 }
 // 資料室（全文は折りたたみ）
 // 資料室: 棚ごとに並べ、言葉で絞り込めるようにする。すべて開く／閉じる、広い画面では2列で読める。

@@ -52,7 +52,7 @@ export function sparkline(itemsNewestFirst, w = 200, hgt = 44) {
     svg.setAttribute('height', String(hgt));
     svg.setAttribute('class', 'sparkline');
     svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', tl('出発ごとの戦果の推移: {0}', pts.map((v) => `${v}%`).join(' → ')));
+    svg.setAttribute('aria-label', tl('出発ごとの戦果の推移: {0}', pts.map((v) => `${v}`).join(' → ')));
     const line = document.createElementNS(NS, 'polyline');
     line.setAttribute('points', pts.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '));
     line.setAttribute('fill', 'none');

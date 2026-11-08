@@ -35,7 +35,7 @@ function savePinned(ids) {
     userSet(MINE_KEY, JSON.stringify(ids));
 }
 let stopCurrent = null;
-const RAID_DESC = tl('冒険に出発した冒険者全員で、ボスに挑みます。ボスが仕掛けるたびに、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。ボスの大技を外すとダウンしますが、次に正しく動けた場面で起き上がります（脱落はしません）。順位は戦果（正しく動けた割合）→ 燃費 → 速さで決まります。');
+const RAID_DESC = tl('冒険に出発した冒険者全員で、ボスに挑みます。ボスが仕掛けるたびに、正しく動けた冒険者はかわして反撃し、間違えた冒険者は攻撃を受けます。ボスの大技を外すとダウンしますが、次に正しく動けた場面で起き上がります（脱落はしません）。順位は戦果（正しく動けた割合がもとで、行動力の使いすぎや余力で上下します）→ 燃費 → 速さの順で決まります。');
 // past: 過去のシーズンの討伐を再生するとき（focus の冒険者を「自分」と同じように目立たせる）
 export async function renderArena(root, initialView, past) {
     getSeason().catch(() => null); // 課題ごとのコスト上限を読み込む（表示用）
@@ -334,7 +334,7 @@ function renderCard(card, s, f, isMine = false, onMine) {
     }
     const fi = s.fighters[f];
     const st = s.standings.find((x) => x.f === f);
-    card.replaceChildren(...nodes(h('div', { class: 'card-head' }, avatarCanvas(fi.loadout, 2), h('div', {}, h('strong', {}, fi.name), h('div', { class: 'muted small' }, tl(`ビルドコスト {0}/{1}`, fi.loadout.cost, COST_RULES.limit)))), fi.kodawari ? h('blockquote', { class: 'kodawari' }, fi.kodawari) : null, loadoutChips(fi.loadout), radar(fi.stats, 170), h('dl', { class: 'mini-stats' }, h('dt', {}, tl('正答率')), h('dd', {}, `${st.accuracy}%`), h('dt', {}, tl('平均トークン')), h('dd', {}, st.avgTokens.toLocaleString()), h('dt', {}, tl('平均応答')), h('dd', {}, fmtMs(st.avgLatencyMs))), h('div', { class: 'card-actions' }, onMine ? h('button', { class: 'btn btn-small' + (isMine ? ' on' : ''), onclick: onMine }, isMine ? tl('★ 自分のキャラ（解除）') : tl('☆ 自分のキャラにする')) : null, h('a', { href: `#/build/${encodeURIComponent(fi.id)}`, class: 'link' }, tl('ビルド詳細を見る →')))));
+    card.replaceChildren(...nodes(h('div', { class: 'card-head' }, avatarCanvas(fi.loadout, 2), h('div', {}, h('strong', {}, fi.name), h('div', { class: 'muted small' }, tl(`ビルドコスト {0}/{1}`, fi.loadout.cost, COST_RULES.limit)))), fi.kodawari ? h('blockquote', { class: 'kodawari' }, fi.kodawari) : null, loadoutChips(fi.loadout), radar(fi.stats, 170), h('dl', { class: 'mini-stats' }, h('dt', {}, tl('戦果')), h('dd', {}, `${st.score ?? st.accuracy}`), h('dt', {}, tl('燃費（平均）')), h('dd', {}, st.avgTokens.toLocaleString()), h('dt', {}, tl('速さ（平均）')), h('dd', {}, fmtMs(st.avgLatencyMs))), h('div', { class: 'card-actions' }, onMine ? h('button', { class: 'btn btn-small' + (isMine ? ' on' : ''), onclick: onMine }, isMine ? tl('★ 自分のキャラ（解除）') : tl('☆ 自分のキャラにする')) : null, h('a', { href: `#/build/${encodeURIComponent(fi.id)}`, class: 'link' }, tl('ビルド詳細を見る →')))));
 }
 // その画面の「あなた」の冒険者（見出しを、あなたが引いた場面にするため）
 const mineOf = (s) => s.fighters.map((f, i) => (mineIds.has(f.id) ? i : -1)).filter((i) => i >= 0);
@@ -349,7 +349,7 @@ function showResults(el, s, select) {
     }));
     const rows = s.standings.map((st) => {
         const fi = s.fighters[st.f];
-        return h('tr', { onclick: () => select(st.f) }, h('td', {}, st.rank), h('td', { class: 'name' }, fi.name), h('td', {}, `${st.accuracy}%`), h('td', {}, st.avgTokens.toLocaleString()), h('td', {}, fmtMs(st.avgLatencyMs)), h('td', {}, st.damageDealt), h('td', {}, st.mvp));
+        return h('tr', { onclick: () => select(st.f) }, h('td', {}, st.rank), h('td', { class: 'name' }, fi.name), h('td', {}, `${st.score ?? st.accuracy}`), h('td', {}, st.avgTokens.toLocaleString()), h('td', {}, fmtMs(st.avgLatencyMs)), h('td', {}, st.damageDealt), h('td', {}, st.mvp));
     });
     // 答え合わせ表: 参加者 × ウェーブの ○ / ×
     const mark = (f, i) => {
@@ -360,7 +360,7 @@ function showResults(el, s, select) {
         return h('td', { class: 'mk' }, '');
     };
     const sheet = h('details', { class: 'answer-sheet' }, h('summary', {}, tl('答え合わせ表（ウェーブごとの正誤）')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact sheet' }, h('thead', {}, h('tr', {}, h('th', {}, ''), ...s.waves.map((_, i) => h('th', { title: waveTitleFor(s.cases[s.waves[i].caseIndex], s.fighters, mineOf(s)) }, `${i + 1}`)))), h('tbody', {}, ...s.standings.map((st) => h('tr', {}, h('td', { class: 'name' }, s.fighters[st.f].name), ...s.waves.map((_, i) => mark(st.f, i))))))));
-    el.replaceChildren(h('div', { class: 'results-inner' }, h('h2', {}, tl('討伐の戦果')), gmSays(h('p', {}, tl('{0}討伐から、みな戻ってきたぞ。今回の戦果1位は「{1}」だ。', s.boss.name, s.fighters[s.standings[0].f].name)), h('p', {}, h('a', { href: '#/ranking' }, tl('順位とわしの講評は、「戦果」で確かめるがよい。')))), head, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('名前'), tl('戦果（正答率）'), tl('燃費（使った行動力の平均）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP'].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows)), sheet));
+    el.replaceChildren(h('div', { class: 'results-inner' }, h('h2', {}, tl('討伐の戦果')), gmSays(h('p', {}, tl('{0}討伐から、みな戻ってきたぞ。今回の戦果1位は「{1}」だ。', s.boss.name, s.fighters[s.standings[0].f].name)), h('p', {}, h('a', { href: '#/ranking' }, tl('順位とわしの講評は、「戦果」で確かめるがよい。')))), head, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('順位'), tl('名前'), tl('戦果'), tl('燃費（平均）'), tl('速さ（平均）'), tl('与ダメ'), 'MVP'].map((t) => h('th', {}, t)))), h('tbody', {}, ...rows)), sheet));
     el.classList.remove('hidden');
 }
 export { SCALE };

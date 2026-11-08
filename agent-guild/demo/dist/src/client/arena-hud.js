@@ -109,6 +109,7 @@ export function mineBand(ctx, w, phase, strikeOf, scene) {
         return;
     const cap = s.theme?.captions;
     const mpOut = this.wave(w).events.some((e) => e.type === 'mpOut' && e.f === mine);
+    const lost = this.wave(w).events.some((e) => e.type === 'lost' && e.f === mine);
     let line;
     if (st.success && !mpOut) {
         const cm = s.cases[s.waves[w].caseIndex];
@@ -116,7 +117,7 @@ export function mineBand(ctx, w, phase, strikeOf, scene) {
         line = okLine(cap, scene, this.respScene(w), this.evadeOf(w, mine), el ? elementLabel(el) : undefined);
     }
     else
-        line = missLine(cap, scene, mpOut ? 'mpOut' : st.charmed ? 'charmed' : 'miss');
+        line = missLine(cap, scene, mpOut ? 'mpOut' : lost ? 'lost' : st.charmed ? 'charmed' : 'miss');
     // sceneBanner は 0〜0.25 の進行度で出入りする
     sceneBanner(ctx, scene, '', ((phase - b0) / (b1 - b0)) * 0.25, s.arena.w, line, st.success && !mpOut ? '#6ab8ff' : '#ff8a8a');
 }

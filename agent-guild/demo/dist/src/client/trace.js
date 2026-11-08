@@ -53,19 +53,42 @@ function step(s) {
         case 'skill': return h('li', { class: 'tr tr-skill' }, h('span', { class: 'tr-k' }, tl('巻物')), h('div', { class: 'tr-body' }, h('b', {}, tl(`「{0}」を開いた`, s.name)), s.output ? h('pre', { class: 'tr-out' }, s.output + (s.output.length >= 300 ? '…' : '')) : null));
         case 'companion': return h('li', { class: 'tr tr-companion' }, h('span', { class: 'tr-k' }, tl('お供')), h('div', { class: 'tr-body' }, h('div', {}, h('b', {}, tl('お供に頼んだ：')), s.request || tl('（中身なし）')), s.tools?.length ? h('div', { class: 'small muted' }, tl(`お供が使った道具: {0}`, s.tools.map(toolName).join(tl('・'))), s.tokens ? tl('（お供が使った行動力 {0}。冒険者の行動力は減らない）', s.tokens.toLocaleString()) : '') : null, h('div', {}, h('b', {}, tl('お供の答え：')), s.output), 
         // お供の答えは冒険者が読むので、その分は冒険者の行動力から減る（長い答えほど重い）
-        s.output ? h('div', { class: `small ${estimateTokens(s.output) >= 300 ? 'tr-mp-heavy' : 'muted'}` }, tl('この答えを冒険者が読んだ分、冒険者の行動力 −約{0}', estimateTokens(s.output).toLocaleString()), estimateTokens(s.output) >= 300 ? tl('（長い答えは冒険者の行動力を圧迫する。答えだけを短く返すよう、お供の心得に書こう）') : null) : null));
+        s.output ? h('div', { class: `small ${estimateTokens(s.output) >= 300 ? 'tr-mp-heavy' : 'muted'}` }, tl('この答えを冒険者が読んだ分、冒険者の行動力 −約{0}', estimateTokens(s.output).toLocaleString()), estimateTokens(s.output) >= 300 ? tl('（長い答えほど、読んだ冒険者の行動力を使います）') : null) : null));
         case 'answer': return h('li', { class: `tr tr-answer ${s.ok ? 'tr-ok' : 'tr-ng'}` }, h('span', { class: 'tr-k' }, tl('答え')), h('div', { class: 'tr-body' }, h('b', {}, s.ok ? '○ ' : '× '), s.text));
     }
 }
 const HEAVY_SHOW = 300; // これより軽い道具の結果には、行動力の減りを出さない（細かい数字で読みにくくしない）
 const HEAVY_WARN = 3000; // これより重い結果は強調する（1場面の 行動力 の2割ほど）
+// 2026-11-07 から、行動力は1回の呼び出しに入る量（ap。同じものを何度も数えない）。ap のない古い記録は、もとの合計で出す
 export function sceneMp(c) {
-    return { used: Math.max(0, c.tokensIn + c.tokensOut - (c.companionTokens ?? 0)), cap: MP_BUDGET_PER_CASE, companion: c.companionTokens, out: c.mpOut };
+    return { used: Math.max(0, c.ap ?? c.tokensIn + c.tokensOut - (c.companionTokens ?? 0)), cap: MP_BUDGET_PER_CASE, companion: c.companionTokens, out: c.mpOut,
+        ...(c.apParts ? { parts: c.apParts } : {}), ...(c.companionApParts ? { companionParts: c.companionApParts } : {}), ...(c.companionAp !== undefined ? { companionAp: c.companionAp } : {}) };
+}
+// 行動力の内訳: 1回の呼び出しに何が積み重なっていたかを、色の帯で見せる（数字は出さない。上限の線を引き、超えたら赤くする）。
+// 心得を削れば書物を読む余地が生まれるが、そのぶん他の場面で外れる。どこを軽くするかは育て役が自分で決める
+const AP_PARTS = [
+    ['main', tl('心得')], ['tools', tl('道具の一覧')], ['scene', tl('場面')], ['scrolls', tl('巻物の中身')],
+    ['results', tl('道具の結果')], ['companion', tl('お供の答え')], ['think', tl('考えと答え')],
+];
+const COMP_PARTS = [
+    ['main', tl('お供の心得')], ['tools', tl('道具の一覧')], ['request', tl('頼んだこと')], ['results', tl('道具の結果')], ['answer', tl('答え')],
+];
+// style は文字列ではなくオブジェクトで渡す（CSP で、文字列の style 属性は効かない）
+function apStack(title, parts, keys, cap, out) {
+    const total = keys.reduce((a, [k]) => a + (parts[k] ?? 0), 0);
+    const scale = Math.max(cap, total) || 1;
+    const shown = keys.filter(([k]) => (parts[k] ?? 0) > 0);
+    return h('div', { class: `ap-stack ${out || total > cap ? 'is-out' : ''}` }, h('div', { class: 'small' }, h('b', {}, title), out || total > cap ? h('b', { class: 'mp-out' }, ' ' + tl('上限を超えた')) : null), h('div', { class: 'ap-stack-bar', role: 'img', 'aria-label': shown.map(([, l]) => l).join(' / ') }, ...shown.map(([k, l]) => h('i', { class: `ap-${k}`, title: l, style: { width: `${((parts[k] / scale) * 100).toFixed(1)}%` } })), h('b', { class: 'ap-cap', title: tl('行動力の上限'), style: { left: `${((cap / scale) * 100).toFixed(1)}%` } })), h('ul', { class: 'ap-legend small muted' }, ...shown.map(([k, l]) => h('li', {}, h('i', { class: `ap-${k}` }), l))));
+}
+function apBreakdown(m) {
+    if (!m.parts && !m.companionParts)
+        return null;
+    return h('details', { class: 'ap-breakdown' }, h('summary', { class: 'small' }, tl('行動力の内訳を見る（いちばん重かったときに、何で埋まっていたか。目安）')), m.parts ? apStack(tl('冒険者'), m.parts, AP_PARTS, m.cap, m.out) : null, m.companionParts ? apStack(tl('お供（行動力の上限は冒険者と同じ）'), m.companionParts, COMP_PARTS, m.cap, false) : null, h('p', { class: 'small muted' }, tl('帯の縦線が、行動力の上限です。')));
 }
 // 行動力（AP）のゲージ: 場面のはじめは満タンで、使った分だけ減っていく（RPG の行動力と同じ向き）。中身はトークンの数
 function mpGauge(m) {
     const left = Math.max(0, m.cap - m.used), r = left / m.cap;
-    return h('div', { class: `mp-gauge ${m.out ? 'is-out' : r <= 0.3 ? 'is-high' : ''}` }, h('div', { class: 'mp-row small' }, h('b', {}, tl('冒険者の行動力')), h('span', {}, tl('残り {0} / {1}', left.toLocaleString(), m.cap.toLocaleString())), m.out ? h('b', { class: 'mp-out' }, tl('行動力切れ')) : null), h('div', { class: 'mp-bar', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': String(m.cap), 'aria-valuenow': String(left) }, h('i', { style: `width:${(r * 100).toFixed(1)}%` })), m.companion ? h('div', { class: 'small muted' }, tl('お供が使った行動力 {0}（お供の分は、冒険者の行動力から減らない）', Math.round(m.companion).toLocaleString())) : null);
+    return h('div', { class: `mp-gauge ${m.out ? 'is-out' : r <= 0.3 ? 'is-high' : ''}` }, h('div', { class: 'mp-row small' }, h('b', {}, tl('冒険者の行動力')), h('span', {}, tl('残り {0} / {1}', left.toLocaleString(), m.cap.toLocaleString())), m.out ? h('b', { class: 'mp-out' }, tl('行動力切れ')) : null), h('div', { class: 'mp-bar', role: 'meter', 'aria-valuemin': '0', 'aria-valuemax': String(m.cap), 'aria-valuenow': String(left) }, h('i', { style: { width: `${(r * 100).toFixed(1)}%` } })), m.companion ? h('div', { class: 'small muted' }, tl('お供が使った行動力 {0}（お供の分は、冒険者の行動力から減らない）', Math.round(m.companion).toLocaleString())) : null, apBreakdown(m));
 }
 // 1場面ぶんの記録。mp を渡すと、先頭にこの場面の 行動力 のゲージを出す
 export function traceView(steps, mp) {
@@ -76,6 +99,6 @@ export function traceView(steps, mp) {
 }
 // どこを読めばよいかの手がかり（記録の読み方）
 export function traceGuide() {
-    return h('details', { class: 'trace-guide small' }, h('summary', {}, tl('記録の読み方')), h('ul', {}, h('li', {}, h('b', {}, tl('行動力')), tl('：1つの場面で、冒険者が使える行動の量（AP）。道具を使う・読む・考える・答えるたびに減ります。冒険者は考えるたびに、それまでに読んだものをまるごと読み返すので、長い結果を一度読むと、その場面の終わりまで何度も行動力を使います。尽きると、その場面は動けません（行動力切れ）。場面が変わると満タンに戻ります。道具の横の「行動力 −約◯」は、その結果を読むのに使った量です。実務の AI でいう「コンテキストの上限」にあたります。')), h('li', {}, h('b', {}, tl('聞いた')), tl('：冒険者の耳に届いたこと。前に聞いてしまった幻術の声が、まだ混ざっていることもあります。')), h('li', {}, h('b', {}, tl('道具・巻物')), tl('：何を使い、何が分かったか。必要な道具を使っていない、関係のない巻物を開いている、が直しどころです。')), h('li', {}, h('b', {}, tl('お供')), tl('：お供（サブエージェント）に何を頼み、何が返ってきたか。お供に届くのは頼んだ文だけなので、手がかりが足りないと、正しく答えられません。')), h('li', {}, h('b', {}, tl('考え')), tl('：冒険者がそう判断した理由。「書いていない」「持っていない」とあれば、心得・巻物・道具のどれが足りないかが分かります。')), h('li', {}, h('b', {}, tl('答え')), tl('：最後の行動。外していたら、その前の「考え」に原因が書いてあることが多いです。'))));
+    return h('details', { class: 'trace-guide small' }, h('summary', {}, tl('記録の読み方')), h('ul', {}, h('li', {}, h('b', {}, tl('行動力')), tl('：1つの場面で、冒険者が使える行動の量（AP）。場面のはじめから、心得と持ち物をもとに考える分を使い、道具を使う・巻物を開く・読む・考える・答えるたびに、その分だけ減ります。尽きると、その場面は動けません（行動力切れ）。場面が変わると満タンに戻ります。道具の横の「行動力 −約◯」は、その結果を読むのに使った量です。実務の AI でいう「コンテキストの上限」にあたります。')), h('li', {}, h('b', {}, tl('途方に暮れた')), tl('：1つの場面で行動できる回数には限りがあります。道具を使い続けて答えを出さないと、その場面は動けなくなります。実務の AI でいう「ループ回数の上限」にあたります。')), h('li', {}, h('b', {}, tl('聞いた')), tl('：冒険者の耳に届いたこと。前に聞いてしまった幻術の声が、まだ混ざっていることもあります。')), h('li', {}, h('b', {}, tl('道具・巻物')), tl('：何を使い、何が分かったか。必要な道具を使っていない、関係のない巻物を開いている、が直しどころです。')), h('li', {}, h('b', {}, tl('お供')), tl('：お供（サブエージェント）に何を頼み、何が返ってきたか。お供に届くのは頼んだ文だけなので、手がかりが足りないと、正しく答えられません。')), h('li', {}, h('b', {}, tl('考え')), tl('：冒険者がそう判断した理由。「書いていない」「持っていない」とあれば、心得・巻物・道具のどれが足りないかが分かります。')), h('li', {}, h('b', {}, tl('答え')), tl('：最後の行動。外していたら、その前の「考え」に原因が書いてあることが多いです。'))));
 }
 //# sourceMappingURL=trace.js.map

@@ -3,14 +3,14 @@
 //   2. 同じチーム（部署）の人。誘った仲間が増えるほど、一緒に戦える
 //   3. 残りの枠は、シーズンの順位で自分のすぐ上・すぐ下にいる人（近い順に、上と下を交互に）
 // 見る人がいなければ、順位の上から。順位（戦果）はシーズンの参加者全員で決まり、討伐隊の組み方には左右されない。
-import { weightedAccuracy } from './stats.js';
+import { contribution, fuelOfCase } from './stats.js';
 import { RAID_PARTY } from './simulate.js';
-// シーズンの順位の並び（戦果 → 燃費 → 速さ）。simulate の討伐の順位と同じ
+// シーズンの順位の並び（貢献度 → 燃費 → 速さ）。simulate の討伐の順位と同じ
 export function seasonOrder(entrants, cases) {
     const ids = new Set(cases.map((c) => c.id));
     const rs = (e) => e.result.cases.filter((c) => ids.has(c.caseId));
-    const acc = (e) => weightedAccuracy(rs(e));
-    const tok = (e) => rs(e).reduce((a, c) => a + c.tokensIn + c.tokensOut, 0);
+    const acc = (e) => contribution(rs(e)).score; // 貢献度（戦果に、長旅の消耗と余力の上乗せ）
+    const tok = (e) => rs(e).reduce((a, c) => a + fuelOfCase(c), 0);
     const lat = (e) => rs(e).reduce((a, c) => a + c.latencyMs, 0);
     return entrants.map((e, i) => ({ e, i, a: acc(e), t: tok(e), l: lat(e) }))
         .sort((x, y) => y.a - x.a || x.t - y.t || x.l - y.l || x.i - y.i).map((x) => x.e);

@@ -6,7 +6,7 @@
 //   4. 後半はボスが怒り、燃費（行動力）の悪いキャラほど余波で削られる
 // 最後まで立っていた人が勝ち。ボスを倒した場合は、生き残りの中で与ダメージが多い順。
 import { Rng } from './rng.js';
-import { computeStats, MP_BUDGET_PER_CASE, weightedAccuracy } from './stats.js';
+import { computeStats, contribution, fuelOfCase, weightedAccuracy } from './stats.js';
 import { caseTitleOf } from './types.js';
 import { perLang, tl } from './i18n.js';
 export const ARENA = { w: 384, h: 216 };
@@ -222,10 +222,13 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             events.push({ type: 'strike', t, f, success, score: round2(s), excerpt: r.excerpt.slice(0, 60), used: usedOf(f, r), targeted, ...(r.charmed ? { charmed: true } : {}), ...(r.haunted ? { haunted: true } : {}) });
             if (success)
                 ok.add(f);
-            if (r.mpOut || r.tokensIn + r.tokensOut - (r.companionTokens ?? 0) > MP_BUDGET_PER_CASE) {
-                over.add(f); // お供（サブエージェント）の分は、冒険者の 行動力 に数えない
+            // 行動力切れは採点の結果（mpOut）で決まる（2026-11-07 から、1回の呼び出しに入る量で判定。合計のトークンでは決めない）
+            if (r.mpOut) {
+                over.add(f);
                 events.push({ type: 'mpOut', t: round2(t + 0.02), f });
             }
+            else if (r.lost)
+                events.push({ type: 'lost', t: round2(t + 0.02), f });
         });
         // 連携詠唱の場面: ボスは大技を溜めているだけで、ふつうの攻撃も反撃もない（詠唱の成否で決まる）
         const chainWave = isChainCase(cm);
@@ -342,10 +345,10 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
         events.sort((x, y) => x.t - y.t);
         waves.push({ caseIndex: w, attack, events, hpAfter: hp.map(round1), shieldAfter: shield.map(round1), aliveAfter: [...alive], bossHpAfter: round1(bossHp) });
     }
-    // 順位: 戦果（正答率）→ 燃費（トークンの少なさ）→ 速さ
+    // 順位: 貢献度（戦果に、長旅の消耗と余力の上乗せ）→ 燃費 → 速さ
     function rankOrder() {
-        const acc = (f) => weightedAccuracy(cases.map((c) => getRes(f, c.id)));
-        const tok = (f) => cases.reduce((a, c) => { const r = getRes(f, c.id); return a + r.tokensIn + r.tokensOut; }, 0);
+        const acc = (f) => contribution(cases.map((c) => getRes(f, c.id))).score;
+        const tok = (f) => cases.reduce((a, c) => a + fuelOfCase(getRes(f, c.id)), 0);
         const lat = (f) => cases.reduce((a, c) => a + getRes(f, c.id).latencyMs, 0);
         return fighters.map((_, f) => f).sort((a, b) => acc(b) - acc(a) || tok(a) - tok(b) || lat(a) - lat(b) || a - b);
     }
@@ -357,7 +360,8 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
             f, rank: k + 1, alive: alive[f],
             damageDealt: Math.round(s.dmg), evades: s.evades, hits: s.hits, items: s.items, mvp: s.mvp,
             accuracy: Math.round(totalScore[f] * 1000) / 10,
-            avgTokens: Math.round(rs.reduce((a, r) => a + r.tokensIn + r.tokensOut, 0) / Math.max(1, rs.length)),
+            score: Math.round(contribution(rs).score * 1000) / 10,
+            avgTokens: Math.round(rs.reduce((a, r) => a + fuelOfCase(r), 0) / Math.max(1, rs.length)),
             avgLatencyMs: Math.round(rs.reduce((a, r) => a + r.latencyMs, 0) / Math.max(1, rs.length)),
         };
     });

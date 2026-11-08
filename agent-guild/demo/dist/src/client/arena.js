@@ -641,6 +641,8 @@ export class ArenaRenderer {
             }
             else if (e.type === 'mpOut' && v && !this.mine.has(e.f))
                 this.floatText(ctx, tl('行動力切れ'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
+            else if (e.type === 'lost' && v && !this.mine.has(e.f))
+                this.floatText(ctx, tl('途方に暮れた'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
             else if (e.type === 'endure' && v)
                 this.floatText(ctx, tl('ギリギリ耐えた！'), v.x, v.y - 40 - fl * 6, '#ffd166', 1 - fl, 9);
             else if (e.type === 'revive' && v) {

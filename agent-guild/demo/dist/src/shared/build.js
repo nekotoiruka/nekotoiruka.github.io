@@ -1,6 +1,6 @@
 // 提出ビルドの型・検証・コスト計算
 import { parseYaml, toYaml, YamlError } from './yaml.js';
-import { COST_RULES, TOOL_BY_ID, TOOL_CATALOG, WEAPON_KINDS } from './catalog.js';
+import { COST_RULES, TOOL_BY_ID, TOOL_CATALOG, toolSpecText, WEAPON_KINDS } from './catalog.js';
 import { perLang, tl } from './i18n.js';
 export const BODY_TYPES = ['knight', 'mage', 'rogue', 'robot', 'cat', 'ninja', 'priest', 'pirate', 'samurai', 'chef', 'astro', 'bunny', 'bear', 'frog', 'witch', 'ghostie'];
 // ねこの柄（ねこを選んだときだけ選べる）
@@ -220,6 +220,9 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
             err(`${p}.name`, tl(`スキル名「{0}」が重複しています`, kn));
         if (!kc.trim())
             err(`${p}.content`, tl('スキルの content は必須です'));
+        // 新しい巻物の下書き（SKILL_TEMPLATE）の記号が残ったままでは送り出さない
+        else if ([kn, str(s.description) ?? '', kc].some((x) => DRAFT_MARK.test(x)))
+            err(`${p}.content`, tl(`巻物「{0}」に、下書きの記号（〇〇・××・△△・□□）が残っています。書き換えるか、要らない行を消してください`, kn));
         const look = parseLook(s.look, CHARM_KINDS, `${p}.look`, err, CHARM_LABELS, 'gem');
         skills.push({ name: kn, description: (str(s.description) ?? '').trim(), content: kc, ...(look ? { look } : {}) });
     });
@@ -262,10 +265,9 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
 }
 // トークン数 → 重さの換算（computeCost と画面の表示で同じ式を使う）
 export const mainWeight = (tokens) => Math.min(COST_RULES.mainMaxPoints, Math.ceil(tokens / COST_RULES.mainTokensPerPoint));
-export const skillWeight = (tokens) => {
-    const extra = Math.max(0, Math.ceil((tokens - COST_RULES.skillFreeTokens) / COST_RULES.extraTokensPerPoint));
-    return { base: COST_RULES.skillCost, extra, total: COST_RULES.skillCost + extra };
-};
+// 巻物の重さは目録（名前と説明）の分だけ（2026-11-07・issue #58）。常に載るのは目録だけで、中身は開いた場面でだけ行動力を使う。
+// 中身の長さでは重くしない（tokens は互換のために受け取るだけ）
+export const skillWeight = (_tokens) => ({ base: COST_RULES.skillCost, extra: 0, total: COST_RULES.skillCost });
 export function computeCost(b, catalog = TOOL_CATALOG) {
     const byId = Object.fromEntries(catalog.map((t) => [t.id, t]));
     const R = COST_RULES;
@@ -274,12 +276,12 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
     items.push({
         kind: 'main', label: tl('心得（システムプロンプト）'),
         cost: mainWeight(mt),
-        note: tl(`約{0}トークン`, mt),
+        note: tl(`長さ 約{0}`, mt),
     });
     for (const s of b.skills) {
         const t = estimateTokens(s.content);
         const { extra, total } = skillWeight(t);
-        items.push({ kind: 'skill', label: tl(`巻物: {0}`, s.name), cost: total, note: tl(`約{0}トークン{1}`, t, extra ? tl(`（超過+{0}）`, extra) : '') });
+        items.push({ kind: 'skill', label: tl(`巻物: {0}`, s.name), cost: total, note: tl(`長さ 約{0}{1}`, t, extra ? tl(`（超過+{0}）`, extra) : '') });
     }
     for (const id of b.tools) {
         const t = byId[id] ?? TOOL_BY_ID[id];
@@ -289,7 +291,7 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
         items.push({ kind: 'guard', label: tl('結界（ガードレール）'), cost: R.guardrailCost, note: tl(`言葉{0}つ`, b.guardrail.words.length) });
     if (b.companion) {
         const ct = estimateTokens(b.companion.prompt);
-        items.push({ kind: 'companion', label: tl('お供（サブエージェント）'), cost: R.companionCost + mainWeight(ct), note: tl(`心得 約{0}トークン`, ct) });
+        items.push({ kind: 'companion', label: tl('お供（サブエージェント）'), cost: R.companionCost + mainWeight(ct), note: tl(`心得の長さ 約{0}`, ct) });
         for (const id of b.companion.tools) {
             const t = byId[id] ?? TOOL_BY_ID[id];
             items.push({ kind: 'tool', label: tl(`お供の道具: {0}`, t.name), cost: t.cost });
@@ -366,8 +368,29 @@ export function toLoadout(b, catalog = TOOL_CATALOG) {
         ...(b.companion ? { companionTools: [...b.companion.tools], pet: b.avatar.pet ?? { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] } } : {}),
     };
 }
-// 画面で組んだビルドを YAML にする（提出・保存・上級者向けの編集用）
-export function buildToYaml(b) {
+// 上級者向けの YAML に添える覚え書き（コメント）: 道具の id と、冒険者とお供に渡る「名前：説明」（採点で AI に渡す文と同じ）、準備の決まりの要約。
+// 読み込みでは使われない。画面の YAML の欄にだけ付け、送り出す・保存する YAML には付けない（ビルドの同一性とハッシュを変えないため）。
+// 準備の画面と同じく、トークン・お供に頼める回数などの仕組みの話は書かない
+export function buildYamlNotes(b, catalog = TOOL_CATALOG) {
+    const R = COST_RULES;
+    const c = (s = '') => (s ? `# ${s}` : '#');
+    const lines = [c(), c(tl('コメント（# で始まる行）は、読み込むときには使われません。')), c(), c(tl('道具（id と、冒険者とお供に渡る「名前：説明」）'))];
+    for (const t of catalog)
+        lines.push(c(`  ${t.id}  ${toolSpecText(t).replace(/\s*\n\s*/g, ' ')}`));
+    const rules = [tl('荷物の重さは{0}まで', R.limit)];
+    if (R.maxTools < 99)
+        rules.push(tl('道具は{0}つまで', R.maxTools));
+    rules.push(tl('巻物は{0}つまで', R.maxSkills), tl('結界の言葉は{0}つまで', R.guardrailMaxWords));
+    if (R.mainMaxChars)
+        rules.push(tl('心得は{0}字まで', R.mainMaxChars));
+    // お供の欄が出るシーズン（分厚い書物がある）か、お供を連れているときだけ
+    if (b.companion || catalog.some((t) => t.source === 'archive'))
+        rules.push(tl('お供の心得は{0}字まで、お供の道具は{1}つまで', R.companionMaxChars, R.companionMaxTools));
+    lines.push(c(), c(tl('決まり')), ...rules.map((r) => c(`  ${r}`)), c());
+    return lines.join('\n') + '\n';
+}
+// 画面で組んだビルドを YAML にする（提出・保存・上級者向けの編集用）。notes を渡すと、覚え書きのコメントを先頭に添える（画面の YAML の欄だけ）
+export function buildToYaml(b, opts = {}) {
     const o = { name: b.name };
     if (b.team)
         o.team = b.team;
@@ -406,35 +429,32 @@ export function buildToYaml(b) {
                 v.color = g.color;
             return [id, v];
         }));
-    return tl('# エージェントギルド 冒険者の準備\n') + toYaml(o);
+    return tl('# エージェントギルド 冒険者の準備\n') + (opts.notes ? buildYamlNotes(b, opts.notes) : '') + toYaml(o);
 }
 // 心得（システムプロンプト）の初期値: どこに何を書くかの型。〇〇・△△は自分で書き換える場所。
 // シーズン固有の正解は入れない。テンプレートのままでも文字数の上限・重さに余裕があるよう短くしておく
+// 道具は持たせるだけ（2026-11-06）: 冒険者は、心得と並んで渡される道具の名前と説明・巻物の名前と説明（何の巻物で、いつ開くか）を見て、
+// 自分で使い分ける。心得には道具や巻物の使い方を書かず、使ってはいけない場面があれば、それだけを書く。手順は巻物の中身へ
+// 調べて分かった名前（書物・お供の答え）も、言いかえずに答える（2026-11-06）: 「教わった名前の中から選ぶ」だと、お供が正しく調べた答えを、心得にある近い行動名に置きかえてしまった
 export const MAIN_PROMPT_TEMPLATE = tl(`# 役割
 あなたは〇〇討伐隊の冒険者。
 # ふるまい
 - 〇〇の様子なら → △△（行動名）
 - 迷ったら → □□
-# 道具の使い方
-- 道具は必要なときだけ使う
-- 〇〇（道具名）: △△のときに使う
+# 使ってはいけない場面（あれば）
+- 〇〇のときは、△△（道具）を使わない
 # 守ること
-- 行動名は、教わった名前の中から選ぶ（作らない）
-- 分からないときは推測せず、道具や巻物で確かめる
+- 行動名は、教わった名前か、調べて分かった名前を、そのまま使う（作らない・言いかえない）
 # 答え方
 - {"answer": "行動名"} の形で、説明は書かない
 `);
-// お供（サブエージェント）の心得の初期値と、お供を連れていくときに冒険者の心得に足す一節（〇〇・△△は自分で書き換える場所）
+// お供（サブエージェント）の心得の初期値（〇〇・△△は自分で書き換える場所）
 export const COMPANION_PROMPT_TEMPLATE = tl(`# 役割
 あなたは冒険者のお供。頼まれたことだけを調べる。
 # 調べ方
 - 〇〇を頼まれたら → △△（道具名）で調べる
 # 答え方
 - 調べた要点だけを、短く答える
-`);
-export const MAIN_COMPANION_SNIPPET = tl(`# お供への頼み方
-- 〇〇のときだけ、お供に頼む
-- 頼むときは、△△（名前や様子）をそのまま伝える
 `);
 // 以前の初期値（この中身のままの下書きは、新しい型に置き換えてよい）
 // 守ることに幻術よけを書いていた版（幻術は結界の役目なので、心得に書くのは誤解のもと）
@@ -451,7 +471,67 @@ const PREV_TEMPLATE_1 = tl(`# 役割
 # 答え方
 - {"answer": "行動名"} の形で、説明は書かない
 `);
-export const LEGACY_MAIN_PROMPTS = [tl('あなたは冒険者です。'), PREV_TEMPLATE_1];
+// 道具ごとの使いどころを書く欄があった版（〜2026-11-05）
+const PREV_TEMPLATE_2 = tl(`# 役割
+あなたは〇〇討伐隊の冒険者。
+# ふるまい
+- 〇〇の様子なら → △△（行動名）
+- 迷ったら → □□
+# 道具の使い方
+- 道具は必要なときだけ使う
+- 〇〇（道具名）: △△のときに使う
+# 守ること
+- 行動名は、教わった名前の中から選ぶ（作らない）
+- 分からないときは推測せず、道具や巻物で確かめる
+# 答え方
+- {"answer": "行動名"} の形で、説明は書かない
+`);
+// 「道具は必要なときだけ使う」「分からないときは道具や巻物で確かめる」を書いていた版（2026-11-06 の途中まで）
+const PREV_TEMPLATE_3 = tl(`# 役割
+あなたは〇〇討伐隊の冒険者。
+# ふるまい
+- 〇〇の様子なら → △△（行動名）
+- 迷ったら → □□
+# 守ること
+- 行動名は、教わった名前の中から選ぶ（作らない）
+- 分からないときは推測せず、道具や巻物で確かめる
+- 道具は必要なときだけ使う
+# 答え方
+- {"answer": "行動名"} の形で、説明は書かない
+`);
+// 「行動名は、教わった名前の中から選ぶ」と書いていた版（2026-11-06 の途中まで）
+const PREV_TEMPLATE_4 = tl(`# 役割
+あなたは〇〇討伐隊の冒険者。
+# ふるまい
+- 〇〇の様子なら → △△（行動名）
+- 迷ったら → □□
+# 使ってはいけない場面（あれば）
+- 〇〇のときは、△△（道具）を使わない
+# 守ること
+- 行動名は、教わった名前の中から選ぶ（作らない）
+# 答え方
+- {"answer": "行動名"} の形で、説明は書かない
+`);
+export const LEGACY_MAIN_PROMPTS = [tl('あなたは冒険者です。'), PREV_TEMPLATE_1, PREV_TEMPLATE_2, PREV_TEMPLATE_3, PREV_TEMPLATE_4];
+// 新しい巻物の下書き（2026-11-06）。記号: 〇〇＝確かめるもの、××＝答え、△△＝道具、□□＝場面。
+// 冒険者に見えるのは名前と説明（何の巻物で、いつ開くか）だけで、中身は開いたときに読む。中身の主役は、その場面の手順（道具を使う手順も書ける）
+export const SKILL_TEMPLATE = () => ({
+    name: tl('〇〇の覚え書き'),
+    description: tl('〇〇ごとの××の覚え書き。□□のときに開く'),
+    content: tl(`手順:
+1. 〇〇を確かめる（分からなければ △△で調べる）
+2. 下の覚え書きで、〇〇に合う××を探す
+3. ××だけを答える
+
+開いてはいけない場面（あれば）:
+- （あれば書く）
+
+覚え書き（資料室の資料から写す）:
+- 〇〇 → ××
+- 〇〇 → ××
+`),
+});
+const DRAFT_MARK = /〇〇|××|△△|□□|（あれば書く）/;
 export const BUILD_TEMPLATE = tl(`# エージェントギルド 冒険者の準備
 name: 名もなき冒険者
 avatar:

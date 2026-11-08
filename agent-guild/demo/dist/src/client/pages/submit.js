@@ -1,11 +1,12 @@
 // 提出画面: 画面でポチポチ組み立てるビルダー（YAML は上級者向けの読み書きだけ）
-import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAMILIAR_KINDS, FAMILIAR_LABELS, POSITIONS, POSITION_LABELS, POSITION_NOTES, DEFAULT_CHARM_COLORS, DEFAULT_FAMILIAR_COLORS, LEGACY_MAIN_PROMPTS, MAIN_PROMPT_TEMPLATE, COMPANION_PROMPT_TEMPLATE, MAIN_COMPANION_SNIPPET, buildToYaml, computeCost, estimateTokens, resolveWeapon, mainWeight, parseBuild, skillWeight, skillLook, toLoadout, CAT_PATTERNS, CAT_PATTERN_LABELS } from '../../shared/build.js';
+import { BODY_LABELS, BODY_TYPES, BUILD_TEMPLATE, CHARM_KINDS, CHARM_LABELS, FAMILIAR_KINDS, FAMILIAR_LABELS, POSITIONS, POSITION_LABELS, POSITION_NOTES, DEFAULT_CHARM_COLORS, DEFAULT_FAMILIAR_COLORS, LEGACY_MAIN_PROMPTS, MAIN_PROMPT_TEMPLATE, COMPANION_PROMPT_TEMPLATE, buildToYaml, computeCost, estimateTokens, resolveWeapon, mainWeight, parseBuild, skillWeight, skillLook, toLoadout, CAT_PATTERNS, CAT_PATTERN_LABELS, SKILL_TEMPLATE } from '../../shared/build.js';
 import { apLevel, COST_RULES, toolAp, WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { MP_BUDGET_PER_CASE } from '../../shared/stats.js';
 import { accountBar, entryCard, loginForm, MOCK_NOTE, SWAY_NOTE } from '../account.js';
 import { coach, coachTaskOf, COACH_PARTS } from '../../shared/coach.js';
 import { accuracyDeltas, diffParts, sparkline } from '../history.js';
-import { coachReview, demoMode, getMe, getSeason, mySubmissions, submitBuild } from '../api.js';
+import { checkNames, coachReview, demoMode, getMe, getSeason, getTeams, mySubmissions, submitBuild } from '../api.js';
+import { heldMessage } from '../../shared/names.js';
 import { charmSprite, drawHero, familiarSprite, gearOf, lookOf, portrait, PORTRAIT_H, PORTRAIT_W, weaponSprite } from '../hero.js';
 import { senpaiName, senpaiPortrait } from '../guildmaster.js';
 import { h, nodes, toast } from '../ui.js';
@@ -35,6 +36,9 @@ function formIssue(e, b, scrollWord, cost) {
     if (m) {
         const i = Number(m[1]);
         const nm = b.skills[i]?.name?.trim();
+        // 中身はあるのに出る問題（下書きの記号が残っている など）は、そのままの文言で出す（「中身を書いてください」ではない）
+        if (m[2] === 'content' && b.skills[i]?.content.trim())
+            return e.message.replace(/^\d+行目: /, '');
         if (m[2] === 'content')
             return scrollWord ? tl('巻物「{0}」の中身を書いてください', nm || tl('（名前なし）')) : tl('スキル「{0}」の中身を書いてください', nm || tl('（名前なし）'));
         if (!nm)
@@ -149,6 +153,34 @@ export async function renderSubmit(root) {
     let attempted = false;
     let emptyHints = [];
     let issues = [];
+    // 名前・チーム名・こだわりを、サーバーの決まり（禁止語・予約語など）で確かめる。打ち終わって少ししてから聞く
+    let nameProblems = [];
+    let lastChecked = '';
+    let checkTimer;
+    const checkNamesSoon = () => {
+        if (demoMode)
+            return;
+        const v = { name: b.name.trim(), team: (b.team ?? '').trim(), kodawari: b.kodawari.trim() };
+        const key = JSON.stringify(v);
+        if (key === lastChecked)
+            return;
+        clearTimeout(checkTimer);
+        checkTimer = setTimeout(async () => {
+            try {
+                const r = await checkNames(v);
+                lastChecked = key;
+                const next = r.problems.map((x) => x.message);
+                if (next.join('\n') !== nameProblems.join('\n')) {
+                    nameProblems = next;
+                    refresh();
+                }
+            }
+            catch { /* 確かめられなくても、出発のときにサーバーが確かめる */ }
+        }, 500);
+    };
+    // いまあるチーム（準備の画面の候補。同じチームの人は同じ討伐隊に入る）
+    const teamList = h('datalist', { id: 'team-list' });
+    getTeams().then((r) => teamList.replaceChildren(...r.teams.map((t) => h('option', { value: t })))).catch(() => { });
     // 値だけが変わったとき（入力中）: フォームは作り直さず、コスト・プレビュー・YAML だけ更新
     // 道具のチェックの表示を、持ち物のデータ（b.tools）にそろえる（スクリプトなどで表示だけが変わっても、次の更新で正しく戻る）
     const syncToolChecks = () => {
@@ -166,8 +198,9 @@ export async function renderSubmit(root) {
         syncToolChecks();
         const yaml = buildToYaml(b);
         saveDraft(yaml, catalog);
+        // 画面の YAML の欄には、道具の「名前：説明」と決まりの要約をコメントで添える（読み込みでは使われない。保存・送り出しの YAML には付けない）
         if (document.activeElement !== yamlBox)
-            yamlBox.value = yaml;
+            yamlBox.value = buildToYaml(b, { notes: catalog });
         const cost = computeCost(b, catalog);
         const r = parseBuild(yaml, catalog);
         valid = !!r.build;
@@ -175,6 +208,11 @@ export async function renderSubmit(root) {
         issues = r.errors
             .filter((e) => { const m = /^skills\[(\d+)\]\.content$/.exec(e.path); return attempted || !m || !fresh.has(b.skills[Number(m[1])]); })
             .map((e) => formIssue(e, b, hasScrolls, cost));
+        if (nameProblems.length) {
+            issues.push(...nameProblems);
+            valid = false;
+        }
+        checkNamesSoon();
         errorsEl.replaceChildren(...issues.map((x) => h('li', {}, x)));
         emptyHints.forEach((x, i) => { x.hidden = !!b.skills[i]?.content.trim(); });
         meterFill.style.width = `${Math.min(100, (cost.total / cost.limit) * 100)}%`;
@@ -209,7 +247,7 @@ export async function renderSubmit(root) {
     };
     const field = (label, input, note) => h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, note ? (typeof note === 'string' ? h('span', { class: 'field-note' }, note) : note) : null);
     const text = (value, on, opts = {}) => {
-        const el = h('input', { value, placeholder: opts.placeholder ?? '', maxlength: opts.maxlength ?? 200 });
+        const el = h('input', { value, placeholder: opts.placeholder ?? '', maxlength: opts.maxlength ?? 200, ...(opts.list ? { list: opts.list, autocomplete: 'off' } : {}) });
         el.oninput = () => { on(el.value); refresh(); };
         return el;
     };
@@ -255,11 +293,11 @@ export async function renderSubmit(root) {
     const renderForm = () => {
         const lo = toLoadout(b, catalog);
         // 1. 基本
-        const basics = h('section', { class: 'card' }, h('h3', {}, tl('1. 冒険者')), h('div', { class: 'hero-row' }, h('div', {}, field(tl('名前'), text(b.name, (v) => { b.name = v; }, { maxlength: 16, placeholder: tl('16文字まで') })), field(tl('こだわり（討伐の画面に出る一言・任意）'), text(b.kodawari, (v) => { b.kodawari = v; }, { maxlength: 150, placeholder: tl('例: 必要なものだけを持たせた') }))), h('div', {}, h('div', { class: 'preview-box' }, preview, nameLabel, actionLabel))));
+        const basics = h('section', { class: 'card' }, h('h3', {}, tl('1. 冒険者')), h('div', { class: 'hero-row' }, h('div', {}, field(tl('名前'), text(b.name, (v) => { b.name = v; }, { maxlength: 16, placeholder: tl('16文字まで') })), field(tl('チーム（任意）'), text(b.team ?? '', (v) => { b.team = v; }, { maxlength: 12, placeholder: tl('12文字まで'), list: 'team-list' }), tl('同じチームの人は、同じ討伐隊に入ります。いまあるチームは候補に出ます')), teamList, field(tl('こだわり（討伐の画面に出る一言・任意）'), text(b.kodawari, (v) => { b.kodawari = v; }, { maxlength: 150, placeholder: tl('例: 必要なものだけを持たせた') }))), h('div', {}, h('div', { class: 'preview-box' }, preview, nameLabel, actionLabel))));
         // 2. メインプロンプト
         const main = area(b.main.prompt, (v) => { b.main.prompt = v; }, { rows: 13, kind: 'main', maxChars: R.mainMaxChars || undefined, placeholder: tl('冒険者に毎回伝えておきたいことを書きます。ここがいちばん差がつくところです。') });
         // 書き方のコツ（折りたたみ）: 一般的なシステムプロンプトの組み立て方を、この順に
-        const tips = h('details', { class: 'prompt-tips' }, h('summary', {}, tl('心得の書き方のコツ')), h('ol', { class: 'small' }, h('li', {}, h('b', {}, tl('役割を最初に')), tl('：だれとして、何のために戦うのかを1行で。')), h('li', {}, h('b', {}, tl('ふるまい')), tl('：どんな場面で、どう動くか。')), h('li', {}, h('b', {}, tl('道具の使い方')), tl('：持たせた道具ごとに「いつ・何のために使うか」。書いていないと、持っていても使い忘れたり、要らない場面で使ったりします。')), h('li', {}, h('b', {}, tl('守ること')), tl('：答えを外さないための約束ごと。「行動名は教わった名前から選ぶ」「分からないときは推測せず確かめる」など。')), h('li', {}, h('b', {}, tl('答え方')), tl('：答えの形。答えだけを返させると、素早く動けます。'))), h('p', { class: 'small muted' }, tl('〇〇・△△・□□は、自分で書き換える場所です。使わない行は消してかまいません。見出し（# の行）は残しておくと、あとで直しやすくなります。')), armButton('tmpl', tl('書き方の型を入れ直す'), tl('もう一度押すと、いまの心得を書き方の型で置き換えます'), () => {
+        const tips = h('details', { class: 'prompt-tips' }, h('summary', {}, tl('心得の書き方のコツ')), h('ol', { class: 'small' }, h('li', {}, h('b', {}, tl('役割を最初に')), tl('：だれとして、何のために戦うのかを1行で。')), h('li', {}, h('b', {}, tl('ふるまい')), tl('：どんな場面で、どう動くか。')), h('li', {}, h('b', {}, tl('使ってはいけない場面')), tl('：冒険者は、道具と巻物の説明を見て、使いどころを自分で決めます。使い方は書かず、使ってはいけない場面があれば、それだけを書きます。')), h('li', {}, h('b', {}, tl('守ること')), tl('：答えを外さないための約束ごと。「行動名は作らない」「調べて分かった名前は、言いかえずにそのまま答える」など。')), h('li', {}, h('b', {}, tl('答え方')), tl('：答えの形。答えだけを返させると、素早く動けます。'))), h('p', { class: 'small muted' }, tl('〇〇・△△・□□は、自分で書き換える場所です。使わない行は消してかまいません。見出し（# の行）は残しておくと、あとで直しやすくなります。')), armButton('tmpl', tl('書き方の型を入れ直す'), tl('もう一度押すと、いまの心得を書き方の型で置き換えます'), () => {
             b.main.prompt = MAIN_PROMPT_TEMPLATE;
             renderForm();
             refresh();
@@ -309,7 +347,7 @@ export async function renderSubmit(root) {
             cb.onchange = toggle;
             cb.oninput = toggle;
             // 並び順と大きさは、チェックの有無で変えない（見た目の選択は、下の「持たせた道具の見た目」に出す）
-            return h('div', { class: 'tool-card' + (on ? ' on' : '') + (full ? ' full' : '') }, h('label', { class: 'tool-head' }, cb, h('b', {}, t.name), withPet ? h('span', { class: 'chip chip-sub' }, tl('お供が持っている')) : null, h('span', { class: 'tool-cost' }, tl(`重さ {0}`, t.cost))), h('p', { class: 'small' }, brief?.toolNotes[t.id] ?? t.description), apInfo(t));
+            return h('div', { class: 'tool-card' + (on ? ' on' : '') + (full ? ' full' : '') }, h('label', { class: 'tool-head' }, cb, h('b', {}, t.name), withPet ? h('span', { class: 'chip chip-sub' }, tl('お供が持っている')) : null, h('span', { class: 'tool-cost' }, tl(`重さ {0}`, t.cost))), h('p', { class: 'small' }, t.description), apInfo(t));
         });
         // 持たせた道具の見た目（持たせた順）
         const gearRows = b.tools.filter((id) => toolById[id]).map((id) => {
@@ -319,35 +357,41 @@ export async function renderSubmit(root) {
             return h('div', { class: 'gear-row', 'data-gear': id }, h('b', { class: 'gear-name small' }, t.name), lookPicker(WEAPON_KINDS, WEAPON_LABELS, { kind: wk, color: g.color ?? '' }, (k, c) => weaponSprite(k, c || undefined), (k, c) => { b.gear[id] = { weapon: k, color: c }; }));
         });
         const gearBox = gearRows.length ? h('div', { class: 'gear-box' }, h('h4', {}, tl('持たせた道具の見た目（強さには影響しません）')), ...gearRows) : null;
-        const toolCard = h('section', { class: 'card kit-dougu' }, h('h3', {}, tl('3. 道具'), h('span', { class: 'ai-term' }, tl('ツール')), R.maxTools < 99 ? h('span', { class: 'slot-count' }, `${b.tools.length} / ${R.maxTools}`) : null), h('p', { class: 'small muted' }, tl('持たせた道具は、冒険者が自分の判断で使います。')), h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('道具は、持たせるだけでは使われんぞ！　いつ・何のために使うかを、心得の「道具の使い方」に書いておけ。書いておかんと、肝心な場面で使い忘れたり、要らん場面で使って行動力を無駄にしたりする。')), h('p', {}, tl('それに、冒険者がひとつの場面で動ける力（行動力）には限りがある。重い道具を使えば、それだけで息が上がるぞ。'))), h('div', { class: 'tool-grid' }, ...toolCards), gearBox);
+        const toolCard = h('section', { class: 'card kit-dougu' }, h('h3', {}, tl('3. 道具'), h('span', { class: 'ai-term' }, tl('ツール')), R.maxTools < 99 ? h('span', { class: 'slot-count' }, `${b.tools.length} / ${R.maxTools}`) : null), h('p', { class: 'small muted' }, tl('道具の名前と説明は、そのまま冒険者に渡ります（書き換えられません）。冒険者はそれを読んで、使うかどうかを自分で決めます。')), h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('持たせた道具は、冒険者が説明を見て、自分で使いどころを決めるぞ。だから、要らん道具でも、それらしく見えれば使ってしまう。何を持たせて、何を置いていくかが腕の見せどころだ。使ってはならん場面があるなら、それだけを心得に書けばいい。')), h('p', {}, tl('それに、冒険者がひとつの場面で動ける力（行動力）には限りがある。重い道具を使えば、それだけで息が上がるぞ。'))), h('div', { class: 'tool-grid' }, ...toolCards), gearBox);
         basics.append(h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('見た目（強さには影響しません）')), h('div', { class: 'body-picker' }, ...bodyBtns), patternRow, h('div', { class: 'color-row' }, h('label', {}, tl('服 '), palIn), h('label', {}, tl('髪・毛 '), hairIn), h('label', {}, tl('手に持つ武器 '), weaponSel))));
         // 4. スキル
         emptyHints = [];
         const skCards = b.skills.map((s, i) => {
-            const c = area(s.content, (v) => { s.content = v; fresh.delete(s); }, { rows: 4, kind: 'skill', placeholder: tl('ルール集・手順・判断基準など。必要なときだけ読まれます') });
+            // 下書きの記号の読み方（記号が残っているあいだだけ出す。書き換えたらその場で消す）
+            const legend = h('p', { class: 'small muted' }, tl('下書きの記号: 〇〇＝確かめるもの、××＝答え、△△＝道具、□□＝場面。書き換えて、要らない行は消してください'));
+            const updLegend = () => { legend.hidden = ![s.name, s.description, s.content].some((x) => /〇〇|××|△△|□□/.test(x)); };
+            updLegend();
+            const c = area(s.content, (v) => { s.content = v; fresh.delete(s); updLegend(); }, { rows: 4, kind: 'skill', placeholder: tl('ルール集・手順・判断基準など。必要なときだけ読まれます') });
             // 中身が空のあいだの案内は、入力欄の下に控えめに出す（警告にはしない）
             const hint = h('span', { class: 'empty-hint' }, tl('中身を書くと持たせられます（空のままでは、冒険に出発できません）'));
             hint.hidden = !!s.content.trim();
             emptyHints.push(hint);
             const look = lookPicker(CHARM_KINDS, CHARM_LABELS, skillLook(lo, i), (k, col) => charmSprite(k, col), (k, col) => { s.look = { kind: k, color: col }; }, 4);
-            return h('div', { class: 'sub-card' }, h('div', { class: 'row-between' }, field(tl('名前'), text(s.name, (v) => { s.name = v; }, { maxlength: 30 })), h('button', { class: 'btn btn-small', onclick: () => { b.skills.splice(i, 1); renderForm(); refresh(); } }, tl('外す'))), field(tl('発動条件（いつ読むか）'), text(s.description, (v) => { s.description = v; }, { placeholder: tl('例: 敵が呪文を唱えたときに読む') })), field(tl('中身'), c.el, h('span', {}, c.note, hint)), h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('見た目')), look));
+            return h('div', { class: 'sub-card' }, h('div', { class: 'row-between' }, field(tl('名前'), text(s.name, (v) => { s.name = v; updLegend(); }, { maxlength: 30 })), h('button', { class: 'btn btn-small', onclick: () => { b.skills.splice(i, 1); renderForm(); refresh(); } }, tl('外す'))), field(tl('説明（何の巻物で、いつ開くか）'), text(s.description, (v) => { s.description = v; updLegend(); }, { placeholder: tl('例: 罠のある宝箱を見つけたときに開く。安全に開けるまでの手順') })), field(tl('中身'), c.el, h('span', {}, c.note, hint)), legend, h('div', { class: 'field' }, h('span', { class: 'field-label' }, tl('見た目')), look));
         });
         const scrolls = scrollOrder;
         // 倉庫の巻物: カードで並べ、「持たせる」で追加
         const shelf = scrolls.length ? h('div', { class: 'scroll-shelf' }, ...scrolls.map((sc) => {
             const has = b.skills.some((x) => x.name === sc.name);
             const full = b.skills.length >= R.maxSkills;
-            const note = brief?.scrollNotes[sc.id];
-            return h('div', { class: 'scroll-card' + (has ? ' on' : '') }, h('div', { class: 'row-between' }, h('b', {}, sc.name), h('span', { class: 'tool-cost' }, tl(`重さ {0}`, R.skillCost))), note ? h('dl', { class: 'scroll-dl small' }, h('dt', {}, tl('発動条件')), h('dd', {}, note.when), h('dt', {}, tl('発動内容')), h('dd', {}, note.what)) : h('p', { class: 'small' }, sc.description), h('button', { class: 'btn btn-small', disabled: has || full, onclick: () => {
+            return h('div', { class: 'scroll-card' + (has ? ' on' : '') }, h('div', { class: 'row-between' }, h('b', {}, sc.name), h('span', { class: 'tool-cost' }, tl(`重さ {0}`, R.skillCost))), 
+            // 名前と説明は、冒険者に渡る文そのまま。中身も、持たせる前に読める
+            h('p', { class: 'small' }, sc.description), h('details', { class: 'small' }, h('summary', {}, tl('中身を見る')), h('pre', { class: 'scroll-body' }, sc.content)), h('button', { class: 'btn btn-small', disabled: has || full, onclick: () => {
                     const n = b.skills.length;
                     b.skills.push({ name: sc.name, description: sc.description, content: sc.content, look: { kind: 'scroll', color: DEFAULT_CHARM_COLORS[n % 4] } });
                     renderForm();
                     refresh();
                 } }, has ? tl('持たせた') : full ? tl('枠がいっぱい') : tl('持たせる')));
         })) : null;
-        const skCard = h('section', { class: 'card kit-makimono' }, h('h3', {}, scrolls.length ? tl('4. 巻物') : tl('4. スキル'), h('span', { class: 'ai-term' }, tl('スキル')), h('span', { class: 'slot-count' }, `${b.skills.length} / ${R.maxSkills}`)), h('p', { class: 'small muted' }, brief?.scrollIntro ?? tl(`1つ重さ{0}。「いつ読むか」を書かないと、必要な場面で読まれにくくなります。`, R.skillCost)), shelf ? h('h4', {}, tl('倉庫にある巻物（そのまま持たせることも、書き方の見本にすることもできます）')) : null, shelf, skCards.length ? h('h4', {}, tl('持たせた巻物（発動条件と中身は書き換えられます）')) : null, ...skCards, b.skills.length < R.maxSkills ? h('button', { class: 'btn btn-small', onclick: () => {
+        const skCard = h('section', { class: 'card kit-makimono' }, h('h3', {}, scrolls.length ? tl('4. 巻物') : tl('4. スキル'), h('span', { class: 'ai-term' }, tl('スキル')), h('span', { class: 'slot-count' }, `${b.skills.length} / ${R.maxSkills}`)), h('p', { class: 'small muted' }, brief?.scrollIntro ?? tl(`1つ重さ{0}。冒険者に見えるのは、巻物の名前と説明（何の巻物で、いつ開くか）だけ。それを見て、必要な場面で自分で開きます。中身には、手順や知識を書きます。`, R.skillCost)), shelf ? h('h4', {}, tl('倉庫にある巻物（そのまま持たせることも、書き方の見本にすることもできます）')) : null, shelf, skCards.length ? h('h4', {}, tl('持たせた巻物（名前・説明・中身は書き換えられます）')) : null, ...skCards, b.skills.length < R.maxSkills ? h('button', { class: 'btn btn-small', onclick: () => {
                 const n = b.skills.length;
-                const sk = { name: scrolls.length ? tl(`巻物{0}`, n + 1) : tl(`スキル{0}`, n + 1), description: '', content: '', look: { kind: 'gem', color: DEFAULT_CHARM_COLORS[n % 4] } };
+                // 下書き（SKILL_TEMPLATE）を入れて開く。記号を書き換えるまで送り出せない
+                const sk = { ...SKILL_TEMPLATE(), look: { kind: 'gem', color: DEFAULT_CHARM_COLORS[n % 4] } };
                 b.skills.push(sk);
                 fresh.add(sk);
                 renderForm();
@@ -397,8 +441,7 @@ export async function renderSubmit(root) {
                 b.companion = { prompt: COMPANION_PROMPT_TEMPLATE, tools: [] };
                 if (!b.avatar.pet)
                     b.avatar.pet = { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] }; // お供の見た目（下の「お供の見た目」で変えられる）
-                if (!/お供|companion/i.test(b.main.prompt))
-                    b.main.prompt = `${b.main.prompt.replace(/\s*$/, '')}\n${MAIN_COMPANION_SNIPPET}`;
+                // 心得には何も足さない（2026-11-06）: お供に何を頼めるかは、お供の道具の説明で冒険者に伝わる。以前は「お供への頼み方」の一節を足していた
             }
             else
                 delete b.companion;
@@ -408,7 +451,7 @@ export async function renderSubmit(root) {
         const desc = brief?.prepare?.find((p) => p.key === 'companion')?.body
             ?? tl('冒険者が頼むと、お供が自分の道具を開いて調べ、わかったことを冒険者に伝えてくれます。お供が道具を使っても、冒険者の行動力は減りません。');
         const head = h('h3', {}, tl('6. お供'), h('span', { class: 'ai-term' }, tl('サブエージェント')), h('span', { class: 'slot-count' }, tl(`重さ {0}＋心得＋道具・任意`, R.companionCost)));
-        const tip = h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('お供に頼むかどうかは、冒険者が心得を読んで決めるんだぞ。「どんな場面で頼むか」と「頼むときは、名前や様子をそのまま伝える」を、心得に書いておけ。お供に届くのは、冒険者が伝えたことだけだからな。')));
+        const tip = h('div', { class: 'gm-tip' }, h('span', { class: 'gm-tip-who' }, tl('ギルドマスターの助言')), h('p', {}, tl('お供に頼むかどうかは、冒険者が自分で決める。決め手は、お供に持たせた道具の説明だ。心得に書くのは、お供に頼んではならん場面があるときだけでいい。お供に届くのは、冒険者が書いた依頼だけだ。どう調べて、何を返すかは、お供の心得に書いておけ。')));
         if (!c)
             return h('section', { class: 'card companion-card kit-otomo', id: 'companion-card' }, head, h('p', { class: 'small muted' }, desc), h('label', { class: 'chk' }, onBox, tl('お供を連れていく（サブエージェント）')), tip);
         const pa = area(c.prompt, (v) => { c.prompt = v; }, { rows: 6, kind: 'main', maxChars: R.companionMaxChars || undefined, placeholder: tl('お供が頼まれたときに思い出す教え。何をどう調べ、どう答えるか') });
@@ -547,10 +590,10 @@ export async function renderSubmit(root) {
             return;
         }
         const { items } = await mySubmissions().catch(() => ({ items: [] }));
-        const stateOf = (s) => s.status === 'queued' ? tl('順番待ち') : s.status === 'grading' ? tl(`戦闘中 {0}%`, Math.round(s.progress * 100)) : s.status === 'done' ? tl(`戦果 {0}%`, s.accuracy) : tl(`エラー: {0}`, s.error ?? '');
+        const stateOf = (s) => s.status === 'queued' ? tl('順番待ち') : s.status === 'grading' ? tl(`戦闘中 {0}%`, Math.round(s.progress * 100)) : s.status === 'done' ? tl(`戦果 {0}`, s.accuracy) : tl(`エラー: {0}`, s.error ?? '');
         const spark = sparkline(items), deltas = accuracyDeltas(items);
         const toolName = (id) => toolById[id]?.name ?? id;
-        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが冒険に出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('出発ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), s.status === 'done' && s.newCases ? h('div', { class: 'small warn-note' }, tl('この出発のあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度出発すると、増えた場面も採点されます）。', s.newCases)) : null, diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ冒険に出ていません。'))));
+        subsEl.replaceChildren(...nodes(h('h3', {}, tl('あなたが冒険に出した冒険者')), spark ? h('div', { class: 'spark-box' }, h('div', { class: 'small muted' }, tl('出発ごとの戦果の推移')), spark) : null, items.length ? h('ul', { class: 'sent-list' }, ...items.map((s) => h('li', {}, h('div', { class: 'row-between' }, h('b', {}, s.name), h('span', { class: s.status === 'done' ? 'ok' : 'muted' }, stateOf(s), deltas.has(s.id) ? h('span', { class: `delta ${deltas.get(s.id) >= 0 ? 'up' : 'down'}` }, ` (${deltas.get(s.id) >= 0 ? '+' : ''}${deltas.get(s.id)}pt)`) : null)), s.status === 'done' && s.newCases ? h('div', { class: 'small warn-note' }, tl('この出発のあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度出発すると、増えた場面も採点されます）。', s.newCases)) : null, diffParts(s, toolName).length ? h('div', { class: 'small sent-diff' }, s.diff?.first ? null : h('span', { class: 'muted' }, tl('前回から'), ': '), diffParts(s, toolName).join(' / ')) : null, h('div', { class: 'small muted' }, tl(`{0}・重さ {1}{2}`, new Date(s.createdAt).toLocaleString(localeOf()), s.buildCost, s.costUsd ? tl(`・\${0}`, s.costUsd.toFixed(3)) : '')), s.held?.length ? h('p', { class: 'small notice' }, heldMessage(s.held)) : null, s.status === 'done' ? h('div', { class: 'small row-gap' }, h('a', { href: `#/build/${s.id}` }, tl('ギルドマスターの講評 →')), h('a', { href: '#/arena/me' }, tl('討伐を見る →'))) : null))) : h('p', { class: 'muted' }, tl('まだ冒険に出ていません。'))));
         const busy = items.some((s) => s.status === 'queued' || s.status === 'grading');
         clearInterval(poll);
         if (busy)
@@ -578,7 +621,9 @@ export async function renderSubmit(root) {
         go.onclick = async () => {
             go.disabled = true;
             try {
-                const { id } = await submitBuild(buildToYaml(b));
+                const { id, held } = await submitBuild(buildToYaml(b));
+                if (held?.length)
+                    toast(heldMessage(held));
                 me = await getMe();
                 renderAccount();
                 refreshSubs();
@@ -749,7 +794,7 @@ function battleWait(id, name, onDone) {
         else if (s.status === 'done') {
             bar.style.width = '100%';
             bar.classList.add('done');
-            label.replaceChildren(h('b', {}, tl('戦いが終わりました！')), tl(`　戦果 {0}%`, s.accuracy));
+            label.replaceChildren(h('b', {}, tl('戦いが終わりました！')), tl(`　戦果 {0}`, s.accuracy));
             finish();
             onDone();
             note.textContent = tl('講評では、何が良くて何を直せばいいかが分かります。討伐では、あなたの冒険者が「あなた」の印つきで登場します。');

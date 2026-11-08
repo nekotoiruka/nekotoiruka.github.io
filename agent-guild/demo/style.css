@@ -437,6 +437,7 @@ main { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .scroll-dl { display: grid; grid-template-columns: 5em 1fr; gap: 2px 6px; margin: 0; }
 .scroll-dl dt { color: var(--muted); }
 .scroll-dl dd { margin: 0; }
+.scroll-body { white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; font: inherit; color: var(--muted); max-height: 12em; overflow: auto; }
 h4 { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
 .story p { font-size: 16px; }
 
@@ -658,6 +659,21 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .mp-gauge.is-high .mp-bar > i { background: #ffc35a; }
 .mp-gauge.is-out .mp-bar > i { background: #ff5d6c; }
 .mp-out { color: #ff7a86; }
+/* 行動力の内訳（積み上げの帯）。数字は出さず、上限の縦線で見せる */
+.ap-breakdown { margin-top: 6px; }
+.ap-breakdown > summary { cursor: pointer; color: var(--muted, #aab); }
+.ap-stack { margin: 6px 0; }
+.ap-stack-bar { position: relative; display: flex; height: 12px; margin: 4px 0; background: rgba(255,255,255,.08); border-radius: 3px; }
+.ap-stack-bar > i { display: block; height: 100%; min-width: 2px; }
+.ap-stack-bar > i:first-child { border-radius: 3px 0 0 3px; }
+.ap-cap { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fff; }
+.ap-stack.is-out .ap-stack-bar { box-shadow: inset 0 0 0 1px #ff5d6c; }
+.ap-stack.is-out .ap-cap { background: #ff5d6c; }
+.ap-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 0 0; padding: 0; list-style: none; }
+.ap-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.ap-main { background: #5ab4ff; } .ap-tools { background: #8a8fa8; } .ap-scene { background: #e0b860; }
+.ap-scrolls, .ap-request { background: #5fd88a; } .ap-results { background: #ff9f5a; } .ap-companion { background: #c59bff; }
+.ap-think, .ap-answer { background: #e86fa8; }
 .tr-mp { color: #8fc8ff; }
 .tr-mp-heavy { color: #ff9aa4; font-weight: bold; }
 .trace-guide { display: inline-block; }
@@ -1175,3 +1191,12 @@ input::placeholder { color: var(--muted); }
 .lp-you { background: var(--you); color: #12152a; border-radius: 0; }
 .roster-item.mine { background: rgba(236, 233, 246, .08); box-shadow: inset 3px 0 0 var(--you); }
 .roster-item.mine .roster-name::before { color: var(--you); }
+
+/* 名前とことばのチェック（管理者画面） */
+.admin-settings textarea, .admin-settings select { font-family: var(--font); font-size: 13px; color: var(--ink); background: var(--panel-2); border: 0; padding: 6px 8px; box-shadow: 0 0 0 2px var(--line); box-sizing: border-box; }
+.admin-settings textarea { width: 100%; resize: vertical; line-height: 1.5; }
+.admin-settings input[type=checkbox] { width: auto; box-shadow: none; }
+.admin-settings .name-text { word-break: break-all; }
+.admin-settings .chip.name-ok { color: #63C74D; }
+.admin-settings .chip.name-ng { color: #FF8A6B; }
+.report-btn { margin-top: 8px; }
