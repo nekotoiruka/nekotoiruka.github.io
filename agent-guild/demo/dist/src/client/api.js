@@ -56,8 +56,11 @@ export async function getSeason() {
         applyCostRules(d.task.costRules);
         // デモでも、そのシーズンで選べる道具だけを出す（昔の課題の道具は出さない）
         const ids = d.catalog;
+        // 道具の説明は、そのシーズンの説明（冒険者に渡る文と同じ）
+        const text = d.toolText ?? {};
+        const pick = ids ? TOOL_CATALOG.filter((t) => ids.includes(t.id)) : TOOL_CATALOG;
         return {
-            task: d.task, catalog: ids ? TOOL_CATALOG.filter((t) => ids.includes(t.id)) : TOOL_CATALOG, costRules: COST_RULES,
+            task: d.task, catalog: pick.map((t) => (text[t.id] ? { ...t, description: text[t.id] } : t)), costRules: COST_RULES,
             seasonEnd: '', seasonOver: true, limits: { submissionsPerDay: 3 }, provider: 'mock', authMode: 'passcode',
         };
     }
@@ -106,6 +109,10 @@ export const login = (name, passcode) => req('POST', 'api/login', { name, passco
 export const logout = () => req('POST', 'api/logout');
 export const enterSeason = (team) => req('POST', 'api/entry', { team: team ?? '' });
 export const submitBuild = (yaml) => req('POST', 'api/submissions', { yaml });
+// 名前とことば: いまあるチーム（候補）・決まりでの確認・通報
+export const getTeams = () => (demoMode ? Promise.resolve({ teams: [] }) : req('GET', 'api/teams'));
+export const checkNames = (v) => req('POST', 'api/names/check', v);
+export const reportBuild = (id) => req('POST', 'api/report', { id });
 export const coachReview = (yaml) => req('POST', 'api/coach/review', { yaml });
 export const mySubmissions = () => req('GET', 'api/submissions/mine');
 export async function getBuild(id) {

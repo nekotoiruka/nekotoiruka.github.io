@@ -8,6 +8,8 @@ export const WEAPON_LABELS = perLang(() => ({
 }));
 // 近づいて殴る武器（それ以外は飛び道具）
 export const MELEE_WEAPONS = ['spear', 'dagger', 'axe', 'hammer', 'shield', 'sword', 'katana', 'scythe', 'pan', 'umbrella', 'guitar'];
+// 分厚い書物を引く道具の、1回の結果の行動力の目安
+export const SEARCH_AP = 250;
 // 道具の結果を読むのに使う行動力の目安（トークン）。準備の画面で「行動力の消費」として見せる。
 // 分厚い書物は archive.tokens（既定 11,000）。日誌は戦いが進むほど長くなるので少し多め。ほかの道具の結果は短い
 export const ARCHIVE_AP = 11000;
@@ -16,10 +18,14 @@ export function toolAp(t) {
         return t.ap;
     if (t.source === 'archive')
         return ARCHIVE_AP;
+    if (t.search)
+        return SEARCH_AP;
     if (t.id === 'memory')
         return 400;
     if (t.decoy)
         return 60;
+    if (t.lure)
+        return 200;
     return 150;
 }
 // 行動力の消費の段階（冒険者の1場面の行動力に対する割合）。1: 少ない 2: ふつう 3: 多い 4: とても多い
@@ -249,6 +255,13 @@ export const TOOL_CATALOG = perLang(() => ([
     { id: 'lamp_log', effect: tl('分厚い灯火簿から、灯台の知らせの進路が分かった'), name: tl('灯台守の灯火簿'), cost: 10, weapon: 'book', description: tl('双子灯台の灯台守が書き継いできた、灯火の知らせの分厚い記録。灯の色と瞬き方ごとに、船の進路が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
     { id: 'statue_catalog', effect: tl('分厚い目録から、守護像の止め方が分かった'), name: tl('守護像目録'), cost: 10, weapon: 'book', description: tl('学術院が百年かけて調べ上げた、遺跡の守護像の分厚い目録。胸の銘板に浮かぶ銘と、止め方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
     { id: 'track_book', effect: tl('分厚い足跡帳から、獣の追い払い方が分かった'), name: tl('獣の足跡帳'), cost: 10, weapon: 'book', description: tl('犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
+    // 分厚い書物を引く道具（検索）。どのシーズンの書物にも使える。説明はシーズンごとに上書きする（書物の名前を入れる）。
+    // 索引は見出しの言葉どおりでないと引けない。水晶玉は言い方が違っても引けるが、似た外れも混じる。古地図の索引は手がかりを2つそろえて引く
+    // 紛らわしい道具: 魔物の動きと身のかわし方の早見表。どの相手の表かは、シーズンの説明と結果の見出しで分かる（この戦いの相手ではない）
+    { id: 'quick_chart', effect: tl('早見表を見たが、どうも相手が違うようだ'), name: tl('魔物の早見表'), cost: 5, weapon: 'book', description: tl('魔物の動きと、そのときの身のかわし方をまとめた早見表。'), inputSchema: { type: 'object', properties: {} }, optIn: true, lure: true },
+    { id: 'archive_index', effect: tl('索引から、必要な行だけが見つかった'), name: tl('書物の索引'), cost: 5, weapon: 'book', description: tl('分厚い書物の索引。言葉を1つ渡すと、その言葉を含む行だけを書物から写して返す。見出しにない言い方では引けない。'), inputSchema: { type: 'object', properties: { word: { type: 'string', description: tl('引く言葉（名前など）') } }, required: ['word'] }, optIn: true, search: 'index' },
+    { id: 'crystal_ball', effect: tl('水晶玉に、近い行が浮かんだ'), name: tl('水晶玉'), cost: 10, weapon: 'wand', description: tl('のぞきこんで手がかりを唱えると、言い方が違っても、分厚い書物の中から意味の近い行を3つ浮かべる。似た別の行が混じることもある。'), inputSchema: { type: 'object', properties: { words: { type: 'string', description: tl('手がかり（見たまま・聞いたままの言葉でよい）') } }, required: ['words'] }, optIn: true, search: 'crystal' },
+    { id: 'old_map_index', effect: tl('古地図の索引で、手がかりの重なる行が見つかった'), name: tl('古地図の索引'), cost: 5, weapon: 'book', description: tl('手がかりを2つ以上そろえて渡すと、分厚い書物から、そのすべてを含む行だけを返す。手がかりが1つだけだと、候補が多すぎて返せない。'), inputSchema: { type: 'object', properties: { clues: { type: 'array', items: { type: 'string' }, description: tl('手がかり（2つ以上）') } }, required: ['clues'] }, optIn: true, search: 'atlas' },
     { id: 'garlic', name: tl('にんにくの首飾り'), cost: 5, weapon: 'fan', description: tl('吸血鬼よけの定番、と言われている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('にんにくを掲げた！ …伯爵は少し顔をしかめただけだった') },
     { id: 'snow_compass', effect: tl('いま立っている斜面の名前が分かった'), name: tl('雪原の羅針盤'), cost: 10, weapon: 'book', description: tl('吹雪で何も見えなくても、いま立っている斜面の名前を指し示す。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
     { id: 'frost_rod', effect: tl('吹雪の向こうの身ぶりが分かった'), name: tl('霜読みの杖'), cost: 10, weapon: 'spear', description: tl('氷に突き立てると、吹雪の向こうで動く巨人の身ぶりが、氷の震えで分かる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
@@ -266,8 +279,13 @@ export const TOOL_BY_ID = perLang(() => (Object.fromEntries(TOOL_CATALOG.map((t)
 export function effectiveCatalog(overrides = {}) {
     return TOOL_CATALOG
         .filter((t) => (t.optIn ? overrides[t.id]?.available === true : overrides[t.id]?.available !== false))
-        .map((t) => (overrides[t.id]?.cost !== undefined ? { ...t, cost: overrides[t.id].cost } : t));
+        .map((t) => {
+        const o = overrides[t.id];
+        return o?.cost !== undefined || o?.description || o?.output ? { ...t, ...(o.cost !== undefined ? { cost: o.cost } : {}), ...(o.description ? { description: o.description } : {}), ...(o.output && t.lure ? { lureOutput: o.output } : {}) } : t;
+    });
 }
+// 本物の AI に渡す道具の説明。道具の名前（ツール名は英字の id なので）を頭に付ける
+export const toolSpecText = (t) => tl(`{0}：{1}`, t.name, t.description);
 export const DEFAULT_COST_RULES = {
     limit: 100,
     mainTokensPerPoint: 200,
@@ -285,7 +303,6 @@ export const DEFAULT_COST_RULES = {
     companionMaxTools: 2,
     companionCallsPerCase: 2,
     companionCallsPerRun: 8,
-    companionTokenCap: 20000,
 };
 // 課題ごとにコストの厳しさを変えられる。毎回「既定値に戻してから」上書きする（同じプロセスで複数の課題を扱うため）
 // 言語ごと（＝サーバーでは言語ごとのシーズン）に別のルールを持つ

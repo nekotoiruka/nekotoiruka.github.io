@@ -3,6 +3,7 @@
 import { demoMode } from '../api.js';
 import { h, toast } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
+import { NAME_KIND_LABELS, NAME_KINDS } from '../../shared/names.js';
 const post = async (url, body) => {
     const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({}));
@@ -25,7 +26,8 @@ export async function renderAdmin(root) {
     const u = (await (await fetch('api/admin/usage')).json());
     const seasons = await (await fetch('api/admin/seasons')).json();
     const people = await (await fetch('api/admin/participants')).json();
-    root.replaceChildren(dashboard(u), seasonsCard(seasons, () => renderAdmin(root)), dataCard(people, () => renderAdmin(root)), settingsForm(s, () => renderAdmin(root)), h('p', {}, h('button', { class: 'btn btn-small', onclick: async () => { await post('api/admin/logout', {}); renderAdmin(root); } }, tl('管理者画面からログアウト'))));
+    const nm = await (await fetch('api/admin/names')).json();
+    root.replaceChildren(dashboard(u), seasonsCard(seasons, () => renderAdmin(root)), dataCard(people, () => renderAdmin(root)), namesCard(nm, () => renderAdmin(root)), settingsForm(s, () => renderAdmin(root)), h('p', {}, h('button', { class: 'btn btn-small', onclick: async () => { await post('api/admin/logout', {}); renderAdmin(root); } }, tl('管理者画面からログアウト'))));
 }
 function loginView(done) {
     const pw = h('input', { type: 'password', placeholder: tl('管理者パスワード'), 'aria-label': tl('管理者パスワード'), autocomplete: 'current-password' });
@@ -147,7 +149,7 @@ function seasonsCard(si, reload) {
         };
         return h('tr', { class: isCur ? 'mine-row' : '' }, h('td', {}, h('b', {}, t.title), isCur ? h('span', { class: 'chip' }, tl('開催中')) : null, h('div', { class: 'small muted' }, t.boss)), h('td', { class: 'small' }, tl(`場面 {0}・資料 {1}`, t.cases, t.references)), h('td', { class: 'num' }, t.submissions), h('td', {}, label), h('td', {}, end), h('td', {}, go));
     });
-    return h('section', { class: 'card admin-settings' }, h('h3', {}, tl('シーズン（ボスと課題）')), h('p', {}, h('b', {}, tl(`開催中: {0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, tl(`　{0}・{1}〜{2}`, cur.boss, fmt(cur.startedAt), cur.end ? fmt(cur.end) : tl('（終了日時なし）')))), h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('ボスと課題'), tl('中身'), tl('出発'), tl('シーズン名'), tl('終了日時（任意）'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))), si.history.length ? h('h4', {}, tl('過去のシーズン')) : null, ...si.history.map((hh) => h('div', { class: 'sub-card' }, h('b', {}, tl(`{0}「{1}」`, hh.label, hh.title)), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmt(hh.startedAt), fmt(hh.endedAt), hh.participants ?? hh.top.length)), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}%`, x.name, x.owner, x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし')))));
+    return h('section', { class: 'card admin-settings' }, h('h3', {}, tl('シーズン（ボスと課題）')), h('p', {}, h('b', {}, tl(`開催中: {0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, tl(`　{0}・{1}〜{2}`, cur.boss, fmt(cur.startedAt), cur.end ? fmt(cur.end) : tl('（終了日時なし）')))), h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('ボスと課題'), tl('中身'), tl('出発'), tl('シーズン名'), tl('終了日時（任意）'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))), si.history.length ? h('h4', {}, tl('過去のシーズン')) : null, ...si.history.map((hh) => h('div', { class: 'sub-card' }, h('b', {}, tl(`{0}「{1}」`, hh.label, hh.title)), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmt(hh.startedAt), fmt(hh.endedAt), hh.participants ?? hh.top.length)), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}`, x.name, x.owner, x.score ?? x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし')))));
 }
 function dataCard(p, reload) {
     const fmt = (iso) => (iso ? new Date(iso).toLocaleString(localeOf()) : '—');
@@ -168,7 +170,7 @@ function dataCard(p, reload) {
     const rows = p.users.map((x) => {
         const del = h('button', { class: 'btn btn-small btn-danger' }, tl('消す'));
         del.onclick = act(del, tl('「{0}」の登録と出発をすべて消します。', x.name), { action: 'remove-user', name: x.name });
-        return h('tr', {}, h('td', {}, h('b', {}, x.name), x.team ? h('div', { class: 'small muted' }, x.team) : null), h('td', {}, x.entered ? tl('エントリー済み') : tl('未エントリー')), h('td', { class: 'num' }, x.submissions), h('td', { class: 'num' }, x.accuracy === null ? '—' : `${x.accuracy}%`), h('td', { class: 'small' }, fmt(x.lastAt)), h('td', {}, del));
+        return h('tr', {}, h('td', {}, h('b', {}, x.name), x.team ? h('div', { class: 'small muted' }, x.team) : null), h('td', {}, x.entered ? tl('エントリー済み') : tl('未エントリー')), h('td', { class: 'num' }, x.submissions), h('td', { class: 'num' }, x.accuracy === null ? '—' : `${x.accuracy}`), h('td', { class: 'small' }, fmt(x.lastAt)), h('td', {}, del));
     });
     const clearBtn = h('button', { class: 'btn btn-small btn-danger' }, tl('全員の出発を消す（登録は残す）'));
     clearBtn.onclick = act(clearBtn, tl('全員の出発と採点結果を消します。登録とエントリーは残ります。'), { action: 'clear-submissions' });
@@ -187,4 +189,94 @@ function confirm2(btn, msg, again = tl('もう一度押すと開催')) {
     setTimeout(() => { delete btn.dataset.armed; btn.textContent = prev; }, 4000);
     return false;
 }
+function namesCard(d, reload) {
+    const c = d.settings;
+    const fmt = (iso) => (iso ? new Date(iso).toLocaleString(localeOf()) : '—');
+    const MODES = [
+        ['off', tl('調べない（見えない文字だけは止める）')],
+        ['basic', tl('決まりだけ（文字の種類・禁止語・予約語）')],
+        ['ai', tl('決まり＋AI の判定（おすすめ）')],
+        ['approval', tl('承認制（新しい言葉は、運営が承認するまで伏せる）')],
+    ];
+    const modeR = MODES.map(([m, label]) => { const r = h('input', { type: 'radio', name: 'name-mode', value: m, checked: c.mode === m }); return { m, r, el: h('label', { class: 'chk' }, r, label) }; });
+    const ng = h('select', { 'aria-label': tl('AI が「出せない」と判定したとき') }, h('option', { value: 'reject', selected: c.ngAction === 'reject' }, tl('出発を止めて、直してもらう')), h('option', { value: 'hold', selected: c.ngAction === 'hold' }, tl('出発は受け付けて、ほかの人には伏せる')));
+    const area = (xs, rows = 4) => { const t = h('textarea', { rows, spellcheck: 'false' }); t.value = xs.join('\n'); return t; };
+    const blocked = area(c.blocked), reserved = area(c.reserved), allowed = area(c.allowed, 3);
+    const rep = h('input', { type: 'checkbox', checked: c.reports });
+    const holdAt = h('input', { type: 'number', min: 1, max: 50, value: String(c.reportHoldAt) });
+    const row = (label, el, note = '') => h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), el, note ? h('span', { class: 'field-note' }, note) : null);
+    const save = h('button', { class: 'btn btn-primary' }, tl('保存する'));
+    const send = async (body, done) => {
+        save.disabled = true;
+        try {
+            await post('api/admin/names/settings', body);
+            toast(done);
+            reload();
+        }
+        catch (e) {
+            toast(e.message, 'err');
+            save.disabled = false;
+        }
+    };
+    save.onclick = () => send({ mode: modeR.find((x) => x.r.checked)?.m, ngAction: ng.value, blocked: blocked.value, reserved: reserved.value, allowed: allowed.value, reports: rep.checked, reportHoldAt: holdAt.value }, tl('保存しました。いま討伐に出ている言葉にも、すぐに効きます'));
+    const resetLists = h('button', { class: 'btn btn-small' }, tl('言葉の一覧を、はじめのものに戻す'));
+    resetLists.onclick = () => { if (confirm2(resetLists, tl('禁止語・予約語・許可語を、はじめの一覧に戻します。'), tl('もう一度押すと戻す')))
+        send({ reset: true }, tl('はじめの一覧に戻しました')); };
+    // ためしに調べる
+    const tText = h('input', { placeholder: tl('調べたい言葉'), 'aria-label': tl('調べたい言葉'), maxlength: 150 });
+    const tKind = h('select', { 'aria-label': tl('種類') }, ...NAME_KINDS.map((k) => h('option', { value: k, selected: k === 'hero' }, NAME_KIND_LABELS[k])));
+    const tOut = h('div', { class: 'small' });
+    const tryIt = (ai) => async () => {
+        tOut.textContent = tl('確認中…');
+        try {
+            const j = await post('api/admin/names/test', { text: tText.value, kind: tKind.value, ai });
+            const parts = [j.rule ? tl('決まり: {0}', j.rule) : tl('決まり: 問題なし')];
+            if (ai)
+                parts.push(!j.aiAvailable ? tl('AI: いまは使えません') : j.ai ? tl('AI: {0}{1}', VERDICT[j.ai.verdict], j.ai.reason ? `（${j.ai.reason}）` : '') : tl('AI: 答えを読めませんでした'));
+            tOut.textContent = parts.join(' / ');
+        }
+        catch (e) {
+            tOut.textContent = tl(`失敗: {0}`, e.message);
+        }
+    };
+    const tRule = h('button', { class: 'btn btn-small', onclick: tryIt(false) }, tl('決まりで調べる'));
+    const tAi = h('button', { class: 'btn btn-small', onclick: tryIt(true) }, tl('AI にも聞く（1回 0.1円ほど）'));
+    // 決める
+    const decide = (kind, text, action) => async () => {
+        try {
+            await post('api/admin/names/decide', { kind, text, action });
+            reload();
+        }
+        catch (e) {
+            toast(e.message, 'err');
+        }
+    };
+    const btns = (kind, text, status, by) => h('div', { class: 'row-gap' }, status !== 'ok' || by !== 'admin' ? h('button', { class: 'btn btn-small btn-primary', onclick: decide(kind, text, 'ok') }, tl('見せる')) : null, status !== 'ng' || by !== 'admin' ? h('button', { class: 'btn btn-small btn-danger', onclick: decide(kind, text, 'ng') }, tl('伏せる')) : null, by ? h('button', { class: 'btn btn-small', onclick: decide(kind, text, 'reset') }, tl('判定をやり直す')) : null);
+    const why = (x) => [BY[x.by] ?? x.by, x.reason].filter(Boolean).join(tl('・'));
+    const table = (head, rows) => h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...head.map((x) => h('th', {}, x)))), h('tbody', {}, ...rows)));
+    const cell = (kind, text) => h('td', {}, h('div', { class: 'small muted' }, NAME_KIND_LABELS[kind]), h('b', { class: 'name-text' }, text));
+    const waiting = d.items.filter((x) => x.status === 'review');
+    const waitRows = [
+        ...waiting.map((x) => h('tr', {}, cell(x.kind, x.text), h('td', { class: 'small' }, why(x)), h('td', { class: 'small' }, x.owners.join(', ')), h('td', {}, btns(x.kind, x.text, x.status, x.by)))),
+        ...d.live.map((x) => h('tr', {}, cell(x.kind, x.text), h('td', { class: 'small' }, x.why === 'rule' ? tl('決まりで伏せている（{0}）', x.rule ?? '') : tl('まだ確認していない')), h('td', { class: 'small' }, x.owners.join(', ')), h('td', {}, btns(x.kind, x.text)))),
+    ];
+    const repRows = d.reports.map((r) => {
+        const okAll = h('button', { class: 'btn btn-small' }, tl('問題なし（通報を消す）'));
+        okAll.onclick = async () => { try {
+            await post('api/admin/names/dismiss', { id: r.id });
+            reload();
+        }
+        catch (e) {
+            toast(e.message, 'err');
+        } };
+        // 言葉ごとに決める（チーム名はほかの人も使っているので、伏せるとそのチームの全員に効く）
+        const parts = [['player', r.owner], ['hero', r.name], ['team', r.team], ['motto', r.kodawari]].filter(([k, t]) => t.trim() && (k !== 'player' || d.withPlayer));
+        return h('tr', {}, h('td', {}, ...parts.map(([k, t]) => h('div', { class: 'row-between' }, h('span', {}, h('span', { class: 'small muted' }, NAME_KIND_LABELS[k], ' '), h('b', { class: 'name-text' }, t)), btns(k, t.trim())))), h('td', { class: 'num' }, r.count), h('td', { class: 'small' }, fmt(r.at)), h('td', {}, okAll));
+    });
+    const decided = d.items.filter((x) => x.status !== 'review');
+    return h('section', { class: 'card admin-settings' }, h('h3', {}, tl('名前とことばのチェック')), h('p', { class: 'small muted' }, tl('ほかの人の画面に出る言葉（表示名・冒険者の名前・チーム名・こだわり）を調べます。伏せた言葉は、本人にはそのまま見え、ほかの人には「名もなき冒険者」などで出ます。巻物の名前・心得などは、本人と運営にしか見えないので調べません。')), !d.withPlayer ? h('p', { class: 'small muted' }, tl('SSO でログインしているので、表示名は調べません。')) : null, h('div', { class: 'row-gap' }, ...modeR.map((x) => x.el)), (c.mode === 'ai' || c.mode === 'approval') && !d.aiAvailable ? h('p', { class: 'notice small' }, tl('いまは AI に聞けないため（模擬採点か、予算に達した）、決まりだけで調べています。')) : null, h('div', { class: 'grid2' }, row(tl('AI が「出せない」と判定したとき'), ng, tl('AI が迷ったときは、出発は受け付けて、運営が確認するまで伏せます')), row(tl('通報'), h('span', { class: 'chk' }, rep, tl('通報ボタンを出す（最後の手段。ふだんはオフ）'))), row(tl('伏せる人数'), holdAt, tl('この人数から通報されたら、運営が見るまで伏せます'))), h('div', { class: 'grid2' }, row(tl('禁止語'), blocked, tl('1行に1つ。英字の言葉は単語の中から、ほかの文字は記号や空白を飛ばして探します。「=」で始めると、言葉全体が同じときだけ当たります')), row(tl('予約語（名前にだけ効く）'), reserved, tl('運営・公式を名乗れないようにする言葉。英字の言葉は単語の頭から探します')), row(tl('許可語'), allowed, tl('禁止語・予約語に誤って当たる言葉（例: Scunthorpe）。名前全体を書くと、その名前は通ります'))), h('div', { class: 'row-gap' }, save, resetLists), h('h4', {}, tl('ためしに調べる')), h('div', { class: 'row-gap' }, tText, tKind, tRule, tAi), tOut, h('h4', {}, tl('確認待ち（{0}）', waitRows.length)), waitRows.length ? table([tl('言葉'), tl('理由'), tl('使った人'), ''], waitRows) : h('p', { class: 'small muted' }, tl('確認待ちの言葉はありません。')), d.reports.length ? h('h4', {}, tl('通報（{0}）', d.reports.length)) : null, d.reports.length ? h('p', { class: 'small muted' }, tl('チーム名を伏せると、そのチームの全員に効きます。')) : null, d.reports.length ? table([tl('冒険者'), tl('人数'), tl('最後の通報'), ''], repRows) : null, decided.length ? h('details', {}, h('summary', {}, tl('判定の記録（{0}）', decided.length)), table([tl('言葉'), tl('判定'), tl('理由'), tl('使った人'), ''], decided.map((x) => h('tr', {}, cell(x.kind, x.text), h('td', {}, h('span', { class: `chip name-${x.status}` }, STATUS[x.status])), h('td', { class: 'small' }, why(x)), h('td', { class: 'small' }, x.owners.join(', ')), h('td', {}, btns(x.kind, x.text, x.status, x.by)))))) : null);
+}
+const VERDICT = { get ok() { return tl('問題なし'); }, get ng() { return tl('出せない'); }, get review() { return tl('迷う'); } };
+const STATUS = { get ok() { return tl('見せる'); }, get ng() { return tl('伏せる'); }, get review() { return tl('確認待ち'); } };
+const BY = { get ai() { return 'AI'; }, get admin() { return tl('運営'); }, get error() { return tl('AI に聞けなかった'); }, get report() { return tl('通報'); }, get approval() { return tl('承認制'); } };
 //# sourceMappingURL=admin.js.map

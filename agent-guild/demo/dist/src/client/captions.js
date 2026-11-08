@@ -50,6 +50,8 @@ export function okLine(c, scene, resp, evade, element) {
 export function missLine(c, scene, why) {
     if (why === 'mpOut')
         return tl('行動力が尽きて、動けない！');
+    if (why === 'lost')
+        return tl('途方に暮れて、動けない！');
     if (why === 'charmed')
         return tl('さっきの声が、まだ頭に響いている……');
     const own = c?.miss?.[scene];
