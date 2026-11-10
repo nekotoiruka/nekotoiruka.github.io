@@ -1,4 +1,5 @@
 import { getLang, perLang, tl } from './i18n.js';
+import { COST_RULES } from './catalog.js';
 const clamp = (v, a = 0, b = 100) => Math.max(a, Math.min(b, v));
 // 対数スケールで good 以下なら100、bad 以上なら0
 function logScore(v, good, bad) {
@@ -25,7 +26,8 @@ export const fuelOfCase = (c) => c.fuel ?? c.tokensIn + c.tokensOut;
 // 同じ中身でも、ラテン文字などの言語は読み書きの量が多くなる（模擬採点で約2倍）ので、旅の体力も言語ごとに広げる
 export const JOURNEY_PER_SCENE = 6000;
 const JOURNEY_LANG_FACTOR = { ja: 1, zh: 1, ko: 1, en: 2, es: 2, pt: 2, fr: 2, de: 2, hi: 2, ar: 2 };
-export const journeyPerScene = () => JOURNEY_PER_SCENE * (JOURNEY_LANG_FACTOR[getLang()] ?? 2);
+// シーズン×言語ごとに決めてあれば、それを使う（2026-11-10: 手本はもち、お供を絞らない形は最後の5場面くらいで疲れる。scripts/journey.mjs）
+export const journeyPerScene = () => COST_RULES.journeyPerScene || JOURNEY_PER_SCENE * (JOURNEY_LANG_FACTOR[getLang()] ?? 2);
 export const FATIGUE = 0.5;
 export const SPARE_BONUS = 0.5;
 export const CONTRIB_FLOOR = 0.5;
@@ -46,7 +48,8 @@ export function contribution(cases) {
     const bonus = accuracy >= CONTRIB_FLOOR && n ? SPARE_BONUS * (1 / n) * spare : 0;
     return { score: (w ? got / w : 0) + bonus, accuracy, fuel: used, journey, tiredFrom, bonus };
 }
-// 行動力の上限（1つの場面で、1回の呼び出しに入る量の上限。超えると行動力切れ）。2026-11-07・issue #58 で数え方を変えた。
+// 行動力の目安（1つの場面で、1回の呼び出しに入る量）。2026-11-07・issue #58 で数え方を変えた。
+// 2026-11-10（issue #83）から行動力切れはなく、記録のゲージと帯に引く「目安の線」にだけ使う（超えると「重い」と出す）。
 // 単位は「行動力の数え方」（模擬採点の見積もり）。本物の採点は、使ったトークンをシーズン×言語ごとの比（tokens.json）で割って、この単位に直す。
 // 本物で測った線（2026-11-07・吸血鬼伯爵・日本語・行動力の数え方に直したもの）: 手本のお供が書物を読む 約12,200 ／ 手本の冒険者が自分で読む 約13,100。
 // その中ほど（TOKEN_CAP_PER_CASE でも変えられる）
