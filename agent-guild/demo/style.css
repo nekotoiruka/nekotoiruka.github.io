@@ -659,6 +659,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .mp-gauge.is-high .mp-bar > i { background: #ffc35a; }
 .mp-gauge.is-out .mp-bar > i { background: #ff5d6c; }
 .mp-out { color: #ff7a86; }
+.mp-heavy { color: #e0a030; margin-left: 6px; }
 /* 行動力の内訳（積み上げの帯）。数字は出さず、上限の縦線で見せる */
 .ap-breakdown { margin-top: 6px; }
 .ap-breakdown > summary { cursor: pointer; color: var(--muted, #aab); }
@@ -669,6 +670,7 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .ap-cap { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: #fff; }
 .ap-stack.is-out .ap-stack-bar { box-shadow: inset 0 0 0 1px #ff5d6c; }
 .ap-stack.is-out .ap-cap { background: #ff5d6c; }
+.ap-stack.is-heavy .ap-cap { background: #ffc35a; }
 .ap-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 0 0; padding: 0; list-style: none; }
 .ap-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
 .ap-main { background: #5ab4ff; } .ap-tools { background: #8a8fa8; } .ap-scene { background: #e0b860; }
@@ -978,6 +980,9 @@ html[dir="rtl"] .editor, html[dir="rtl"] textarea { text-align: left; }
 .companion-card .pet-tool { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--panel-2); box-shadow: 0 0 0 1px var(--line); }
 .companion-card .pet-tool.on { box-shadow: 0 0 0 2px #c59bff; }
 .companion-card .pet-tool .tool-cost { margin-left: 4px; }
+.companion-card .pet-scrolls .field-label .slot-count { margin-left: 8px; }
+.companion-card .pet-scroll-shelf { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.companion-card .pet-scrolls .sub-card { margin-top: 8px; }
 
 /* ===== アプリ全体のトンマナを、紹介ページにそろえる =====
    紹介ページの骨組み: 大きなまとまりは RPG のメッセージウィンドウ（白い二重枠・角丸・濃い地・段付きの影）、

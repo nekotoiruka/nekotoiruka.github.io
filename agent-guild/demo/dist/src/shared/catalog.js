@@ -301,6 +301,8 @@ export const DEFAULT_COST_RULES = {
     companionCost: 10,
     companionMaxChars: 200,
     companionMaxTools: 2,
+    companionMaxSkills: 2,
+    journeyPerScene: 0,
     companionCallsPerCase: 2,
     companionCallsPerRun: 8,
 };

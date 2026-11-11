@@ -36,6 +36,11 @@ export const POSITION_NOTES = perLang(() => ({
     back: tl('ボスから遠い。与えるダメージは小さいが、ほとんどの攻撃が届かない。隕石（ひっかけ問題）にだけは弱い'),
 }));
 const POSITION_ALIASES = { front: 'front', 前衛: 'front', mid: 'mid', 中衛: 'mid', back: 'back', 後衛: 'back' };
+// お供が使える道具と巻物（2026-11-10・issue #83）: 絞っていなければ、冒険者と同じ全部。
+// tools か skills のどちらかを書いたら「選んだものだけ」で、書いていないほうは使わない（準備の画面の「選んだものだけを使う」と同じ）
+export const companionNarrowed = (b) => !!(b.companion && (b.companion.tools || b.companion.skills));
+export const companionToolsOf = (b) => (!b.companion ? [] : companionNarrowed(b) ? [...(b.companion.tools ?? [])] : [...b.tools]);
+export const companionSkillsOf = (b) => (!b.companion ? [] : companionNarrowed(b) ? b.skills.filter((s) => (b.companion.skills ?? []).includes(s.name)) : [...b.skills]);
 // 日本語・中国語はおおむね1文字1トークン、英数字は4文字1トークン。
 // ほかの文字は、言語ごとの目安で概算する（ラテン文字の記号付きは英数字並み、ハングル0.8、デーヴァナーガリー0.6、アラビア文字0.45）
 export function estimateTokens(text) {
@@ -149,8 +154,6 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
         else
             tools.push(id);
     }
-    if (tools.length > COST_RULES.maxTools)
-        err('tools', tl(`ツールは{0}つまでです（装備枠）`, COST_RULES.maxTools));
     let guardrail;
     if (raw.guardrail !== undefined && raw.guardrail !== null) {
         const g = raw.guardrail;
@@ -168,64 +171,102 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
                 guardrail = { words };
         }
     }
+    // 巻物（スキル）の読み込み: 冒険者の巻物と、お供の巻物（2026-11-09・issue #78）で同じ決まり
+    const parseSkills = (rawList, base, taken = []) => {
+        const out = [];
+        if (rawList !== undefined && rawList !== null && !Array.isArray(rawList))
+            err(base, tl('{0} はリストで書いてください', base));
+        const list = Array.isArray(rawList) ? rawList : [];
+        list.forEach((s, i) => {
+            const p = `${base}[${i}]`;
+            if (!isObj(s)) {
+                err(p, tl('スキルは name / content を持つマップで書いてください'));
+                return;
+            }
+            const kn = (str(s.name) ?? '').trim();
+            const kc = str(s.content) ?? '';
+            if (!kn)
+                err(`${p}.name`, tl('スキルの name は必須です'));
+            else if (out.some((x) => x.name === kn))
+                err(`${p}.name`, tl(`スキル名「{0}」が重複しています`, kn));
+            else if (taken.some((x) => x.name === kn))
+                err(`${p}.name`, tl(`スキル名「{0}」が重複しています`, kn));
+            if (!kc.trim())
+                err(`${p}.content`, tl('スキルの content は必須です'));
+            // 新しい巻物の下書き（SKILL_TEMPLATE）の記号が残ったままでは送り出さない
+            else if ([kn, str(s.description) ?? '', kc].some((x) => DRAFT_MARK.test(x)))
+                err(`${p}.content`, tl(`巻物「{0}」に、下書きの記号（〇〇・××・△△・□□）が残っています。書き換えるか、要らない行を消してください`, kn));
+            const look = parseLook(s.look, CHARM_KINDS, `${p}.look`, err, CHARM_LABELS, 'gem');
+            out.push({ name: kn, description: (str(s.description) ?? '').trim(), content: kc, ...(look ? { look } : {}) });
+        });
+        return out;
+    };
+    const skills = parseSkills(raw.skills, 'skills');
     // subagents は廃止（古い YAML に書かれていても無視する）。いまのサブエージェントは companion（お供）ひとり
+    // 道具と巻物は、冒険者とお供で共有する（2026-11-10・issue #83）。companion.tools / skills は、お供が使えるものを絞る一覧（書かなければ全部）
     let companion;
     if (raw.companion !== undefined && raw.companion !== null) {
         const c = raw.companion;
         if (!isObj(c))
-            err('companion', tl('companion は { prompt: お供の心得, tools: [道具, …] } の形で書いてください'));
+            err('companion', tl('companion は { prompt: お供の心得 } の形で書いてください（tools・skills で、お供が使う道具と巻物を絞れます）'));
         else {
             const prompt = str(c.prompt) ?? '';
             if (!prompt.trim())
                 err('companion.prompt', tl('companion.prompt（お供の心得）は必須です'));
             if (COST_RULES.companionMaxChars && [...prompt].length > COST_RULES.companionMaxChars)
                 err('companion.prompt', tl(`お供の心得は{0}字までです（いま{1}字）`, COST_RULES.companionMaxChars, [...prompt].length));
-            const ctools = [];
-            if (c.tools !== undefined && c.tools !== null && !Array.isArray(c.tools))
-                err('companion.tools', tl('companion.tools はリストで書いてください'));
-            for (const t of Array.isArray(c.tools) ? c.tools : []) {
-                const id = str(t);
-                if (!id || !byId[id])
-                    err('companion.tools', TOOL_BY_ID[id ?? ''] ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
-                else if (ctools.includes(id))
-                    err('companion.tools', tl(`ツール「{0}」が重複しています`, id));
-                else if (tools.includes(id))
-                    err('companion.tools', tl(`道具「{0}」は、冒険者とお供の両方には持たせられません（どちらかひとりに）`, byId[id].name));
-                else
-                    ctools.push(id);
+            companion = { prompt };
+            if (c.tools !== undefined && c.tools !== null) {
+                if (!Array.isArray(c.tools))
+                    err('companion.tools', tl('companion.tools はリストで書いてください'));
+                const ctools = [];
+                for (const t of Array.isArray(c.tools) ? c.tools : []) {
+                    const id = str(t);
+                    if (!id || !byId[id])
+                        err('companion.tools', TOOL_BY_ID[id ?? ''] ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
+                    else if (ctools.includes(id))
+                        err('companion.tools', tl(`ツール「{0}」が重複しています`, id));
+                    else {
+                        ctools.push(id);
+                        // 古い形（お供だけが持つ道具）: 共有の持ち物に入れて、お供はその中から使う
+                        if (!tools.includes(id))
+                            tools.push(id);
+                    }
+                }
+                companion.tools = ctools;
             }
-            if (ctools.length > COST_RULES.companionMaxTools)
-                err('companion.tools', tl(`お供に持たせられる道具は{0}つまでです`, COST_RULES.companionMaxTools));
-            companion = { prompt, tools: ctools };
+            if (c.skills !== undefined && c.skills !== null) {
+                if (!Array.isArray(c.skills))
+                    err('companion.skills', tl('companion.skills はリストで書いてください'));
+                const names = [];
+                const own = parseSkills((Array.isArray(c.skills) ? c.skills : []).filter((x) => isObj(x)), 'companion.skills', skills);
+                // 古い形（お供だけが持つ巻物）: 共有の巻物に入れて、お供はその中から開く
+                for (const sk of own) {
+                    skills.push(sk);
+                    names.push(sk.name);
+                }
+                for (const x of Array.isArray(c.skills) ? c.skills : []) {
+                    if (isObj(x))
+                        continue;
+                    const n = (str(x) ?? '').trim();
+                    if (!n)
+                        continue;
+                    if (!skills.some((k) => k.name === n))
+                        err('companion.skills', tl('お供に開かせる巻物「{0}」が、持ち物の巻物にありません', n));
+                    else if (!names.includes(n))
+                        names.push(n);
+                }
+                companion.skills = names;
+            }
         }
     }
-    const skills = [];
-    const skRaw = raw.skills;
-    if (skRaw !== undefined && skRaw !== null && !Array.isArray(skRaw))
-        err('skills', tl('skills はリストで書いてください'));
-    const skList = Array.isArray(skRaw) ? skRaw : [];
-    if (skList.length > COST_RULES.maxSkills)
-        err('skills', tl(`スキルは{0}つまでです`, COST_RULES.maxSkills));
-    skList.forEach((s, i) => {
-        const p = `skills[${i}]`;
-        if (!isObj(s)) {
-            err(p, tl('スキルは name / content を持つマップで書いてください'));
-            return;
-        }
-        const kn = (str(s.name) ?? '').trim();
-        const kc = str(s.content) ?? '';
-        if (!kn)
-            err(`${p}.name`, tl('スキルの name は必須です'));
-        else if (skills.some((x) => x.name === kn))
-            err(`${p}.name`, tl(`スキル名「{0}」が重複しています`, kn));
-        if (!kc.trim())
-            err(`${p}.content`, tl('スキルの content は必須です'));
-        // 新しい巻物の下書き（SKILL_TEMPLATE）の記号が残ったままでは送り出さない
-        else if ([kn, str(s.description) ?? '', kc].some((x) => DRAFT_MARK.test(x)))
-            err(`${p}.content`, tl(`巻物「{0}」に、下書きの記号（〇〇・××・△△・□□）が残っています。書き換えるか、要らない行を消してください`, kn));
-        const look = parseLook(s.look, CHARM_KINDS, `${p}.look`, err, CHARM_LABELS, 'gem');
-        skills.push({ name: kn, description: (str(s.description) ?? '').trim(), content: kc, ...(look ? { look } : {}) });
-    });
+    // 道具と巻物の数: お供を連れていると、そのぶん多く持てる（お供の分の枠）
+    const maxT = COST_RULES.maxTools + (companion ? COST_RULES.companionMaxTools : 0);
+    const maxS = COST_RULES.maxSkills + (companion ? COST_RULES.companionMaxSkills : 0);
+    if (tools.length > maxT)
+        err('tools', companion ? tl('ツールは{0}つまでです（装備枠。お供を連れているので、あと{1}つ多く持てます）', maxT, COST_RULES.companionMaxTools) : tl(`ツールは{0}つまでです（装備枠）`, maxT));
+    if (skills.length > maxS)
+        err('skills', tl(`スキルは{0}つまでです`, maxS));
     const gear = {};
     if (raw.gear !== undefined && raw.gear !== null) {
         if (!isObj(raw.gear))
@@ -292,10 +333,7 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
     if (b.companion) {
         const ct = estimateTokens(b.companion.prompt);
         items.push({ kind: 'companion', label: tl('お供（サブエージェント）'), cost: R.companionCost + mainWeight(ct), note: tl(`心得の長さ 約{0}`, ct) });
-        for (const id of b.companion.tools) {
-            const t = byId[id] ?? TOOL_BY_ID[id];
-            items.push({ kind: 'tool', label: tl(`お供の道具: {0}`, t.name), cost: t.cost });
-        }
+        // 道具と巻物は共有なので、上で1回だけ数える（お供が使っても重さは増えない）
     }
     const total = items.reduce((a, x) => a + x.cost, 0);
     return { items, total, limit: R.limit, over: total > R.limit };
@@ -365,7 +403,7 @@ export function toLoadout(b, catalog = TOOL_CATALOG) {
         skillLooks: b.skills.map((s, i) => ({ kind: s.look?.kind ?? 'gem', color: s.look?.color || DEFAULT_CHARM_COLORS[i % 4] })),
         ...(Object.keys(b.gear).length ? { gear: b.gear } : {}),
         ...(b.guardrail?.words.length ? { guardrail: b.guardrail.words.length } : {}),
-        ...(b.companion ? { companionTools: [...b.companion.tools], pet: b.avatar.pet ?? { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] } } : {}),
+        ...(b.companion ? { companionTools: companionToolsOf(b), pet: b.avatar.pet ?? { kind: 'spirit', color: DEFAULT_FAMILIAR_COLORS[2] } } : {}),
     };
 }
 // 上級者向けの YAML に添える覚え書き（コメント）: 道具の id と、冒険者とお供に渡る「名前：説明」（採点で AI に渡す文と同じ）、準備の決まりの要約。
@@ -378,14 +416,15 @@ export function buildYamlNotes(b, catalog = TOOL_CATALOG) {
     for (const t of catalog)
         lines.push(c(`  ${t.id}  ${toolSpecText(t).replace(/\s*\n\s*/g, ' ')}`));
     const rules = [tl('荷物の重さは{0}まで', R.limit)];
+    const withPet = !!b.companion || catalog.some((t) => t.source === 'archive');
     if (R.maxTools < 99)
-        rules.push(tl('道具は{0}つまで', R.maxTools));
-    rules.push(tl('巻物は{0}つまで', R.maxSkills), tl('結界の言葉は{0}つまで', R.guardrailMaxWords));
+        rules.push(withPet ? tl('道具は{0}つまで（お供を連れていれば、あと{1}つ）', R.maxTools, R.companionMaxTools) : tl('道具は{0}つまで', R.maxTools));
+    rules.push(withPet ? tl('巻物は{0}つまで（お供を連れていれば、あと{1}つ）', R.maxSkills, R.companionMaxSkills) : tl('巻物は{0}つまで', R.maxSkills), tl('結界の言葉は{0}つまで', R.guardrailMaxWords));
     if (R.mainMaxChars)
         rules.push(tl('心得は{0}字まで', R.mainMaxChars));
     // お供の欄が出るシーズン（分厚い書物がある）か、お供を連れているときだけ
-    if (b.companion || catalog.some((t) => t.source === 'archive'))
-        rules.push(tl('お供の心得は{0}字まで、お供の道具は{1}つまで', R.companionMaxChars, R.companionMaxTools));
+    if (withPet)
+        rules.push(tl('お供の心得は{0}字まで。お供は冒険者と同じ道具と巻物を使う（companion.tools・skills で絞れる）', R.companionMaxChars));
     lines.push(c(), c(tl('決まり')), ...rules.map((r) => c(`  ${r}`)), c());
     return lines.join('\n') + '\n';
 }
@@ -411,14 +450,15 @@ export function buildToYaml(b, opts = {}) {
             v.color = l.color;
         return { look: v };
     };
+    const skillYaml = (x) => ({ name: x.name, ...(x.description ? { description: x.description } : {}), content: x.content, ...look(x.look) });
     if (b.skills.length)
-        o.skills = b.skills.map((x) => ({ name: x.name, ...(x.description ? { description: x.description } : {}), content: x.content, ...look(x.look) }));
+        o.skills = b.skills.map(skillYaml);
     if (b.tools.length)
         o.tools = [...b.tools];
     if (b.guardrail?.words.length)
         o.guardrail = { words: [...b.guardrail.words] };
     if (b.companion)
-        o.companion = { prompt: b.companion.prompt, tools: [...b.companion.tools] };
+        o.companion = { prompt: b.companion.prompt, ...(b.companion.tools ? { tools: [...b.companion.tools] } : {}), ...(b.companion.skills ? { skills: [...b.companion.skills] } : {}) };
     const gear = Object.entries(b.gear ?? {}).filter(([id, g]) => b.tools.includes(id) && (g.weapon || g.color));
     if (gear.length)
         o.gear = Object.fromEntries(gear.map(([id, g]) => {
