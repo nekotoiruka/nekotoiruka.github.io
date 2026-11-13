@@ -20,8 +20,10 @@ export const fuelOfCase = (c) => c.fuel ?? c.tokensIn + c.tokensOut;
 // 貢献度（0〜1 と少し）: 順位を決める値（2026-11-07・issue #58）。戦果を軸に、燃費を「引かれる費用」ではなく戦いの力として効かせる。
 //  - 長旅の消耗: 場面を順に進むうちに、燃費の積み重ねが「旅の体力」（場面の数 × JOURNEY_PER_SCENE）を超えると、
 //    そこから先の場面は疲れて、与える力が FATIGUE 倍になる（実務の予算・利用料の上限）
-//  - 余力の上乗せ: 旅の体力が残っているほど、最後に少し上乗せする（いちばん多くて1場面ぶんの半分。外してまで節約しても得をしない）。
-//    戦果が CONTRIB_FLOOR に届かない構成（当てずっぽうで安く済ませたもの）には付けない
+//  - 余力の上乗せ: 旅の体力が残っているほど、最後に上乗せする。体力の残りの割合 × SPARE_BONUS 場面ぶん × 正解の割合。
+//    2026-11-13: 0.5場面ぶんから4場面ぶんに広げ、正解の割合を掛けた（手本より燃費を1割削ると約半場面、2割で約1場面ぶん）。
+//    上位どうしで「手本よりどこまで削れたか」が点に出るように（正解の割合の揺れより、燃費の揺れのほうがずっと小さい）。
+//    外してまで節約しても得をしない: 正解の割合を掛け、戦果が CONTRIB_FLOOR に届かない構成（当てずっぽうで安く済ませたもの）には付けない
 // 数字は模擬採点の手本（日本語で1場面 約3,500〜4,000）で余裕が残るように置いた仮の値。本物で合わせる。
 // 同じ中身でも、ラテン文字などの言語は読み書きの量が多くなる（模擬採点で約2倍）ので、旅の体力も言語ごとに広げる
 export const JOURNEY_PER_SCENE = 6000;
@@ -29,7 +31,7 @@ const JOURNEY_LANG_FACTOR = { ja: 1, zh: 1, ko: 1, en: 2, es: 2, pt: 2, fr: 2, d
 // シーズン×言語ごとに決めてあれば、それを使う（2026-11-10: 手本はもち、お供を絞らない形は最後の5場面くらいで疲れる。scripts/journey.mjs）
 export const journeyPerScene = () => COST_RULES.journeyPerScene || JOURNEY_PER_SCENE * (JOURNEY_LANG_FACTOR[getLang()] ?? 2);
 export const FATIGUE = 0.5;
-export const SPARE_BONUS = 0.5;
+export const SPARE_BONUS = 4;
 export const CONTRIB_FLOOR = 0.5;
 export function contribution(cases) {
     const n = cases.length;
@@ -45,7 +47,7 @@ export function contribution(cases) {
     });
     const accuracy = weightedAccuracy(cases);
     const spare = journey ? Math.max(0, 1 - used / journey) : 0;
-    const bonus = accuracy >= CONTRIB_FLOOR && n ? SPARE_BONUS * (1 / n) * spare : 0;
+    const bonus = accuracy >= CONTRIB_FLOOR && n ? SPARE_BONUS * (1 / n) * spare * accuracy : 0;
     return { score: (w ? got / w : 0) + bonus, accuracy, fuel: used, journey, tiredFrom, bonus };
 }
 // 行動力の目安（1つの場面で、1回の呼び出しに入る量）。2026-11-07・issue #58 で数え方を変えた。
