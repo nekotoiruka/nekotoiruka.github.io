@@ -1,6 +1,7 @@
 import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { ULT_T, R, TAU, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, impactBurst, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { aura, blit, talismanSprite } from './pixart.js';
 const T = ULT_T.seal;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const MAGIC = new Set(['wand', 'book', 'fan', 'guitar']);
@@ -60,8 +61,8 @@ function driveFx(a, w, cols, to) {
 // =====================================================================
 const BOX_COL = { blaster: ['#63d471', '#c8ffc8'], hammer: ['#ffd166', '#fff6c8'], spear: ['#7fe0ff', '#e8fff0'] };
 const boxCol = (w) => BOX_COL[w] ?? ['#9fe8ff', '#ffffff'];
-// 箱の大きさ（半幅）。現れて → 締めつけて縮む → 砕ける
-const boxSize = (p) => { const app = ease(win(p, T.chain, T.chain + 0.05)), squeeze = ease(win(p, T.bind, T.strain)) * 0.25 + ease(win(p, T.drive, T.hit)) * 0.15; return { s: 54 * (0.5 + 0.5 * app) * (1 - squeeze), app }; };
+// 箱の大きさ（半幅）と濃さ。はじめから同じ大きさで、ふわっと浮かび上がる（フェードイン）→ 締めつけて縮む → 砕ける
+const boxSize = (p) => { const app = ease(win(p, T.chain, T.chain + 0.08)), squeeze = ease(win(p, T.bind, T.strain)) * 0.25 + ease(win(p, T.drive, T.hit)) * 0.15; return { s: 54 * (1 - squeeze), app }; };
 function boxPts(a, s, shake) {
     const c = { x: a.body.x + 2 + shake, y: a.foot.y - 30 }, d = s * 0.45; // 奥行き（斜め上）
     const f = [{ x: c.x - s, y: c.y + s * 0.6 }, { x: c.x + s, y: c.y + s * 0.6 }, { x: c.x + s, y: c.y - s * 1.1 }, { x: c.x - s, y: c.y - s * 1.1 }];
@@ -86,14 +87,14 @@ function boxEdges(a, w, back) {
     // 手前の面: 六角の模様の、半透明の壁
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = al * (0.18 + 0.25 * hot);
-    ctx.fillStyle = cols[0];
+    ctx.globalAlpha = al * al * (0.18 + 0.25 * hot);
+    ctx.fillStyle = cols[0]; // 壁は枠より少し遅れて浮かぶ
     ctx.beginPath();
     f.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
     ctx.closePath();
     ctx.fill();
     ctx.clip();
-    ctx.globalAlpha = al * 0.5;
+    ctx.globalAlpha = al * al * 0.5;
     ctx.strokeStyle = cols[1];
     ctx.lineWidth = 0.8;
     const hs = 9, x0 = f[0].x, y0 = f[2].y;
@@ -166,25 +167,12 @@ const TAL_N = 12;
 const talSpot = (body, i) => { const an = -Math.PI / 2 + (i / TAL_N) * TAU, r = 30 + (i % 3) * 8; return { x: body.x + 2 + Math.cos(an) * r, y: body.y + 2 + Math.sin(an) * r * 1.1 }; };
 const talT = (i) => T.chain + (i / TAL_N) * (T.bind - T.chain);
 const talLit = (i) => T.bind + (i / TAL_N) * (T.drive - T.bind); // 順に光る
+// 札（ドット絵の紙。朱の枠と墨の印）。光るときは、紙のまわりに段のついた金色の光
 function drawTalisman(ctx, x, y, rot, lit, al) {
-    ctx.save();
-    ctx.translate(R(x), R(y));
-    ctx.rotate(rot);
-    ctx.globalAlpha = al;
-    ctx.fillStyle = '#f4ead2';
-    ctx.fillRect(-4, -7, 8, 14);
-    ctx.fillStyle = '#c8301a';
-    ctx.fillRect(-4, -7, 8, 2);
-    ctx.fillRect(-1, -4, 2, 8);
-    ctx.fillRect(-3, -1, 6, 1);
-    ctx.fillRect(-3, 3, 6, 1); // 朱の字（封）
-    if (lit > 0) {
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = al * lit;
-        ctx.fillStyle = '#ffd166';
-        ctx.fillRect(-5, -8, 10, 16);
-    }
-    ctx.restore();
+    const t = talismanSprite();
+    if (lit > 0)
+        blit(ctx, aura('tal', t.spr, 2, '#ffd166'), x, y, t.ax + 2, t.ay + 2, { rot, add: true, alpha: al * lit });
+    blit(ctx, t.spr, x, y, t.ax, t.ay, { rot, alpha: al });
 }
 const talisman = {
     pose: (p, home, _f, body, frame, w) => sealPose(p, home, body, frame, w, 0),
@@ -205,7 +193,6 @@ const talisman = {
             const quiver = p > T.strain ? Math.sin(a.frame * 2 + i) * 0.15 : 0;
             drawTalisman(ctx, pos.x, pos.y, k < 1 ? k * 9 + i : (i % 2 ? 0.2 : -0.2) + quiver, lit, out);
             if (lit > 0) {
-                glowDisc(ctx, pos.x, pos.y, 10, cols[0], lit * 0.6, 0.6);
                 if (talLit(i) <= p && p < talLit(i) + 0.012)
                     text(ctx, tl('封'), pos.x, pos.y - 14, 9, '#ffe9a0', 1, '#3a1a00');
             }
@@ -491,8 +478,10 @@ const freeze = {
 // =====================================================================
 const STK_COL = { dagger: ['#a55bd8', '#e2c2ff'], bow: ['#ffd166', '#fff6c8'] };
 const stkCol = (w) => STK_COL[w] ?? ['#7fe0ff', '#ffffff'];
-// 楔の刺さる位置（ボスの四方。手前2本・奥2本）と落ちる時刻
-const stakeAt = (a, i, tight) => { const an = (i / 4) * TAU + Math.PI / 4, r = 66 * (1 - tight * 0.35); return { x: a.body.x + 2 + Math.cos(an) * r, y: a.foot.y + 4 + Math.sin(an) * r * 0.3 }; };
+// 楔の刺さる位置（ボスの四方。手前2本・奥2本）と落ちる時刻。
+// 手前の2本は内側、奥の2本は外側に置き、4本の横の位置をずらす（そろえると、奥の楔が手前の楔やボスの体に重なって見えなくなる）
+const STK_AN = [Math.PI / 3, (Math.PI * 2) / 3, Math.PI * 1.1, Math.PI * 1.9];
+const stakeAt = (a, i, tight) => { const an = STK_AN[i], r = 78 * (1 - tight * 0.3); return { x: a.body.x + 2 + Math.cos(an) * r, y: a.foot.y + 4 + Math.sin(an) * r * 0.32 }; };
 const stakeT = (i) => T.chain + i * 0.022;
 function drawStake(ctx, x, tip, cols, al) {
     glowLine(ctx, x, tip - 34, x, tip, 4, cols[0], al);
@@ -516,7 +505,7 @@ function stakeLayer(a, w, back) {
         return;
     for (let i = 0; i < 4; i++) {
         const isBack = i >= 2; // 奥の2本（i=2,3 は上側）
-        const q = stakeAt(a, i, tight), sin = Math.sin((i / 4) * TAU + Math.PI / 4);
+        const q = stakeAt(a, i, tight), sin = Math.sin(STK_AN[i]);
         if ((sin < 0) !== back)
             continue;
         const k = win(p, stakeT(i), stakeT(i) + 0.02);

@@ -1,6 +1,7 @@
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
 import { ULT_T, R, TAU, bump, clamp01, crater, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, lerp, petals, rocks, skyDisc, slashArc, sparkBurst, speedLines, starSpark, summonCircle, text, win, } from './ultkit.js';
+import { blit, crescentSprite, drawBird as drawFireBird, drawHole, drawRockFist, firePal, pixelSlash, ramp } from './pixart.js';
 const T = ULT_T.summon;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const NO_GEAR = { back: [], fams: [], charms: [] };
@@ -44,51 +45,16 @@ function riseFx(a, hero, col) {
 const FIST_VEIN = { scythe: '#c77dff', shield: '#7fe0ff', wand: '#c77dff' };
 const veinOf = (w) => FIST_VEIN[w] ?? '#ffb04a';
 const RISE0 = T.plunge - 0.006; // 拳が地面を割って出はじめる
-// 岩の拳（ドット絵ふう、拳は上向き）。x は中心、top は拳の上端、s は大きさ
-function drawFist(ctx, x, top, s, vein, glow, ground) {
-    const P = (px, py, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(R(x + px * s), R(top + py * s), Math.max(1, R(w * s)), Math.max(1, R(h * s))); };
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x - 60 * s, -400, 120 * s, ground + 2 + 400);
-    ctx.clip(); // 地面より下は見せない
-    const D = '#3a2e22', M = '#6a5a48', L = '#8a7a62', H = '#b8a888';
-    // 手首（地面へ続く太い腕）
-    P(-11, 22, 22, 40, D);
-    P(-10, 22, 20, 40, M);
-    P(-10, 22, 5, 40, L);
-    P(5, 22, 4, 40, D);
-    // 拳の塊
-    P(-15, 4, 30, 22, D);
-    P(-14, 5, 28, 20, M);
-    P(-14, 5, 28, 5, L);
-    P(-14, 21, 28, 3, D);
-    // 指の関節（4つ）
-    for (let i = 0; i < 4; i++) {
-        const fx = -14 + i * 7;
-        P(fx, 0, 6, 8, D);
-        P(fx + 1, 0, 4, 6, L);
-        P(fx + 1, 0, 4, 2, H);
-    }
-    // 親指（横から巻く）
-    P(-18, 10, 6, 10, D);
-    P(-17, 11, 4, 8, L);
-    P(-17, 11, 4, 2, H);
-    // 光る亀裂（魔力の筋）
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.6 + 0.4 * glow;
-    P(-6, 10, 1, 9, vein);
-    P(-6, 18, 6, 1, vein);
-    P(3, 7, 1, 6, vein);
-    P(3, 28, 1, 14, vein);
-    P(-4, 36, 7, 1, vein);
-    ctx.restore();
-}
 const fist = {
     pose: (p, _h, _f, _b, frame) => floatPose(p, frame),
     cam: (p, home, _f, body, W, H) => wideCam(p, home, body, W, H, [1.2, body.x + 30, body.y - 10]),
     beats: (w) => [{ t: T.circle, stop: 0, shake: 0, sfx: 'barrier' }, { t: T.split, stop: 0, shake: 1, sfx: 'summonHorn' }, { t: T.descend, stop: 0, shake: 3, sfx: 'rumble' }, { t: RISE0, stop: 0, shake: 4, sfx: 'boom' },
         { t: T.impact, stop: 0.008, shake: w === 'shield' ? 9 : 10, sfx: 'impactHeavy' }, { t: T.impact + 0.06, stop: 0, shake: 3, sfx: 'rumble' }],
-    back(a, hero) { summonCircle(a, hero); },
+    back(a, hero, w) {
+        summonCircle(a, hero);
+        const p = a.phase;
+        drawHole(a.ctx, a.body.x + 4, a.foot.y + 5, 36 * ease(win(p, RISE0, RISE0 + 0.02)), veinOf(w), 1 - win(p, T.impact + 0.1, T.home), a.frame, 2);
+    },
     top(a, hero, w) {
         const { ctx, phase: p } = a;
         const vein = veinOf(w), x = a.body.x + 4, ground = a.foot.y + 4;
@@ -101,7 +67,6 @@ const fist = {
                 const an = (i / 9) * TAU + rng.range(-0.2, 0.2), len = rng.range(30, 70) * ease(ck);
                 glowLine(ctx, x, ground, x + Math.cos(an) * len, ground + Math.sin(an) * len * 0.25, 1.6, vein, ck * (0.6 + 0.4 * Math.sin(a.frame / 2 + i)));
             }
-            glowDisc(ctx, x, ground, 24 + 20 * ck, vein, ck * 0.7, 0.6);
             if (p < RISE0)
                 for (let i = 0; i < 6; i++) {
                     const t = (p * 20 + i / 6) % 1;
@@ -115,11 +80,10 @@ const fist = {
         // 拳が突き上がる → 止まって、崩れる
         const rk = win(p, RISE0, T.impact), hold = win(p, T.impact, T.impact + 0.08), crumble = win(p, T.impact + 0.08, T.impact + 0.16);
         if (rk > 0 && crumble < 1) {
-            const s = 2.2, h = 46 * s, topY = ground - h * ease(rk) - 6 * Math.sin(Math.PI * hold) + 40 * crumble * crumble;
-            ctx.save();
-            ctx.globalAlpha = 1 - crumble;
-            drawFist(ctx, x, topY, s, vein, rk, ground);
-            ctx.restore();
+            // 岩の拳（pixart.ts の共通の部品。ボスの「石の巨人」の拳も同じ部品）。突き上げて、当たった瞬間に少し押しこむ
+            const s = 2.5, h = 112, topY = ground - h * ease(rk) - 6 * Math.sin(Math.PI * hold) + 40 * crumble * crumble;
+            const shake = hold > 0 && hold < 1 ? Math.round(Math.sin(a.frame * 2.1) * 2 * (1 - hold)) : 0;
+            drawRockFist(ctx, x + shake, topY, { s, arm: 0.9, vein, glow: 0.5 + 0.5 * rk, alpha: 1 - crumble, ground: ground + 2 });
             if (rk < 1)
                 speedLines(ctx, x, 60, topY - 40, ground, a.frame, 0.7, '#ffffff', 10, Math.PI);
             if (crumble > 0)
@@ -145,11 +109,9 @@ const fist = {
             ctx.restore();
             starSpark(ctx, x, y, 26 * (1 - ik), 1 - ik, '#ffffff');
             sparkBurst(ctx, x, y, ik, `${a.seed}:fistspark`, [vein, '#ffffff', '#ffe27a'], 30, 90, 60);
-            text(ctx, 'BOOM!', x + 40, y - 20, R(14 + 6 * (1 - ik)), '#ffe9a0', Math.min(1, (1 - ik) * 3), '#3a1a00');
         }
         rocks(a, x, ground, win(p, RISE0, RISE0 + 0.16), 'fistrock', 40, 140);
         dustCloud(a, x, ground, win(p, RISE0, RISE0 + 0.16), 'fistdust', 2.2);
-        crater(ctx, x, ground, 30 * ease(win(p, RISE0, RISE0 + 0.02)), 1 - win(p, T.impact + 0.1, T.home), vein);
         flash(a, bump(p, T.impact - 0.003, T.impact + 0.035), '#ffffff', 0.8);
     },
 };
@@ -234,37 +196,6 @@ function birdAt(hero, body, u) {
     return { x: q * q * q * P0.x + 3 * q * q * u * P1.x + 3 * q * u * u * P2_.x + u * u * u * P3.x, y: q * q * q * P0.y + 3 * q * q * u * P1.y + 3 * q * u * u * P2_.y + u * u * u * P3.y };
 }
 const birdU = (p) => clamp01((p - T.split) / (T.impact - T.split)) ** 1.6;
-// 炎の鳥の絵: 胴・頭・くちばし・長い尾羽・羽ばたく翼（炎の三角を重ねる）
-function drawBird(ctx, x, y, ang, flap, s, cols, al) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(ang);
-    ctx.scale(s, s);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = al;
-    const tri = (pts, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2)
-        ctx.lineTo(pts[i], pts[i + 1]); ctx.closePath(); ctx.fill(); };
-    // 尾羽（3本、うしろへ長く）
-    for (let i = -1; i <= 1; i++)
-        tri([-6, 0, -34, i * 8 - 2, -28, i * 8 + 3], i ? cols[0] : cols[1]);
-    // 翼（上下に羽ばたく）
-    const wy = -20 * flap;
-    for (const side of [-1, 1]) {
-        tri([0, 0, -8, side * (16 + wy * side * 0.2), 10, side * (26 + Math.abs(wy)), 8, 0], cols[0]);
-        tri([0, 0, -2, side * (12 + Math.abs(wy) * 0.4), 8, side * (18 + Math.abs(wy) * 0.6)], cols[1]);
-    }
-    // 胴と頭
-    ctx.fillStyle = cols[1];
-    ctx.beginPath();
-    ctx.ellipse(2, 0, 9, 4, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(10, 0, 4, 3, 0, 0, TAU);
-    ctx.fill();
-    tri([13, -1, 18, 0, 13, 2], cols[2]); // くちばし
-    ctx.restore();
-}
 const bird = {
     pose: (p, _h, _f, _b, frame) => floatPose(p, frame),
     cam: (p, home, _f, body, W, H) => wideCam(p, home, body, W, H, [1.0, (home.x + body.x) / 2 + 10, H / 2 - 20]),
@@ -295,9 +226,9 @@ const bird = {
                 ctx.fillRect(R(q.x + rng.range(-6, 6)), R(q.y + rng.range(-6, 6) + back * 30), 2, 2);
             }
             ctx.restore();
-            glowDisc(ctx, h.x, h.y, 34, cols[0], 0.7, 0.5);
             const dive = p > T.plunge;
-            drawBird(ctx, h.x, h.y, ang, dive ? -0.6 : Math.sin(a.frame / 3), 1.6 + 0.4 * win(p, T.plunge, T.impact), cols, 1);
+            // 炎の鳥（ドット絵。翼を3コマで羽ばたき、突っこむときは翼をたたむ）
+            drawFireBird(ctx, h.x, h.y, ang, dive ? 0 : Math.floor(a.frame / 4), firePal(cols[0], cols[1]), { glow: cols[0] });
             if (dive)
                 speedLines(ctx, h.x + 20, 80, h.y - 60, h.y + 10, a.frame, 0.5, cols[1], 10, ang - Math.PI / 2);
         }
@@ -328,20 +259,50 @@ function torRing(a, i, grow) {
     return { x: a.body.x + 4 + sway, y, rx, ry: rx * 0.22 };
 }
 const torGrow = (p) => ease(win(p, T.split, T.plunge)) * (1 + 0.2 * win(p, T.plunge, T.impact));
+// 竜巻の本体（ドット絵）: 行ごとに、らせんの帯を塗る。手前の帯は top、奥の内壁は back。
+// 帯は左の縁が明るく、右の縁が暗く、帯の先頭に白いふち（グラデーションは使わない）
 function torBands(a, w, back) {
-    const p = a.phase, cols = tCol(w), g = torGrow(p), out = 1 - win(p, T.impact, T.impact + 0.06);
+    const p = a.phase, g = torGrow(p), out = 1 - win(p, T.impact, T.impact + 0.06);
     if (g <= 0 || out <= 0)
         return;
-    for (let i = 0; i < TOR_N; i++) {
-        const r = torRing(a, i, g), rot = a.frame / 3 + i * 0.7;
-        const [s0, s1] = back ? [Math.PI + rot % 0.6, TAU - 0.2] : [0.2, Math.PI - 0.2];
-        glowArc(a.ctx, r.x, r.y, r.rx, r.ry, s0, s1, 1.6 + (i % 3 === 0 ? 1 : 0), i % 2 ? cols[0] : cols[1], out * (back ? 0.45 : 0.85) * (0.5 + 0.5 * i / TOR_N));
+    const pal = ramp(tCol(w)[0], 0.6), ctx = a.ctx, top = torRing(a, TOR_N - 1, g).y, bottom = a.foot.y + 2, rot = a.frame / 4;
+    const seg = Math.PI / 3; // 帯の間隔
+    ctx.save();
+    ctx.globalAlpha *= out * (back ? 0.55 : 0.92);
+    for (let y = Math.floor(top); y <= bottom; y++) {
+        const f = clamp01((bottom - y) / Math.max(1, bottom - top)), hw = Math.round((6 + f * f * 60) * (0.4 + 0.6 * g)), cx = Math.round(a.body.x + 4 + Math.sin(a.frame / 9 + f * 3) * 10 * f);
+        let run = -1, runCol = '';
+        const flush = (x) => { if (run >= 0) {
+            ctx.fillStyle = runCol;
+            ctx.fillRect(run, y, x - run, 1);
+        } run = -1; };
+        for (let x = cx - hw; x <= cx + hw; x++) {
+            const u = (x + 0.5 - cx) / hw, th = Math.asin(Math.max(-1, Math.min(1, u))), ph = back ? Math.PI - th : th;
+            const sp = (((ph + rot - y * 0.09) % seg) + seg) % seg, on = sp < seg * 0.55;
+            let col = '';
+            if (on)
+                col = sp < seg * 0.08 ? pal.h : back ? pal.d : u < -0.6 ? pal.l : u > 0.6 ? pal.d : pal.m;
+            else if (!back && Math.abs(u) > 0.93)
+                col = pal.o; // 外側の輪郭
+            if (col !== runCol || !col) {
+                flush(x);
+                if (col) {
+                    run = x;
+                    runCol = col;
+                }
+            }
+        }
+        flush(cx + hw + 1);
     }
+    ctx.restore();
 }
+// 竜巻の中でボスに入る連打（巻きこまれて、何度も打たれる）
+const TOR_HITS = [0, 1, 2, 3, 4, 5].map((i) => T.descend + 0.02 + i * 0.019);
 const tornado = {
     pose: (p, _h, _f, _b, frame) => floatPose(p, frame),
     cam: (p, home, _f, body, W, H) => wideCam(p, home, body, W, H, [1.1, body.x + 50, body.y - 30]),
-    beats: () => [{ t: T.circle, stop: 0, shake: 0, sfx: 'barrier' }, { t: T.split, stop: 0, shake: 1, sfx: 'summonHorn' }, { t: T.descend, stop: 0, shake: 1, sfx: 'whoosh' }, { t: T.descend + 0.05, stop: 0, shake: 2, sfx: 'whoosh' }, { t: T.plunge, stop: 0, shake: 2, sfx: 'rumble' },
+    beats: () => [{ t: T.circle, stop: 0, shake: 0, sfx: 'barrier' }, { t: T.split, stop: 0, shake: 1, sfx: 'summonHorn' }, { t: T.descend, stop: 0, shake: 1, sfx: 'whoosh' }, { t: T.plunge, stop: 0, shake: 2, sfx: 'rumble' },
+        ...TOR_HITS.map((t, i) => ({ t, stop: 0.002, shake: 2 + (i % 2), sfx: 'hit' })),
         { t: T.impact, stop: 0.008, shake: 8, sfx: 'impactMagic' }, { t: T.impact + 0.03, stop: 0, shake: 2, sfx: 'whoosh' }],
     back(a, hero, w) { summonCircle(a, hero); torBands(a, w, true); },
     top(a, hero, w) {
@@ -357,7 +318,17 @@ const tornado = {
                 const ph = rng.next(), f = (ph + p * 3 * rng.range(0.7, 1.3)) % 1, r = torRing(a, Math.floor(f * (TOR_N - 1)), g), an = a.frame / 4 + i * 2.3;
                 ctx.globalAlpha = out * Math.sin(f * Math.PI);
                 ctx.fillStyle = w === 'guitar' ? (i % 2 ? cols[0] : cols[1]) : i % 4 ? (i % 2 ? '#3aa860' : '#9be7b0') : '#a8987a';
-                ctx.fillRect(R(r.x + Math.cos(an) * r.rx), R(r.y + Math.sin(an) * r.ry), 2, i % 3 ? 2 : 3);
+                const dx = R(r.x + Math.cos(an) * r.rx), dy = R(r.y + Math.sin(an) * r.ry);
+                if (i % 4 === 0 && w !== 'guitar') {
+                    ctx.fillStyle = '#3a2e22';
+                    ctx.fillRect(dx - 1, dy - 1, 4, 4);
+                    ctx.fillStyle = '#a8987a';
+                    ctx.fillRect(dx, dy, 2, 2);
+                    ctx.fillStyle = '#d8ccb0';
+                    ctx.fillRect(dx, dy, 1, 1);
+                } // 小石（輪郭・中・ハイライト）
+                else
+                    ctx.fillRect(dx, dy, 2, i % 3 ? 2 : 3);
             }
             ctx.restore();
             if (w === 'guitar') {
@@ -375,6 +346,23 @@ const tornado = {
             // 足元の砂煙
             dustCloud(a, a.body.x + 4, a.foot.y + 4, (p * 8) % 1, `tordust${Math.floor(p * 8)}`, 1.2 * g);
         }
+        // 連打: 巻きこまれたボスに、風の刃が当たるたびに白い火花と岩のかけら
+        TOR_HITS.forEach((t0, i) => {
+            const k = win(p, t0, t0 + 0.02);
+            if (k <= 0 || k >= 1)
+                return;
+            const hx = a.body.x + 4 + [-14, 12, -6, 16, -16, 6][i], hy = a.body.y - 10 + [-12, 6, -24, -4, 10, -16][i];
+            starSpark(ctx, hx, hy, 12 * (1 - k) + 2, 1 - k, '#ffffff');
+            ctx.save();
+            ctx.globalAlpha = 1 - k;
+            ctx.strokeStyle = cols[1];
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(R(hx) + 0.5, R(hy) + 0.5, 3 + k * 10, 2 + k * 6, 0, 0, TAU);
+            ctx.stroke();
+            ctx.restore();
+            sparkBurst(ctx, hx, hy, k, `${a.seed}:torhit${i}`, ['#ffffff', cols[0], '#a8987a'], 8, 22, 20);
+        });
         // 弾ける: 輪が外へ吹き飛び、木の葉が四方へ
         const ik = win(p, T.impact, T.impact + 0.16);
         if (ik > 0 && ik < 1) {
@@ -399,7 +387,7 @@ const knight = {
     pose: (p, _h, _f, _b, frame) => floatPose(p, frame),
     cam: (p, home, _f, body, W, H) => wideCam(p, home, body, W, H, [1.0, (home.x + body.x) / 2 + 10, H / 2 - 30]),
     beats: () => [{ t: T.circle, stop: 0, shake: 0, sfx: 'barrier' }, { t: T.split, stop: 0, shake: 2, sfx: 'awakenFlare' }, { t: T.plunge, stop: 0, shake: 1, sfx: 'slash' },
-        { t: T.impact, stop: 0.008, shake: 8, sfx: 'impactBlade' }, { t: T.impact + 0.03, stop: 0, shake: 2, sfx: 'shatter' }],
+        { t: T.impact, stop: 0.009, shake: 10, sfx: 'impactBlade' }, { t: T.impact + 0.03, stop: 0, shake: 3, sfx: 'shatter' }],
     back(a, hero, w, look) {
         summonCircle(a, hero);
         const p = a.phase, cols = kCol(w), kp = knPos(hero);
@@ -423,20 +411,26 @@ const knight = {
         }
         // 振り下ろし: 騎士の剣筋（巨大な弧）
         const sk = win(p, T.plunge - 0.01, T.impact - 0.01), sf = 1 - win(p, T.impact + 0.02, T.impact + 0.1);
+        // ボスは左にいるので、右上 → 頭上 → 左下へ振り下ろす（反時計まわり）
+        const A0 = -(Math.PI - 1.9), A1 = -(Math.PI + 1.2);
         if (sk > 0 && sf > 0)
-            slashArc(ctx, kp.x - 10, kp.y - 70, 66, -1.9, lerp(-1.9, 1.2, ease(sk)), 26, cols, sf);
-        // 光の斬撃が飛び、ボスに当たる
-        const fk = win(p, T.plunge + 0.005, T.impact);
+            slashArc(ctx, kp.x - 10, kp.y - 70, 66, A0, lerp(A0, A1, ease(sk)), 26, cols, sf);
+        // 光の斬撃（ドット絵の三日月の刃）が、残像を引いて飛び、ボスに食いこむ
+        const fk = win(p, T.plunge + 0.005, T.impact), cr = crescentSprite(cols[0], 0.9);
         if (fk > 0 && fk < 1) {
-            const x = lerp(kp.x - 40, a.body.x + 20, ease(fk));
-            glowArc(ctx, x, a.body.y - 4, 22, 70, Math.PI * 0.6, Math.PI * 1.4, 10, cols[0], 1);
-            glowArc(ctx, x + 8, a.body.y - 4, 16, 56, Math.PI * 0.6, Math.PI * 1.4, 2, '#ffffff', 0.8);
-            speedLines(ctx, x + 30, 60, a.body.y - 70, a.body.y + 60, a.frame, 0.5, cols[1], 10, Math.PI / 2);
+            const xAt = (u) => lerp(kp.x - 40, a.body.x + 14, ease(u));
+            for (let j = 3; j >= 1; j--)
+                blit(ctx, cr.spr, xAt(Math.max(0, fk - j * 0.09)), a.body.y - 4, cr.ax, cr.ay, { alpha: 0.5 - j * 0.12, add: true });
+            blit(ctx, cr.spr, xAt(fk), a.body.y - 4, cr.ax, cr.ay);
+            speedLines(ctx, xAt(fk) + 40, 60, a.body.y - 70, a.body.y + 60, a.frame, 0.5, cols[1], 10, Math.PI / 2);
         }
         const ik = win(p, T.impact, T.impact + 0.14);
         if (ik > 0 && ik < 1) {
             const c = { x: a.body.x + 4, y: a.body.y - 4 };
-            glowArc(ctx, c.x, c.y, 22 + ik * 40, 70 + ik * 50, Math.PI * 0.6, Math.PI * 1.4, 12 * (1 - ik) + 1, cols[0], 1 - ik);
+            // 食いこんだ刃が、ボスを通り抜けて二つに割れて飛ぶ。縦の切り口が白く残る
+            blit(ctx, cr.spr, c.x - 10 - ik * 40, c.y - ik * 18, cr.ax, cr.ay, { alpha: 1 - ik, sy: 0.6 });
+            blit(ctx, cr.spr, c.x - 10 - ik * 40, c.y + ik * 18, cr.ax, cr.ay, { alpha: 1 - ik, sy: -0.6 });
+            pixelSlash(ctx, c.x + 2, c.y - 70, c.x - 2, c.y + 64, 14 * (1 - ik) + 2, ramp(cols[0]), 1 - ik * ik);
             sparkBurst(ctx, c.x, c.y, ik, `${a.seed}:knburst`, [cols[0], cols[1], '#ffffff'], 40, 110, 20);
             groundRings(ctx, c.x, a.foot.y + 4, ik, cols[0], 150);
             if (w === 'fan')

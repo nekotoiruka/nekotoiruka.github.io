@@ -410,10 +410,10 @@ const goblin = {
                         continue;
                     const v = hs.length ? hs[i % hs.length] : null;
                     const gx = (v ? landing(v, 0).x : a.W - 60) + (hash(i, 2) - 0.5) * 36, gy = (v ? v.y : 170) + (hash(i, 3) - 0.5) * 22;
-                    const e = Math.min(1, t * 1.2), x = lerp(gx + 34, gx, e), y = lerp(-20, gy - 6, e);
+                    const e = Math.min(1, t * 1.2), x = lerp(gx - 34, gx, e), y = lerp(-20, gy - 6, e); // 左上（ゴブリンの陣）から右下へ
                     const stuck = t >= 0.83;
                     ctx.globalAlpha = stuck ? 1 - win(p, 0.56, 0.62) : 1;
-                    arrow(ctx, stuck ? gx : x, stuck ? gy - 4 : y, stuck ? 1.9 : 1.9, 14);
+                    arrow(ctx, stuck ? gx : x, stuck ? gy - 4 : y, Math.PI - 1.9, 14);
                     ctx.globalAlpha = 1;
                 }
                 screenFlash(ctx, a.W, a.H, bump(p, 0.44, 0.48), '#ffe0a0', 0.18);
@@ -466,7 +466,7 @@ const goblin = {
             const hs = heroes(a), tx = hs.length ? hs.reduce((s, v) => s + v.x, 0) / hs.length : a.W * 0.68, ty = 158;
             const k = win(p, 0.34, 0.44);
             if (k > 0 && k < 1) { // 山なりの軌道
-                const x = lerp(h.x, tx, k), y = lerp(h.y, ty, k) - Math.sin(k * Math.PI) * 120, r = 8 + 5 * Math.sin(k * Math.PI);
+                const x = lerp(h.x, tx, k), y = lerp(h.y, ty, k) - Math.sin(k * Math.PI) * 120, r = 9; // 大きさは変えない（ふくらんで見えないように）
                 for (let i = 1; i <= 4; i++) {
                     const u = k - i * 0.05;
                     if (u <= 0)
@@ -508,7 +508,7 @@ const goblin = {
                     const x = lead - 20 - (i % 5) * 26 - Math.floor(i / 5) * 12, y = 156 + (i % 4) * 14 + hash(i) * 6;
                     if (x < a.foot.x - 10)
                         continue;
-                    goblinSil(ctx, x, y, 1.15, a.frame / 2 + i);
+                    goblinSil(ctx, x, y, 1.15, a.frame / 2 + i, undefined, undefined, true); // 槍を前（右）へ構えて駆ける
                     puffs(ctx, x - 6, y - 1, { n: 4, t: p * 5 + i, dx: -16, dy: -5, spread: 6, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.6, seed: 61 + i });
                 }
                 ctx.restore();
@@ -772,7 +772,8 @@ const golem = {
     dive: {
         front(a) {
             const { ctx, phase: p } = a;
-            const run = ease(win(p, 0.24, 0.44)), fade = 1 - win(p, 0.52, 0.64);
+            // 地割れは、巨人が跳び上がって着地した瞬間（0.42〜0.44。bossmotion.ts の dive）から走らせる
+            const run = ease(win(p, 0.42, 0.5)), fade = 1 - win(p, 0.58, 0.7);
             if (run > 0 && fade > 0) {
                 ctx.save();
                 ctx.globalAlpha = fade;
@@ -781,7 +782,7 @@ const golem = {
                 ctx.restore();
                 puffs(ctx, a.foot.x + 44 + run * (a.W - a.foot.x) * 0.8, a.foot.y - 6, { n: 8, t: p * 3, dx: -30, dy: -16, spread: 12, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.7 * fade, seed: 83 });
             }
-            const b = win(p, 0.42, 0.58);
+            const b = win(p, 0.46, 0.62); // 割れ目が届いてから
             if (b > 0 && b < 1) {
                 for (const v of heroes(a)) { // 割れ目から岩が噴きあがる
                     for (let i = 0; i < 5; i++) {
@@ -791,8 +792,8 @@ const golem = {
                         ctx.globalAlpha = 1;
                     }
                 }
-                screenFlash(ctx, a.W, a.H, bump(p, 0.42, 0.46), '#c0fff0', 0.3);
             }
+            screenFlash(ctx, a.W, a.H, bump(p, 0.42, 0.46), '#c0fff0', 0.3); // 着地の瞬間
         },
     },
     // 腕の薙ぎ払い: 石の腕が大きな弧をえがいて床を払う（岩のかけら・砂ぼこり）

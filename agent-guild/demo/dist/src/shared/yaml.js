@@ -69,7 +69,9 @@ class Parser {
             if (ci < 0)
                 throw new YamlError(tl('「キー: 値」の形式になっていません'), l.no);
             const key = unquoteKey(l.text.slice(0, ci).trim(), l.no);
-            if (key in out)
+            if (key === '__proto__')
+                throw new YamlError(tl(`不明な項目「{0}」です`, key), l.no);
+            if (Object.hasOwn(out, key))
                 throw new YamlError(tl(`キー「{0}」が重複しています`, key), l.no);
             const rest = l.text.slice(ci + 1).trim();
             this.i++;
@@ -296,6 +298,8 @@ class FlowParser {
             if (this.s[this.p] !== ':')
                 this.err(tl('{ } の中は「キー: 値」で書いてください'));
             this.p++;
+            if (String(k) === '__proto__')
+                this.err(tl(`不明な項目「{0}」です`, String(k)));
             out[String(k)] = this.value();
             this.ws();
             const c = this.s[this.p++];

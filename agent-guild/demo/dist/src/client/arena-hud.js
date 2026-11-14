@@ -28,9 +28,6 @@ export function comboHud(ctx, w, phase, views) {
     ctx.fillText(t1, Math.round(p.x), Math.round(p.y));
     const wN = ctx.measureText(t1).width;
     ctx.font = `8px ${PIXEL_FONT}`;
-    ctx.strokeText(tl('連携！'), Math.round(p.x + wN + 3), Math.round(p.y + 2));
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(tl('連携！'), Math.round(p.x + wN + 3), Math.round(p.y + 2));
     ctx.restore();
 }
 // 画面下の進み具合: 仕掛けの数だけのブロック（巻物が要る場面は重いので幅が広い）。
@@ -444,8 +441,18 @@ export function keyItem(ctx, w, vis, strikeOf, phase, ultHero) {
             this.lights.push({ x: wx, y: wy, r: 26, a: 0.9, col: '#ffffff' });
     }
 }
-export function hpBar(ctx, v) {
-    const x = Math.round(v.x - 8), y = Math.round(v.y + 4);
+// 体力ゲージ: 体の足もと（体を描く位置 body。回避・攻撃・必殺技で動いても、体についていく）。
+// 寄ったカメラで体が画面の端にかかっているときも、ゲージは画面の中に収める
+export function hpBar(ctx, v, body) {
+    const { w: AW, h: AH } = this.script.arena, z = this.cam.z;
+    // 画面の端（世界の座標）。描くときの変換（arena.ts の setTransform）と同じ式
+    const left = this.cam.x + (-AW / 2 - this.shakeXY.x) / z, right = this.cam.x + (AW / 2 - this.shakeXY.x) / z;
+    const top = this.cam.y + (-AH / 2 - this.shakeXY.y) / z, bottom = this.cam.y + (AH / 2 - this.shakeXY.y) / z;
+    // 体がまるごと画面の外にいるとき（ボスの向こうへ跳びこむ・飛ばされる など）は、端に残さず出さない
+    if (body.x < left - 10 || body.x > right + 10 || body.y < top || body.y - 30 > bottom)
+        return;
+    const x = Math.round(Math.max(Math.ceil(left) + 1, Math.min(Math.floor(right) - 17, body.x - 8)));
+    const y = Math.round(Math.max(Math.ceil(top) + 1, Math.min(Math.floor(bottom) - 4, body.y + 3)));
     ctx.fillStyle = '#1a1c2c';
     ctx.fillRect(x, y, 16, 3);
     const k = v.hp / 100;

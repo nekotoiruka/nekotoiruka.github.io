@@ -1,6 +1,6 @@
 import { Rng } from '../shared/rng.js';
-import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bandArc, heroSilhouette, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
+import { ULT_T, R, TAU, bandArc, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
+import { pixelSlash, ramp } from './pixart.js';
 const T = ULT_T.rush;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const MAGIC = new Set(['wand', 'book', 'fan', 'guitar']);
@@ -9,7 +9,6 @@ const at = (home, q, extra = {}) => ({ ...base, ox: q.x - home.x, oy: q.y - home
 function trail(home, q, k, n, step, a0, act) {
     return Array.from({ length: n }, (_, j) => { const g = q(Math.max(0, k - (j + 1) * step)); return { x: g.x - home.x, y: g.y - home.y, a: a0 / (j + 1), ...(act ? { act } : {}) }; });
 }
-const NO_GEAR = { back: [], fams: [], charms: [] };
 const passAt = (i) => T.first + i * T.pass;
 const passOf = (p) => Math.floor((p - T.first) / T.pass);
 // 構え → 最初の位置へ
@@ -45,7 +44,7 @@ function readyFx(a, hero, col) {
     }
     ctx.restore();
 }
-// ヒット数（右上）。n は今までの数、max で FINISH
+// ヒット数（右上）。n は今までに当てた数、max で FINISH。締めの爆発は数に入れない（技の名前の「八連」などとそろえる）
 function hitCounter(a, n, last, max, col) {
     const p = a.phase;
     const showK = win(p, T.first, T.first + 0.01) * (1 - win(p, T.burst + 0.12, T.burst + 0.16));
@@ -55,8 +54,6 @@ function hitCounter(a, n, last, max, col) {
     const x = a.body.x + 100, y = a.body.y - 26;
     text(a.ctx, 'HIT', x - 22, y + 2, 9, '#ffe9a0', showK, '#3a1a00');
     text(a.ctx, `×${n}`, x + 8, y, R(16 * pop), n >= max ? (a.frame % 6 < 3 ? '#ffffff' : col) : '#ffffff', showK, '#3a1a00');
-    if (p > T.burst)
-        text(a.ctx, 'FINISH!', x, y + 18, 11, col, showK, '#3a0a3a');
 }
 // 締めの爆発（共通の土台: 白い玉と輪）
 function burstCore(a, x, y, k, cols, big = 1) {
@@ -163,8 +160,8 @@ const cyclone = {
         burstCore(a, c.x + 6, a.body.y, bk, cols, 1.1);
         rocks(a, c.x + 10, a.foot.y, bk, 'cycrock', 40, 150);
         dustCloud(a, c.x + 10, a.foot.y + 4, bk, 'cycdust2', 2.2);
-        const n = Math.max(0, Math.min(T.n, passOf(p) + 1)) * 3 + (p >= T.burst ? 1 : 0);
-        hitCounter(a, p >= T.first ? n : 0, p >= T.burst ? T.burst : passAt(Math.max(0, passOf(p))), T.n * 3 + 1, cols[0]);
+        const n = Math.max(0, Math.min(T.n, passOf(p) + 1)); // 1周を1連と数える（旋風八連 = 8周）
+        hitCounter(a, p >= T.first ? n : 0, p >= T.burst ? T.burst : passAt(Math.max(0, passOf(p))), T.n, cols[0]);
         flash(a, bump(p, T.burst - 0.003, T.burst + 0.04), '#ffffff', 0.85);
     },
 };
@@ -199,7 +196,8 @@ function cycBands(a, w, back) {
 // =====================================================================
 const PIERCE_COL = { bow: ['#ffd166', '#fff6c8'], blaster: ['#63d471', '#c8ffc8'], pan: ['#ff9a3a', '#ffe27a'] };
 const pierceCol = (w) => PIERCE_COL[w] ?? ['#7fe0ff', '#e8fff0'];
-const pierceSpot = (body, w) => ({ x: body.x + (SHOT.has(w) ? 96 : 50), y: body.y + 16 });
+// 射手（弓・光線銃）も、味方の列にかからないよう、ボスの手前まで踏みこんで近くから撃つ
+const pierceSpot = (body, w) => ({ x: body.x + (SHOT.has(w) ? 58 : 50), y: body.y + 16 });
 const NEEDLES = 40;
 // 突き（針）の i 本目: 出る時刻と、先端の位置（ボスの前で束になる）
 const needleT = (i) => passAt(0) + (T.n * T.pass) * Math.pow(i / NEEDLES, 0.8);
@@ -245,12 +243,15 @@ const pierce = {
         let n = 0, last = T.first;
         const fade = 1 - win(p, T.burst, T.burst + 0.03);
         for (let i = 0; i < NEEDLES; i++) {
-            const t0 = needleT(i), off = { x: rng.range(-6, 6), y: rng.range(-16, 16) }, life = 0.03;
+            const t0 = needleT(i), off = { x: rng.range(-6, 6), y: rng.range(-16, 16) }, life = 0.014;
             if (p < t0)
                 continue;
             n++;
             last = t0;
-            const u = (p - t0) / 0.006, k = clamp01(u), al = (p < T.finish ? Math.max(0.25, 1 - (p - t0) / life) : 0.25 + 0.75 * win(p, T.finish, T.burst)) * fade;
+            // 突きは一瞬だけ光って消える（残すと、締めの前に光の扇が残って見える）
+            const u = (p - t0) / 0.006, k = clamp01(u), al = clamp01(1 - (p - t0) / life) * fade;
+            if (al <= 0)
+                continue;
             const tip = { x: lerp(hand.x, tgt.x + off.x, k), y: lerp(hand.y, tgt.y + off.y, k) };
             if (SHOT.has(w)) { // 光の針（弾）: 細い線が手元から一瞬で届く
                 glowLine(ctx, lerp(hand.x, tip.x, Math.max(0, k - 0.4)), lerp(hand.y, tip.y, Math.max(0, k - 0.4)), tip.x, tip.y, 1.3, i % 2 ? cols[0] : cols[1], al);
@@ -260,12 +261,10 @@ const pierce = {
             if (k >= 1 && p - t0 < 0.02)
                 starSpark(ctx, tip.x, tip.y, 6 * (1 - (p - t0) / 0.02), 1, '#ffffff');
         }
-        // 束: 突きが重なるほど、ボスの前の光が太くなる
-        const bundle = clamp01(n / NEEDLES) * fade;
-        if (bundle > 0) {
-            glowDisc(ctx, tgt.x + 8, tgt.y, 10 + 16 * bundle, cols[0], bundle * 0.7, 0.8);
-            glowLine(ctx, hand.x, hand.y, tgt.x, tgt.y, 3 + 8 * bundle, cols[0], bundle * 0.5);
-        }
+        // 束: 当たった所の光だけが、突きが重なるほど強くなる（締めの溜めのあいだに引いていく）
+        const bundle = clamp01(n / NEEDLES) * fade * (1 - win(p, T.finish, T.finish + 0.015) * 0.7);
+        if (bundle > 0)
+            glowDisc(ctx, tgt.x + 8, tgt.y, 6 + 8 * bundle, cols[0], bundle * 0.35, 0.8);
         // 締め: 力を溜めて、極太の一突きがボスを貫き、向こう側まで抜ける
         const ck = win(p, T.finish, T.burst);
         if (ck > 0 && p < T.burst) {
@@ -295,7 +294,7 @@ const pierce = {
             sparkBurst(ctx, tgt.x - 10, tgt.y, bk, `${a.seed}:pburst`, [cols[0], cols[1], '#ffffff'], 40, 110, 20);
         }
         burstCore(a, tgt.x, tgt.y, win(p, T.burst, T.burst + 0.12), cols, 0.9);
-        hitCounter(a, n + (p >= T.burst ? 1 : 0), p >= T.burst ? T.burst : last, NEEDLES + 1, cols[0]);
+        hitCounter(a, n, p >= T.burst ? T.burst : last, NEEDLES, cols[0]);
         flash(a, bump(p, T.burst - 0.003, T.burst + 0.035), '#ffffff', 0.8);
     },
 };
@@ -422,7 +421,7 @@ const star = {
         }
         burstCore(a, c.x, c.y, bk, cols, 1.2);
         const n = Math.min(STROKES, Math.max(0, Math.floor((p - T.first) / (T.pass * 1.4)) + 1));
-        hitCounter(a, p >= T.first ? n + (p >= T.burst ? 1 : 0) : 0, p >= T.burst ? T.burst : STROKE_T(Math.max(0, n - 1)), STROKES + 1, cols[0]);
+        hitCounter(a, p >= T.first ? n : 0, p >= T.burst ? T.burst : STROKE_T(Math.max(0, n - 1)), STROKES, cols[0]);
         flash(a, bump(p, T.burst - 0.003, T.burst + 0.04), cols[1], 0.75);
     },
 };
@@ -431,7 +430,7 @@ const star = {
 // =====================================================================
 const HUN_COL = { guitar: ['#ff6bd6', '#7fe0ff'] };
 const hunCol = (w) => HUN_COL[w] ?? ['#c8b0ff', '#ffffff'];
-const HUNDRED = 99;
+const HUNDRED = 99; // 細かな斬撃の数。最後の大きな一太刀を足して、ちょうど100連（HIT ×100）
 // k 本目の斬撃の時刻（だんだん速くなる）
 const cutT = (k) => T.first + (T.finish - T.first) * Math.pow(k / HUNDRED, 0.55);
 const cutOf = (seed, k, body) => {
@@ -512,6 +511,7 @@ const hundred = {
                 sparkBurst(ctx, c.c.x, c.c.y, bk, `${a.seed}:hb${k}`, [cols[0], cols[1], '#ffffff'], 3, 30, 10);
             }
         burstCore(a, a.body.x + 2, a.body.y, bk, cols, 1);
+        // 最後の一太刀が当たった瞬間に100本目を数える（締めの爆発は数えない）
         hitCounter(a, n + (p >= T.burst ? 1 : 0), p >= T.burst ? T.burst : last, HUNDRED + 1, cols[0]);
         flash(a, bump(p, T.burst - 0.003, T.burst + 0.035), '#ffffff', 0.8);
     },
@@ -531,7 +531,7 @@ const frames = {
             return ready(p, home, start, w);
         if (p >= T.home)
             return null;
-        if (p < DARK1) { // 暗転のあいだは、斬った瞬間の姿だけが一瞬浮かぶ（白い影は演出で描く）
+        if (p < DARK1) { // 暗転のあいだは姿を見せない（斬撃だけが浮かぶ）
             return { ...base, alpha: 0 };
         }
         const end = { x: body.x - 56, y: foot.y + 4 };
@@ -558,7 +558,7 @@ const frames = {
         readyFx(a, hero, cols[0]);
         // 上下の黒い帯（シネマスコープ）
         const bars = win(p, T.go, T.first) * (1 - win(p, T.burst + 0.06, T.home));
-        // 暗転: 真っ黒の中に、白い斬撃と、その瞬間の主役の白い影だけ
+        // 暗転: 真っ黒の中に、白い斬撃だけが1コマずつ浮かぶ
         const dk = win(p, DARK0, DARK0 + 0.005) * (1 - win(p, DARK1, DARK1 + 0.01));
         dim(a, dk * 0.96, '#000000');
         const shown = Math.min(T.n, Math.max(0, passOf(p) + 1));
@@ -569,11 +569,13 @@ const frames = {
             const l = frameCut(a.body, i), cur = i === shown - 1 && p < DARK1;
             const al = p < DARK1 ? (cur ? 1 : 0.35) : 0.6 + 0.4 * win(p, DARK1, T.burst);
             const wv = p < DARK1 ? (cur ? 7 : 2.5) : 3 + 5 * win(p, DARK1 + 0.02, T.burst);
-            slashLine(ctx, l.x0, l.y0, lerp(l.x0, l.x1, k), lerp(l.y0, l.y1, k), wv, p < DARK1 ? ['#ffffff', '#ffffff'] : cols, al * (1 - win(p, T.burst, T.burst + 0.05)));
-            if (cur && a.ult?.look) { // 斬った瞬間の主役の白い影（線の先）
-                const look = a.ult.look, hx = lerp(l.x0, l.x1, 0.74), hy = lerp(l.y0, l.y1, 0.74) + 16, fl = l.x1 < l.x0;
-                heroSilhouette(ctx, (c) => drawHero(c, look, NO_GEAR, 32, 56, { frame: a.frame, flip: fl, action: MAGIC.has(w) ? 'cast' : 'attack', t: 0.9, ring: false }), hx, hy, 1, '#ffffff', k * 0.9, 1);
-            }
+            // 暗転のあいだは、ぼかさない硬い線（白い芯と、武器の色のふち）
+            if (p < DARK1)
+                pixelSlash(ctx, l.x0, l.y0, lerp(l.x0, l.x1, k), lerp(l.y0, l.y1, k), wv, ramp(cols[0]), al);
+            else
+                slashLine(ctx, l.x0, l.y0, lerp(l.x0, l.x1, k), lerp(l.y0, l.y1, k), wv, cols, al * (1 - win(p, T.burst, T.burst + 0.05)));
+            if (cur)
+                starSpark(ctx, lerp(l.x0, l.x1, 0.62), lerp(l.y0, l.y1, 0.62), 7 * k, k, '#ffffff'); // 振った刃のきらめき（主役の形は出さず、斬撃だけを見せる）
         }
         // 明ける: ボスがよろめき、間をおいて斬撃が一斉にはじける
         if (p >= DARK1 && p < T.burst)
@@ -599,7 +601,7 @@ const frames = {
             ctx.fillRect(-a.W, a.H - h, a.W * 3, a.H + h);
             ctx.restore();
         }
-        hitCounter(a, shown + (p >= T.burst ? 1 : 0), p >= T.burst ? T.burst : passAt(Math.max(0, shown - 1)) + T.pass * 0.45, T.n + 1, cols[0]);
+        hitCounter(a, shown, p >= T.burst ? T.burst : passAt(Math.max(0, shown - 1)) + T.pass * 0.45, T.n, cols[0]);
         flash(a, bump(p, DARK1 - 0.003, DARK1 + 0.01), '#ffffff', 0.5);
         flash(a, bump(p, T.burst - 0.003, T.burst + 0.035), '#ffffff', 0.85);
     },

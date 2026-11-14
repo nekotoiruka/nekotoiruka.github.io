@@ -125,20 +125,27 @@ function settingsForm(s, reload) {
     return card;
 }
 // シーズン（ボスと課題）の管理: 開催中のボスを切り替える。前のシーズンの順位は記録に残る
+// 日時は、このブラウザのタイムゾーンで入力・表示する（どのタイムゾーンかを画面に書く）。サーバーには、タイムゾーンつきの ISO 形式で送る
 function seasonsCard(si, reload) {
-    const fmt = (iso) => (iso ? new Date(iso).toLocaleString(localeOf()) : '—');
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // dateStyle と timeZoneName は一緒に使えないので、項目を1つずつ指定する
+    const fmt = (iso) => (iso ? new Date(iso).toLocaleString(localeOf(), { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }) : '—');
+    // datetime-local の入力欄に入れる形（このブラウザのタイムゾーンでの日時）
+    const localInput = (iso) => { if (!iso)
+        return ''; const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
+    const toIso = (v) => (v ? new Date(v).toISOString() : '');
     const cur = si.current;
     const rows = si.available.map((t) => {
         const isCur = t.id === cur.taskId;
         const label = h('input', { value: isCur ? cur.label : t.season, 'aria-label': tl('シーズン名'), maxlength: 30 });
-        const end = h('input', { type: 'datetime-local', 'aria-label': tl('終了日時'), value: isCur && cur.end ? cur.end.slice(0, 16) : '' });
+        const end = h('input', { type: 'datetime-local', 'aria-label': tl('終了日時'), value: isCur ? localInput(cur.end) : '' });
         const go = h('button', { class: isCur ? 'btn btn-small' : 'btn btn-small btn-primary' }, isCur ? tl('名前・終了日時を更新') : tl('このボスで開催する'));
         go.onclick = async () => {
             if (!isCur && !confirm2(go, tl(`「{0}」を開催します。いまのシーズンは終わり、順位は記録に残ります。`, t.title)))
                 return;
             go.disabled = true;
             try {
-                await post('api/admin/seasons/activate', { taskId: t.id, label: label.value, end: end.value ? new Date(end.value).toISOString() : '' });
+                await post('api/admin/seasons/activate', { taskId: t.id, label: label.value, end: toIso(end.value) });
                 toast(isCur ? tl('更新しました') : tl(`「{0}」を開催しました`, t.title));
                 reload();
             }
@@ -149,7 +156,47 @@ function seasonsCard(si, reload) {
         };
         return h('tr', { class: isCur ? 'mine-row' : '' }, h('td', {}, h('b', {}, t.title), isCur ? h('span', { class: 'chip' }, tl('開催中')) : null, h('div', { class: 'small muted' }, t.boss)), h('td', { class: 'small' }, tl(`場面 {0}・資料 {1}`, t.cases, t.references)), h('td', { class: 'num' }, t.submissions), h('td', {}, label), h('td', {}, end), h('td', {}, go));
     });
-    return h('section', { class: 'card admin-settings' }, h('h3', {}, tl('シーズン（ボスと課題）')), h('p', {}, h('b', {}, tl(`開催中: {0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, tl(`　{0}・{1}〜{2}`, cur.boss, fmt(cur.startedAt), cur.end ? fmt(cur.end) : tl('（終了日時なし）')))), h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('ボスと課題'), tl('中身'), tl('出発'), tl('シーズン名'), tl('終了日時（任意）'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))), si.history.length ? h('h4', {}, tl('過去のシーズン')) : null, ...si.history.map((hh) => h('div', { class: 'sub-card' }, h('b', {}, tl(`{0}「{1}」`, hh.label, hh.title)), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmt(hh.startedAt), fmt(hh.endedAt), hh.participants ?? hh.top.length)), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}`, x.name, x.owner, x.score ?? x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし')))));
+    // 予約: 開始日時を過ぎると、サーバーがそのボスで開催する（いまのシーズンは記録に残る）
+    const planned = si.scheduled.map((x) => {
+        const cancel = h('button', { class: 'btn btn-small' }, tl('取り消す'));
+        cancel.onclick = async () => {
+            if (!confirm2(cancel, tl(`「{0}」の予約を取り消します。`, x.label), tl('もう一度押すと取り消す')))
+                return;
+            cancel.disabled = true;
+            try {
+                await post('api/admin/seasons/unschedule', { start: x.start });
+                toast(tl('予約を取り消しました'));
+                reload();
+            }
+            catch (e) {
+                toast(e.message, 'err');
+                cancel.disabled = false;
+            }
+        };
+        return h('tr', {}, h('td', {}, fmt(x.start)), h('td', {}, x.end ? fmt(x.end) : tl('（次の予約まで）')), h('td', {}, h('b', {}, tl(`{0}「{1}」`, x.label, x.title)), h('div', { class: 'small muted' }, x.boss)), h('td', {}, cancel));
+    });
+    const pTask = h('select', { 'aria-label': tl('ボスと課題') }, ...si.available.map((t) => h('option', { value: t.id }, tl(`{0}「{1}」`, t.season, t.title))));
+    const pLabel = h('input', { 'aria-label': tl('シーズン名'), placeholder: tl('シーズン名（空なら課題のシーズン名）'), maxlength: 30 });
+    const pStart = h('input', { type: 'datetime-local', 'aria-label': tl('開始日時') });
+    const pEnd = h('input', { type: 'datetime-local', 'aria-label': tl('終了日時') });
+    const plan = h('button', { class: 'btn btn-small btn-primary' }, tl('予約する'));
+    plan.onclick = async () => {
+        if (!pStart.value) {
+            toast(tl('開始日時を入れてください'), 'err');
+            return;
+        }
+        plan.disabled = true;
+        try {
+            await post('api/admin/seasons/schedule', { taskId: pTask.value, label: pLabel.value, start: toIso(pStart.value), end: toIso(pEnd.value) });
+            toast(tl('予約しました'));
+            reload();
+        }
+        catch (e) {
+            toast(e.message, 'err');
+            plan.disabled = false;
+        }
+    };
+    return h('section', { class: 'card admin-settings' }, h('h3', {}, tl('シーズン（ボスと課題）')), h('p', {}, h('b', {}, tl(`開催中: {0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, tl(`　{0}・{1}〜{2}`, cur.boss, fmt(cur.startedAt), cur.end ? fmt(cur.end) : tl('（終了日時なし）')))), h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')), h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('ボスと課題'), tl('中身'), tl('出発'), tl('シーズン名'), tl('終了日時（任意）'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))), h('h4', {}, tl('予約したシーズン')), h('p', { class: 'small muted' }, tl('開始日時になると、サーバーがそのボスで開催します（サーバーが止まっていたときは、次に起動したときに開催し、記録は予約の日時で残ります）。終了日時を過ぎてから次のシーズンが始まるまでは「受付終了」になり、出発はできません。参加者のホームには、次のシーズンの開始日時だけを出します（ボスは始まるまで伏せます）。')), h('p', { class: 'small muted' }, tl('日時は、このブラウザのタイムゾーン（{0}）で入力・表示します。', tz)), planned.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table compact' }, h('thead', {}, h('tr', {}, ...[tl('開始日時'), tl('終了日時'), tl('ボスと課題'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...planned))) : h('p', { class: 'small muted' }, tl('予約はありません')), h('div', { class: 'row-gap' }, pTask, pLabel, h('label', { class: 'small' }, tl('開始日時'), ' ', pStart), h('label', { class: 'small' }, tl('終了日時（任意）'), ' ', pEnd), plan), si.history.length ? h('h4', {}, tl('過去のシーズン')) : null, ...si.history.map((hh) => h('div', { class: 'sub-card' }, h('b', {}, tl(`{0}「{1}」`, hh.label, hh.title)), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmt(hh.startedAt), fmt(hh.endedAt), hh.participants ?? hh.top.length)), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}`, x.name, x.owner, x.score ?? x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし')))));
 }
 function dataCard(p, reload) {
     const fmt = (iso) => (iso ? new Date(iso).toLocaleString(localeOf()) : '—');
