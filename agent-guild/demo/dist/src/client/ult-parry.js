@@ -1,7 +1,7 @@
-import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
 import { ULT_T, R, TAU, bolt, bump, clamp01, crescent, dim, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { ORB_BOSS, aura, blit, drawOrb, mirrorSprite, pixelBeam, ramp } from './pixart.js';
 const T = ULT_T.parry;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const NO_GEAR = { back: [], fams: [], charms: [] };
@@ -63,7 +63,7 @@ function readyFx(a, hero) {
     ctx.restore();
 }
 // 受けた瞬間の「見切り！」と、時間の止まる暗転・ひび（共通。暗転の強さを選べる）
-function clashFx(a, cp, label, darkMax = 0.5) {
+function clashFx(a, cp, darkMax = 0.5) {
     const { ctx, phase: p } = a;
     const ck = win(p, T.clash, T.clash + 0.02);
     if (ck <= 0 || p >= T.freeze + 0.02)
@@ -77,43 +77,33 @@ function clashFx(a, cp, label, darkMax = 0.5) {
             glowLine(ctx, cp.x, cp.y, cp.x + Math.cos(an) * len, cp.y + Math.sin(an) * len * 0.8, 0.9, '#ffffff', fz * 0.7);
         }
         starSpark(ctx, cp.x, cp.y, 14 + 40 * ease(ck), fz, '#ffffff');
-        text(ctx, label, cp.x - 6, cp.y - 38, R(12 + 5 * (1 - ck)), '#ffe9a0', fz, '#3a1a00');
     }
 }
-// ボスの赤い玉（大技）
+// ボスの赤い玉（大技）。ドット絵の球（pixart.ts）: 輪郭・影・ハイライトの3段と、中で渦を巻く光
 function redOrb(ctx, x, y, r, frame, al = 1) {
-    glowDisc(ctx, x, y, r * 2.4, '#ff3b3b', 0.8 * al, 0.6);
-    ctx.save();
-    ctx.globalAlpha = al;
-    ctx.fillStyle = '#ff4a5a';
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#ffd0d0';
-    ctx.beginPath();
-    ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.4, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = '#8a0a1a';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(x, y, r + 1 + Math.sin(frame / 2), 0, TAU);
-    ctx.stroke();
-    ctx.restore();
+    drawOrb(ctx, x, y, r, frame, ORB_BOSS, al);
 }
 // 味方の色の玉（返った玉）
-function allyOrb(ctx, x, y, r, cols, frame) {
-    glowDisc(ctx, x, y, r * 2.6, cols[0], 0.9, 0.8);
+function allyOrb(ctx, x, y, r, cols, frame, al = 1) {
+    drawOrb(ctx, x, y, r, frame, ramp(cols[0]), al);
+    starSpark(ctx, x, y, r * 1.4 + (frame % 4 < 2 ? 2 : 0), 0.7 * al, cols[1]);
+}
+// 玉の尾（ドットの四角が小さくなりながら続く。外側が中の色、芯が明るい色）
+function orbTail(ctx, x, y, size, col, k) {
+    if (k <= 0)
+        return;
+    const pal = ramp(col), sz = Math.max(1, Math.round(size));
     ctx.save();
-    ctx.fillStyle = cols[0];
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(x - r * 0.25, y - r * 0.25, r * 0.45, 0, TAU);
-    ctx.fill();
+    ctx.globalAlpha *= Math.min(1, k);
+    ctx.fillStyle = pal.d;
+    ctx.fillRect(Math.round(x - sz / 2) - 1, Math.round(y - sz / 2) - 1, sz + 2, sz + 2);
+    ctx.fillStyle = pal.m;
+    ctx.fillRect(Math.round(x - sz / 2), Math.round(y - sz / 2), sz, sz);
+    if (sz > 2) {
+        ctx.fillStyle = pal.l;
+        ctx.fillRect(Math.round(x - sz / 2), Math.round(y - sz / 2), sz - 1, Math.max(1, Math.round(sz / 3)));
+    }
     ctx.restore();
-    starSpark(ctx, x, y, r * 1.6 + Math.sin(frame / 2) * 2, 1, cols[1]);
 }
 const incoming = (p, body) => { const u = ease(win(p, ARRIVE0, T.clash)), s = source(body), cp = contact(body); return { x: lerp(s.x, cp.x, u), y: lerp(s.y, cp.y, u) - Math.sin(u * Math.PI) * 10 }; };
 // =====================================================================
@@ -165,7 +155,6 @@ const ret = {
             starSpark(ctx, cp.x, cp.y, 30 * (1 - sk) + 6, 1 - sk, '#ffffff');
             groundRings(ctx, cp.x, cp.y + 20, sk, cols[0], 60, 2);
             sparkBurst(ctx, cp.x, cp.y, sk, `${a.seed}:retspark`, ['#ffffff', cols[0], '#ff4a5a'], 24, 50, 20);
-            text(ctx, tl('カキーン！'), cp.x + 6, cp.y - 34, R(13 + 5 * (1 - sk)), '#ffe9a0', 1 - sk, '#3a1a00');
         }
         // 返った玉: ひと回り大きく、味方の色。尾を引いて、ボスへ
         const rk = win(p, T.strike, T.hit);
@@ -173,7 +162,7 @@ const ret = {
             const pos = (u) => ({ x: lerp(cp.x, tg.x, u), y: lerp(cp.y, tg.y, u) - Math.sin(u * Math.PI) * 10 });
             for (let i = 8; i >= 1; i--) {
                 const q = pos(Math.max(0, rk - i * 0.04));
-                glowDisc(ctx, q.x, q.y, 12 - i, cols[0], 0.7 - i * 0.07, 0.4);
+                orbTail(ctx, q.x, q.y, 12 - i * 1.3, cols[0], 1 - i * 0.1);
             }
             const q = pos(rk);
             allyOrb(ctx, q.x, q.y, 11 + 3 * rk, cols, a.frame);
@@ -214,29 +203,30 @@ const counter = {
             const u = ease(win(Math.min(p, STOP0), ARRIVE0, T.clash)), s = source(a.body), x = lerp(s.x, cp.x, u), y = lerp(s.y, cp.y, u);
             crescent(ctx, x, y, 1, 1.15, p > STOP0 ? '#8a8a96' : '#ff4a5a', 1);
         }
-        // 止まった世界: 色が抜けて灰色に。時計の針の輪がまわる
+        // 止まった世界: 色が抜けて灰色に。舞っていた塵が宙で止まる。
+        // 迫る三日月には、止まった印のひびが入る（時計の針は分かりにくいので、使わない）
         const sk = win(p, STOP0, STOP0 + 0.008) * (1 - win(p, STOP1, STOP1 + 0.01));
         if (sk > 0) {
-            dim(a, sk * 0.55, '#2a2c38'); // 色が抜けた、止まった世界
+            dim(a, sk * 0.6, '#24262f'); // 色が抜けた、止まった世界
+            const rng = new Rng(`${a.seed}:cntdust`);
             ctx.save();
-            ctx.globalAlpha = sk * 0.8;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(cp.x, cp.y, 34, 0, TAU);
-            ctx.stroke();
-            for (let i = 0; i < 12; i++) {
-                const an = (i / 12) * TAU;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(R(cp.x + Math.cos(an) * 30) - 1, R(cp.y + Math.sin(an) * 30) - 1, 2, 2);
+            ctx.globalAlpha = sk;
+            for (let i = 0; i < 40; i++) {
+                const x = cp.x + rng.range(-150, 110), y = cp.y + rng.range(-80, 60);
+                ctx.fillStyle = i % 3 ? '#9a9cab' : '#ffffff';
+                ctx.fillRect(R(x), R(y), i % 5 ? 1 : 2, 1);
+            } // 止まった塵
+            const q = { x: lerp(source(a.body).x, cp.x, ease(win(STOP0, ARRIVE0, T.clash))), y: lerp(source(a.body).y, cp.y, ease(win(STOP0, ARRIVE0, T.clash))) };
+            ctx.fillStyle = '#ffffff'; // 三日月に入るひび（1ドットの折れ線）
+            for (let j = 0; j < 3; j++) {
+                let x = q.x + 2, y = q.y - 8 + j * 8;
+                for (let k = 0; k < 8; k++) {
+                    x += (rng.next() > 0.5 ? 1 : 0) + 0.6;
+                    y += rng.range(-1, 1);
+                    ctx.fillRect(R(x), R(y), 1, 1);
+                }
             }
-            const hand = -Math.PI / 2 + win(p, STOP0, STOP1) * TAU * 0.25;
-            ctx.beginPath();
-            ctx.moveTo(cp.x, cp.y);
-            ctx.lineTo(cp.x + Math.cos(hand) * 24, cp.y + Math.sin(hand) * 24);
-            ctx.stroke();
             ctx.restore();
-            text(ctx, tl('……時が止まる'), cp.x, cp.y - 46, 9, '#ffffff', sk);
         }
         // 白い影だけが動く: ボスの懐へ → 二太刀 → 戻る
         const wk = win(p, STOP0 + 0.01, STOP1 - 0.004);
@@ -244,8 +234,13 @@ const counter = {
             const A = fr, B = { x: tg.x + 16, y: fr.y - 2 }, C = { x: tg.x - 30, y: fr.y }, u = wk;
             const pos = u < 0.3 ? { x: lerp(A.x, B.x, ease(u / 0.3)), y: A.y } : u < 0.65 ? { x: lerp(B.x, C.x, ease((u - 0.3) / 0.35)), y: B.y } : { x: lerp(C.x, A.x, ease((u - 0.65) / 0.35)), y: A.y };
             const act = u < 0.3 || u > 0.65 ? 'dash' : 'attack';
-            for (let j = 3; j >= 0; j--)
-                heroSilhouette(ctx, (c) => drawHero(c, look, NO_GEAR, 32, 56, { frame: a.frame, flip: u < 0.65, action: act, t: 0.8, ring: false }), pos.x + j * (u < 0.65 ? 6 : -6), pos.y, 1, '#ffffff', j ? 0.25 / j : 1, j ? 0 : 1);
+            const draw = (c) => drawHero(c, look, NO_GEAR, 32, 56, { frame: a.frame, flip: u < 0.65, action: act, t: 0.8, ring: false });
+            for (let j = 3; j >= 1; j--)
+                heroSilhouette(ctx, draw, pos.x + j * (u < 0.65 ? 6 : -6), pos.y, 1, '#c8ccd8', 0.25 / j, 0); // 残像
+            // 本体: 黒い姿に1ドットの白い縁取り（白く塗りつぶすと、形の分からない白いかたまりになる）
+            for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]])
+                heroSilhouette(ctx, draw, pos.x + ox, pos.y + oy, 1, '#ffffff', 1, 0);
+            heroSilhouette(ctx, draw, pos.x, pos.y, 1, '#14141c', 1, 0);
             // 白い影がつけた斬撃の線（止まったまま残る）
             for (const [t0, an] of [[0.32, -0.7], [0.5, 0.6]]) {
                 const k = win(u, t0, t0 + 0.08);
@@ -265,7 +260,6 @@ const counter = {
                 const L = 70 + hk * 20;
                 slashLine(ctx, tg.x - Math.cos(an) * L, tg.y - Math.sin(an) * L, tg.x + Math.cos(an) * L, tg.y + Math.sin(an) * L, 16 * (1 - hk) + 2, cols[0] === '#ffffff' ? ['#ff9ab0', '#ffffff'] : cols, 1 - hk);
             }
-            text(ctx, tl('斬！'), tg.x + 36, tg.y - 32, R(16 + 6 * (1 - hk)), '#ffffff', Math.min(1, (1 - hk) * 3), '#2a0a3a');
             if (w === 'fan')
                 petals(ctx, tg.x, tg.y, 200, 120, hk * 2, `${a.seed}:cntleaf`, ['#3aa860', '#9be7b0', '#e3ffc8'], 1 - hk, 26, 0.6);
             else
@@ -298,54 +292,34 @@ const mirror = {
         const { ctx, phase: p } = a;
         const cols = mirCol(w), cp = contact(a.body), s = source(a.body), tg = target(a.body);
         readyFx(a, hero);
-        // 光る板（六角）: 受けると傾いて、跳ね返す角度になる
+        // 鏡（ドット絵の六角の鏡。銀の枠と、映りこみの帯）: 受けると傾いて、跳ね返す角度になる。押し合うあいだ、鏡面を光が走る
         const pk = win(p, T.guard - 0.02, T.guard) * (1 - win(p, T.hit + 0.02, T.hit + 0.08));
         if (pk > 0) {
-            const tilt = -0.25 * win(p, T.freeze, T.strike);
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.translate(cp.x + 4, cp.y);
-            ctx.rotate(tilt);
-            ctx.globalAlpha = pk * (0.8 + 0.2 * Math.sin(a.frame / 3));
-            ctx.fillStyle = `${cols[0]}55`;
-            ctx.strokeStyle = cols[0];
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            for (let i = 0; i <= 6; i++) {
-                const t = (i / 6) * TAU + Math.PI / 6, x = Math.cos(t) * 10, y = Math.sin(t) * 26;
-                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-            }
-            ctx.fill();
-            ctx.stroke();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-3, -18);
-            ctx.lineTo(3, -6);
-            ctx.moveTo(-3, 0);
-            ctx.lineTo(3, 12);
-            ctx.stroke(); // 板のきらめき
-            ctx.restore();
+            const tilt = -0.25 * win(p, T.freeze, T.strike), gl = p < T.clash ? 0.2 : (win(p, T.clash, T.strike) * 3) % 1;
+            const m = mirrorSprite(cols[0], gl);
+            blit(ctx, aura(`mir${cols[0]}`, mirrorSprite(cols[0], 0).spr, 2, cols[0]), cp.x + 4, cp.y, m.ax + 2, m.ay + 2, { rot: tilt, add: true, alpha: pk * (0.5 + 0.3 * Math.sin(a.frame / 3)), sx: 0.8, sy: 0.9 });
+            blit(ctx, m.spr, cp.x + 4, cp.y, m.ax, m.ay, { rot: tilt, alpha: pk, sx: 0.8, sy: 0.9 });
         }
         // ボスの光線（赤）: 板に当たって止まり、押し合う
         const bk = win(p, ARRIVE0 + 0.02, T.clash), bf = 1 - win(p, T.strike, T.strike + 0.02);
         if (bk > 0 && bf > 0) {
             const end = { x: lerp(s.x, cp.x, ease(bk)), y: lerp(s.y, cp.y, ease(bk)) }, wv = 6 + 3 * Math.sin(a.frame * 1.3);
-            glowLine(ctx, s.x, s.y, end.x, end.y, wv + 2, '#ff3b3b', bf);
-            glowLine(ctx, s.x, s.y, end.x, end.y, 2, '#ffe0e0', bf);
+            pixelBeam(ctx, s.x, s.y, end.x, end.y, wv + 2, ORB_BOSS, bf, a.frame);
             glowDisc(ctx, s.x, s.y, 14, '#ff3b3b', bf, 1);
             if (p > T.clash) {
                 sparkBurst(ctx, cp.x, cp.y, (p * 40) % 1, `${a.seed}:mirspark${Math.floor(p * 40)}`, ['#ff4a5a', '#ffffff', cols[0]], 10, 30, 0);
                 glowDisc(ctx, cp.x, cp.y, 20, '#ffffff', 0.8 * bf, 1);
             }
         }
-        clashFx(a, cp, tl('受け止めた！'), 0.35);
+        clashFx(a, cp, 0.35);
         // 跳ね返す: 味方の色に変わった極太の光線
         const rk = win(p, T.strike, T.hit), rf = 1 - win(p, T.hit + 0.04, T.hit + 0.12);
         if (rk > 0 && rf > 0) {
             const end = { x: lerp(cp.x, tg.x - 30, ease(Math.min(1, rk * 1.4))), y: lerp(cp.y, tg.y, ease(Math.min(1, rk * 1.4))) };
-            glowLine(ctx, cp.x, cp.y, end.x, end.y, 16 * rf + 2, cols[0], rf);
-            glowLine(ctx, cp.x, cp.y, end.x, end.y, 4 * rf + 1, '#ffffff', rf);
+            // 反射: 鏡の面で折れ曲がった、味方の色の極太の光線（ドットの帯）。鏡の上に、はね返った瞬間の白い十字
+            pixelBeam(ctx, cp.x, cp.y, end.x, end.y, 16 * rf + 3, ramp(cols[0]), rf, a.frame);
+            if (rk < 0.3)
+                starSpark(ctx, cp.x + 2, cp.y, 22 * (1 - rk / 0.3) + 4, 1, '#ffffff');
             for (let i = 0; i < 3; i++) {
                 const off = (i - 1) * 10;
                 glowLine(ctx, cp.x, cp.y + off * 0.3, lerp(cp.x, end.x, 0.8), lerp(cp.y, end.y, 0.8) + off, 1, cols[1], rf * 0.6);
@@ -404,14 +378,13 @@ const catchMove = {
             if (p >= SPIN0)
                 for (let i = 1; i <= 6; i++) {
                     const q = spinPos(fr, p - i * 0.003);
-                    glowDisc(ctx, q.x, q.y, 8 - i, cols[0], 0.6 - i * 0.08, 0.2);
+                    orbTail(ctx, q.x, q.y, 8 - i, cols[0], 0.9 - i * 0.12);
                 }
         }
         if (p >= T.clash && p < SPIN0) {
             const k = win(p, T.clash, T.clash + 0.02);
             groundRings(ctx, fr.x, fr.y, k, '#ffffff', 40, 2);
             sparkBurst(ctx, cp.x, cp.y, k, `${a.seed}:catspark`, ['#ff4a5a', '#ffffff'], 18, 30, 10);
-            text(ctx, tl('つかんだ！'), cp.x, cp.y - 34, 12, '#ffe9a0', 1 - k * 0.3, '#3a1a00');
         }
         // 投げ返す: 回した勢いで、大きな弧を描いてボスへ
         const tk = win(p, SPIN1, T.hit);
@@ -419,7 +392,7 @@ const catchMove = {
             const s0 = spinPos(fr, SPIN1), pos = (u) => ({ x: lerp(s0.x, tg.x, u), y: lerp(s0.y, tg.y, u) - Math.sin(u * Math.PI) * 26 });
             for (let i = 8; i >= 1; i--) {
                 const q = pos(Math.max(0, tk - i * 0.05));
-                glowDisc(ctx, q.x, q.y, 13 - i, cols[0], 0.7 - i * 0.07, 0.4);
+                orbTail(ctx, q.x, q.y, 13 - i * 1.4, cols[0], 1 - i * 0.1);
             }
             const q = pos(tk);
             allyOrb(ctx, q.x, q.y, 10 + 3 * tk, cols, a.frame);
@@ -476,7 +449,6 @@ const absorb = {
             ctx.restore();
             glowArc(ctx, cp.x, cp.y, 20 * (1 - ck) + 10, 16 * (1 - ck) + 8, a.frame / 3, a.frame / 3 + 4.5, 2, cols[0], 0.9);
             glowDisc(ctx, cp.x, cp.y, 8 + 20 * ck, cols[0], 0.9, 1);
-            text(ctx, tl('吸収！'), cp.x, cp.y - 40, 12, '#ffe9a0', win(p, T.clash, T.clash + 0.01) * (1 - win(p, T.freeze, T.strike)), '#3a1a00');
         }
         // 撃ち返す: 極太の光線と、まわりを巻く雷
         const rk = win(p, T.strike, T.hit), rf = 1 - win(p, T.hit + 0.04, T.hit + 0.12);
@@ -549,8 +521,6 @@ const behind = {
             const u = ease(win(p, ARRIVE0, T.freeze)), s = source(a.body), x = lerp(s.x, cp.x + 60, u), y = lerp(s.y, cp.y, u);
             crescent(ctx, x, y, 1, 1.15, '#ff4a5a', 1 - win(p, T.clash + 0.02, T.freeze));
         }
-        if (p > SINK && p < SINK + 0.03)
-            text(ctx, tl('すり抜けた…'), cp.x + 20, cp.y - 34, 10, '#e2c2ff', bump(p, SINK, SINK + 0.03), '#14081e');
         // 影の水たまり（沈む所と、現れる所）
         const pool = (x, y, k) => { if (k <= 0)
             return; ctx.save(); ctx.globalAlpha = k * 0.85; ctx.fillStyle = '#14081e'; ctx.beginPath(); ctx.ellipse(x, y, 16 * k, 4 * k, 0, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = cols[0]; ctx.lineWidth = 1; ctx.globalAlpha = k * 0.7; ctx.beginPath(); ctx.ellipse(x, y, 16 * k, 4 * k, 0, 0, TAU); ctx.stroke(); ctx.restore(); };
@@ -582,7 +552,6 @@ const behind = {
             slashLine(ctx, bk.x + 4, bk.y - 4, lerp(bk.x + 4, tg.x + 30, ease(sk)), lerp(bk.y - 4, tg.y - 50, ease(sk)), 16, cols, sf);
         const hk = win(p, T.hit, T.hit + 0.14);
         if (hk > 0 && hk < 1) {
-            text(ctx, tl('背後！'), tg.x - 30, tg.y - 44, R(14 + 5 * (1 - hk)), cols[1], Math.min(1, (1 - hk) * 3), '#14081e');
             sparkBurst(ctx, tg.x - 6, tg.y, hk, `${a.seed}:behburst`, [cols[0], cols[1], '#ffffff', '#2a103e'], 40, 100, 20);
         }
         impactBurst(a, tg.x - 6, tg.y, hk, cols[0], cols[1], 1.1);

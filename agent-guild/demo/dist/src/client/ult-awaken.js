@@ -1,7 +1,6 @@
-import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
+import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, win } from './ultkit.js';
 const T = ULT_T.awaken;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const NO_GEAR = { back: [], fams: [], charms: [] };
@@ -9,6 +8,27 @@ const MAGIC = new Set(['wand', 'book', 'fan', 'guitar']);
 const at = (home, q, extra = {}) => ({ ...base, ox: q.x - home.x, oy: q.y - home.y, ...extra });
 const endOf = (body) => ({ x: body.x - 62, y: body.y + 18 }); // 駆け抜けた先
 const tgOf = (body) => ({ x: body.x + 2, y: body.y + 2 });
+// 主役の姿に色を重ねる（いまの動きと同じ形で）。rise は足元から何割まで染めるか（1 で全身）。
+// outline を渡すと、色ではなく1ドットの縁取りだけを描く（キャラの後ろに描いて、姿を隠さずにまとう光にする）
+function onHero(a, hero, look, pose, col, alpha, o = {}) {
+    if (!look || !pose || alpha <= 0 || pose.alpha <= 0)
+        return;
+    const { ctx } = a, x = hero.x + pose.ox, fy = hero.y + 1 + pose.oy;
+    const draw = (c) => drawHero(c, look, NO_GEAR, 32, 56, { frame: a.frame + hero.f * 7, flip: pose.flip, action: pose.action, t: pose.t, rot: pose.rot, ring: false });
+    ctx.save();
+    if (o.rise !== undefined) {
+        const top = Math.round(fy - 30 * o.rise);
+        ctx.beginPath();
+        ctx.rect(x - 40, top, 80, fy - top + 4);
+        ctx.clip();
+    }
+    if (o.outline)
+        for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]])
+            heroSilhouette(ctx, draw, x + ox, fy + oy, 1, col, alpha * pose.alpha, 0);
+    else
+        heroSilhouette(ctx, draw, x, fy, 1, col, alpha * pose.alpha, 0);
+    ctx.restore();
+}
 // 構え → 力の解放（宙に浮いて震える）→ 溜め（腰を落とす）。共通
 function powerUp(p, frame, w) {
     if (p < T.ready - 0.02 || p >= T.home)
@@ -53,7 +73,6 @@ function awakenCam(p, home, body) {
     return [g, 1.4, body.x - 6, body.y - 14];
 }
 // 「覚醒！」の文字
-const awakenText = (a, hero, col = '#ffffff', outline = '#3a0a3a') => text(a.ctx, tl('覚醒！'), hero.x + 6, hero.y - 66, R(11 + 4 * bump(a.phase, T.flare, T.flare + 0.03)), col, win(a.phase, T.flare, T.flare + 0.01) * (1 - win(a.phase, T.hold, T.blink)), outline);
 // 光る目（顔の位置）
 function eyes(ctx, hero, col, k, frame) {
     if (k <= 0)
@@ -89,30 +108,54 @@ const dark = {
     pose: (p, home, _f, body, frame, w) => dashThrough(p, home, body, frame, w),
     cam: (p, home, _f, body) => awakenCam(p, home, body),
     beats: () => [{ t: T.flare, stop: 0, shake: 3, sfx: 'awakenFlare' }, { t: T.flare + 0.02, stop: 0, shake: 1, sfx: 'rumble' }, { t: T.blink, stop: 0, shake: 0, sfx: 'whoosh' }, { t: T.hit, stop: 0.008, shake: 8, sfx: 'impactBlade' }, { t: T.hit + 0.02, stop: 0.001, shake: 3, sfx: 'slash' }, { t: T.hit + 0.06, stop: 0, shake: 2, sfx: 'rumble' }],
-    top(a, hero) {
+    back(a, hero, w) {
+        const p = a.phase, fk = win(p, T.ready, T.flare) * (1 - win(p, T.blink, T.blink + 0.012));
+        glowDisc(a.ctx, hero.x, hero.y - 14, 30 * fk, '#5a2a8a', fk * 0.6, 0.2);
+        void w;
+    },
+    top(a, hero, w, look) {
         const { ctx, phase: p } = a;
         // 世界が闇に沈む
-        dim(a, 0.78 * win(p, T.ready, T.flare) * (1 - win(p, T.hit + 0.04, T.hit + 0.14)), '#05000a');
-        // 紫黒の炎（ゆらめく舌）
+        dim(a, 0.7 * win(p, T.ready, T.flare) * (1 - win(p, T.hit + 0.04, T.hit + 0.14)), '#05000a');
+        // 体が足元から少しずつ闇に染まる（染まった所は黒紫、境目に紫の光の縁）。全身が染まると、赤い目がひらく
+        const pose = dashThrough(p, { x: hero.x, y: hero.y }, a.body, a.frame, w);
+        const rise = ease(win(p, T.ready - 0.01, T.hold - 0.02)), keep = 1 - win(p, T.hit + 0.05, T.hit + 0.12);
+        if (rise > 0 && keep > 0 && p < T.blink) {
+            onHero(a, hero, look, pose, DK[0], keep, { rise, outline: true }); // 染まった所は、紫の縁取りで形が見えるように
+            onHero(a, hero, look, pose, '#1a0a26', 0.92 * keep, { rise });
+            if (rise < 1) { // 染まっていく境目（紫に光る1ドットの帯）
+                const fy = hero.y + 1 + (pose?.oy ?? 0), y = Math.round(fy - 30 * rise);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(hero.x - 40, y - 1, 80, 2);
+                ctx.clip();
+                onHero(a, hero, look, pose, DK[0], 1);
+                ctx.restore();
+                sparkBurst(ctx, hero.x + (pose?.ox ?? 0), y, (p * 30) % 1, `${a.seed}:dkedge${Math.floor(p * 30)}`, [DK[0], DK[1], '#14081e'], 8, 14, -20, 1);
+            }
+        }
+        if (p >= T.hit && keep > 0) {
+            onHero(a, hero, look, pose, DK[0], keep, { outline: true });
+            onHero(a, hero, look, pose, '#1a0a26', 0.92 * keep);
+        } // 駆け抜けたあとの残心も、闇をまとったまま
+        // 紫黒の炎（体から立ちのぼる。染まった高さまで）
         const fk = win(p, T.ready, T.flare) * (1 - win(p, T.blink, T.blink + 0.012));
         if (fk > 0) {
             const rng = new Rng(`${a.seed}:darkflame`);
             ctx.save();
             for (let i = 0; i < 40; i++) {
-                const t = (p * 7 + rng.next()) % 1, x = hero.x + rng.range(-12, 12) * (1 - t * 0.5) + Math.sin(t * 8 + i) * 3, y = hero.y - t * 60;
+                const t = (p * 7 + rng.next()) % 1, x = hero.x + rng.range(-12, 12) * (1 - t * 0.5) + Math.sin(t * 8 + i) * 3, y = hero.y - t * 60 * Math.max(0.3, rise);
                 ctx.globalAlpha = fk * (1 - t);
                 ctx.fillStyle = i % 3 === 0 ? '#14081e' : i % 3 === 1 ? DK[0] : '#5a2a8a';
                 ctx.fillRect(R(x), R(y), 2, i % 2 ? 3 : 2);
             }
             ctx.restore();
-            glowDisc(ctx, hero.x, hero.y - 14, 30 * fk, '#5a2a8a', fk * 0.6, 0.2);
             for (let i = 0; i < 3; i++) {
                 const t = (p * 9 + i / 3) % 1;
                 glowArc(ctx, hero.x, hero.y, 6 + t * 48, 2 + t * 14, 0, TAU, 2 * (1 - t) + 0.5, i % 2 ? DK[0] : '#5a2a8a', fk * (1 - t));
             }
         }
-        eyes(ctx, hero, '#ff3b3b', win(p, T.flare, T.flare + 0.01) * (1 - win(p, T.blink, T.blink + 0.01)), a.frame);
-        awakenText(a, hero, '#ff9ab0', '#14081e');
+        eyes(ctx, { ...hero, x: hero.x + (pose?.ox ?? 0), y: hero.y + (pose?.oy ?? 0) }, '#ff3b3b', win(p, T.hold - 0.02, T.hold) * (1 - win(p, T.blink, T.blink + 0.01)), a.frame);
         streak(a, hero, ['#5a2a8a', DK[1]], 7);
         // 闇の一閃: ボスに斜めの黒い裂け目が残り、遅れて紫の光が噴き出す
         const hk = win(p, T.hit, T.hit + 0.16), tg = tgOf(a.body);
@@ -132,18 +175,36 @@ const dark = {
 const HALO_COL = { guitar: ['#ff9ce6', '#ffffff'], blaster: ['#9dffb0', '#ffffff'], umbrella: ['#bfe8ff', '#ffffff'] };
 const haloCol = (w) => HALO_COL[w] ?? ['#fff6c8', '#ffffff'];
 const BEAM0 = T.blink, BEAM1 = T.hit + 0.06; // 光線を撃っているあいだ
+// 跳ぶ高さ: 溜めで屈み → 高く跳んで、宙で撃つ（反動でわずかに浮く）→ 撃ち終わると落ちて着地
+const JUMP = 30;
+function haloLift(p) {
+    if (p < T.hold || p >= BEAM1 + 0.04)
+        return 0;
+    if (p < BEAM0)
+        return JUMP * (1 - (1 - win(p, T.hold + 0.012, BEAM0)) ** 2); // 跳び上がる（だんだんゆっくり）
+    if (p < BEAM1)
+        return JUMP + 3 * win(p, BEAM0, BEAM1); // 撃つ反動で、わずかに浮く
+    return (JUMP + 3) * (1 - win(p, BEAM1, BEAM1 + 0.04) ** 2); // 落ちる
+}
 const halo = {
     pose(p, _home, _f, _b, frame, w) {
         if (p < T.ready - 0.02 || p >= T.home)
             return null;
         if (p < T.hold)
             return powerUp(p, frame, w);
-        if (p < BEAM1) {
-            const lift = ease(win(p, T.hold, T.blink));
-            return { ...base, oy: -14 * lift + Math.sin(frame / 5) * 1.2, ox: (p > BEAM0 ? 2 + Math.sin(frame * 1.7) * 0.6 : 0), action: 'cast', t: p > BEAM0 ? 0.9 : 0.5 };
-        } // 宙に浮いて、両手から撃つ（反動で震える）
-        const k = win(p, BEAM1, T.home);
-        return { ...base, oy: -14 * (1 - ease(k)), action: 'idle', t: 0 };
+        if (p < T.hold + 0.012) {
+            const k = win(p, T.hold, T.hold + 0.012);
+            return { ...base, oy: 4 * ease(k), action: 'guard', t: 1 };
+        } // 屈んで、跳ぶ溜め
+        const lift = haloLift(p);
+        if (p < BEAM0)
+            return { ...base, oy: -lift, action: 'dash', t: 0.5 };
+        if (p < BEAM1)
+            return { ...base, oy: -lift, ox: 2 + Math.sin(frame * 1.7) * 0.6, action: 'cast', t: 0.9 }; // 宙で、両手から撃つ（反動で震える）
+        if (p < BEAM1 + 0.04)
+            return { ...base, oy: -lift, action: 'dash', t: 0.5 };
+        const k = win(p, BEAM1 + 0.04, BEAM1 + 0.07);
+        return { ...base, oy: 3 * Math.sin(k * Math.PI), action: k < 1 ? 'guard' : 'idle', t: 1 }; // 着地して、膝を曲げる
     },
     cam(p, home, _f, body) {
         const g = win(p, T.ready - 0.04, T.ready) * (1 - win(p, T.hit + 0.08, T.home));
@@ -154,39 +215,9 @@ const halo = {
         return [g, 1.05, (home.x + body.x) / 2, body.y - 20]; // 撃つ人とボスの両方が入る広さ
     },
     beats: () => [{ t: T.flare, stop: 0, shake: 2, sfx: 'awakenFlare' }, { t: T.flare + 0.03, stop: 0, shake: 0, sfx: 'chant' }, { t: T.hold, stop: 0, shake: 1, sfx: 'whoosh' }, { t: BEAM0, stop: 0, shake: 3, sfx: 'charge' }, { t: T.land, stop: 0, shake: 4, sfx: 'thunder' }, { t: T.hit, stop: 0.008, shake: 8, sfx: 'impactMagic' }],
-    back(a, hero, w) {
-        const { ctx, phase: p } = a;
-        const cols = haloCol(w), k = ease(win(p, T.flare, T.hold)) * (1 - win(p, BEAM1, BEAM1 + 0.08));
-        if (k <= 0)
-            return;
-        const lift = 14 * ease(win(p, T.hold, T.blink)) * (1 - win(p, BEAM1, T.home));
-        const cx = hero.x + 2, cy = hero.y - 20 - lift, flap = Math.sin(a.frame / 6) * 0.08;
-        for (const side of [-1, 1])
-            for (let i = 0; i < 7; i++) { // 羽根を一枚ずつ扇形に
-                const an = -Math.PI / 2 + side * (0.35 + i * 0.2 + flap) * k, len = (34 - i * 3) * k;
-                const x1 = cx + Math.cos(an) * len * 0.9 + side * 4, y1 = cy + Math.sin(an) * len * 0.6 + i * 3;
-                ctx.save();
-                ctx.globalAlpha = k;
-                ctx.strokeStyle = '#b08a10';
-                ctx.lineWidth = 4 - i * 0.3;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(cx + side * 3, cy + 2);
-                ctx.lineTo(x1, y1);
-                ctx.stroke();
-                ctx.restore(); // 羽根の縁
-                glowLine(ctx, cx + side * 3, cy + 2, x1, y1, 2.4 - i * 0.2, i % 2 ? cols[0] : cols[1], k);
-                ctx.save();
-                ctx.globalAlpha = k;
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(R(x1) - 1, R(y1) - 1, 2, 2);
-                ctx.restore();
-            }
-        glowDisc(ctx, cx, cy, 20 * k, cols[0], k * 0.35, 0.3);
-    },
     top(a, hero, w) {
         const { ctx, phase: p } = a;
-        const cols = haloCol(w), lift = 14 * ease(win(p, T.hold, T.blink)) * (1 - win(p, BEAM1, T.home)), hy = hero.y - lift;
+        const cols = haloCol(w), lift = haloLift(p), hy = hero.y - lift;
         // 頭上の光輪
         const hk = ease(win(p, T.flare, T.flare + 0.03)) * (1 - win(p, BEAM1, BEAM1 + 0.08));
         if (hk > 0) {
@@ -195,11 +226,11 @@ const halo = {
         }
         // 天から降る光と、舞う羽根
         const sk = bump(p, T.ready, T.hold + 0.02);
-        if (sk > 0) {
-            glowLine(ctx, hero.x, -40, hero.x, hy, 18 * sk, cols[0], sk * 0.5);
-            petals(ctx, hero.x, hy - 30, 90, 90, p * 2, `${a.seed}:halofeather`, ['#ffffff', cols[0], '#f0f0ff'], sk, 14, 1);
-        }
-        awakenText(a, hero, '#fff6c8', '#3a2a00');
+        if (sk > 0)
+            glowLine(ctx, hero.x, -40, hero.x, hy - 24, 10 * sk, cols[0], sk * 0.4); // 頭の上まで（体には重ねない）
+        // 跳んだときの砂ぼこりと、着地の砂ぼこり
+        dustCloud(a, hero.x, hero.y + 2, win(p, T.hold + 0.012, T.hold + 0.06), 'halojump', 0.8);
+        dustCloud(a, hero.x, hero.y + 2, win(p, BEAM1 + 0.04, BEAM1 + 0.1), 'haloland', 0.8);
         // 両手から極太の光線
         const bk = win(p, BEAM0, T.land), bf = 1 - win(p, T.hit + 0.02, BEAM1);
         const hand = { x: hero.x - 10, y: hy - 14 }, tg = tgOf(a.body);
@@ -275,11 +306,12 @@ const giant = {
         const mk = bump(p, T.ready, T.hit + 0.06);
         if (mk > 0)
             sparkBurst(ctx, gp.x, gp.y - 4, (p * 20) % 1, `${a.seed}:gimist${Math.floor(p * 20)}`, ['#14081e', GI[0], GI[1]], 18, 50, -60, 3);
-        awakenText(a, hero, '#e2c2ff', '#14081e');
         // 影の一撃: 巨大な影の腕が、弧を描いてボスへ（影の三日月が飛ぶ）
         const sk = win(p, SWING0, SWING1), sf = 1 - win(p, T.hit, T.hit + 0.08);
+        // ボスは左にいるので、右上 → 頭上 → 左下へ振り下ろす（反時計まわり）
+        const A0 = -(Math.PI - 2.0), A1 = -(Math.PI + 1.0);
         if (sk > 0 && sf > 0)
-            slashArc(ctx, gp.x - 6, gp.y - 50, 74, -2.0, lerp(-2.0, 1.0, ease(sk)), 30, ['#5a2a8a', GI[1]], sf);
+            slashArc(ctx, gp.x - 6, gp.y - 50, 74, A0, lerp(A0, A1, ease(sk)), 30, ['#5a2a8a', GI[1]], sf);
         const fk = win(p, SWING1 - 0.01, T.hit);
         if (fk > 0 && fk < 1) {
             const x = lerp(gp.x - 60, tg.x + 20, ease(fk));
@@ -327,7 +359,6 @@ const flame = {
             }
         }
         eyes(ctx, hero, '#ffe27a', win(p, T.flare, T.flare + 0.01) * (1 - win(p, T.blink, T.blink + 0.01)), a.frame);
-        awakenText(a, hero, '#ffe27a', '#3a1a00');
         // 突進: 炎の帯と火の粉
         streak(a, hero, [FL[0], FL[1]], 9);
         const bk = win(p, T.blink, T.land);
@@ -365,65 +396,48 @@ const flame = {
 // =====================================================================
 const GOLD_COL = { fan: ['#ffd166', '#e3ffc8'] };
 const goldCol = (w) => GOLD_COL[w] ?? ['#ffd166', '#fff6c8'];
-const CUT0 = T.flare + 0.012, CUT1 = T.hold - 0.006; // カットイン
 const gold = {
     pose: (p, home, _f, body, frame, w) => dashThrough(p, home, body, frame, w),
     cam: (p, home, _f, body) => awakenCam(p, home, body),
-    beats: () => [{ t: T.flare, stop: 0.004, shake: 3, sfx: 'awakenFlare' }, { t: CUT0, stop: 0, shake: 0, sfx: 'shatter' }, { t: T.blink, stop: 0, shake: 0, sfx: 'whoosh' }, { t: T.hit, stop: 0.01, shake: 9, sfx: 'impactBlade' }, { t: T.hit + 0.03, stop: 0, shake: 2, sfx: 'shatter' }],
-    top(a, hero, w, look) {
+    beats: () => [{ t: T.flare, stop: 0.004, shake: 3, sfx: 'awakenFlare' }, { t: T.blink, stop: 0, shake: 0, sfx: 'whoosh' }, { t: T.hit, stop: 0.01, shake: 9, sfx: 'impactBlade' }, { t: T.hit + 0.03, stop: 0, shake: 2, sfx: 'shatter' }],
+    back(a, hero, w, look) {
+        const { ctx, phase: p } = a;
+        const cols = goldCol(w), rk = win(p, T.flare - 0.01, T.flare + 0.03) * (1 - win(p, T.blink, T.blink + 0.02));
+        if (rk <= 0)
+            return;
+        const pose = dashThrough(p, { x: hero.x, y: hero.y }, a.body, a.frame, w), cx = hero.x + (pose?.ox ?? 0), cy = hero.y - 14 + (pose?.oy ?? 0);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 12; i++) {
+            const an = (i / 12) * TAU + a.frame / 40, L = (44 + (i % 3) * 16) * ease(rk), r0 = 12;
+            ctx.globalAlpha = rk * (i % 2 ? 0.2 : 0.35);
+            ctx.fillStyle = cols[0];
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(an) * r0, cy + Math.sin(an) * r0);
+            ctx.lineTo(cx + Math.cos(an - 0.04) * L, cy + Math.sin(an - 0.04) * L);
+            ctx.lineTo(cx + Math.cos(an + 0.04) * L, cy + Math.sin(an + 0.04) * L);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+        onHero(a, hero, look, pose, cols[0], rk * (0.75 + 0.25 * Math.sin(a.frame / 3)), { outline: true }); // 体の縁が金色に光る
+    },
+    top(a, hero, w) {
         const { ctx, phase: p } = a;
         const cols = goldCol(w);
-        // 金色の光が放射状にあふれる
+        // 金の粒が体のまわりから立ちのぼる（姿の前を横切らないよう、小さな粒だけ）
         const rk = win(p, T.flare - 0.01, T.flare + 0.03) * (1 - win(p, T.blink, T.blink + 0.02));
         if (rk > 0) {
+            const rng = new Rng(`${a.seed}:goldmote`);
             ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
             for (let i = 0; i < 16; i++) {
-                const an = (i / 16) * TAU + a.frame / 40, L = (80 + (i % 3) * 30) * ease(rk);
-                ctx.globalAlpha = rk * (i % 2 ? 0.35 : 0.6);
-                ctx.fillStyle = cols[0];
-                ctx.beginPath();
-                ctx.moveTo(hero.x, hero.y - 16);
-                ctx.lineTo(hero.x + Math.cos(an - 0.06) * L, hero.y - 16 + Math.sin(an - 0.06) * L);
-                ctx.lineTo(hero.x + Math.cos(an + 0.06) * L, hero.y - 16 + Math.sin(an + 0.06) * L);
-                ctx.closePath();
-                ctx.fill();
+                const t = (p * 6 + rng.next()) % 1, side = i % 2 ? 1 : -1;
+                ctx.globalAlpha = rk * (1 - t);
+                ctx.fillStyle = i % 3 ? cols[0] : '#ffffff';
+                ctx.fillRect(R(hero.x + side * rng.range(9, 16)), R(hero.y - 4 - t * 40), 1, 2);
             }
             ctx.restore();
-            glowDisc(ctx, hero.x, hero.y - 16, 40 * rk, cols[0], rk, 1);
         }
-        // カットイン: 画面を横切る帯に、主役の顔（大きく）と金の光の線
-        const ck = win(p, CUT0, CUT0 + 0.01) * (1 - win(p, CUT1, CUT1 + 0.01));
-        if (ck > 0 && !ultQuiet()) {
-            const cy = hero.y - 40, bh = 40 * ease(ck), slide = (1 - ease(win(p, CUT0, CUT0 + 0.012))) * 200;
-            ctx.save();
-            ctx.globalAlpha = 0.92 * ck;
-            ctx.fillStyle = '#1a1205';
-            ctx.fillRect(-a.W, cy - bh / 2, a.W * 3, bh);
-            ctx.globalCompositeOperation = 'lighter';
-            for (let i = 0; i < 8; i++) {
-                const y = cy - bh / 2 + ((i * 7 + a.frame * 3) % bh);
-                ctx.globalAlpha = ck * 0.5;
-                ctx.fillStyle = cols[0];
-                ctx.fillRect(-a.W, R(y), a.W * 3, 1);
-            } // 流れる光
-            ctx.restore();
-            if (look) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(-a.W, cy - bh / 2, a.W * 3, bh);
-                ctx.clip();
-                ctx.translate(hero.x - 60 + slide, cy + 52);
-                ctx.scale(3, 3);
-                ctx.imageSmoothingEnabled = false;
-                ctx.globalAlpha = ck;
-                drawHero(ctx, look, NO_GEAR, 0, 0, { frame: a.frame, flip: true, action: 'guard', t: 1, ring: false });
-                ctx.restore();
-            }
-            glowLine(ctx, -a.W, cy - bh / 2, a.W * 2, cy - bh / 2, 1.5, cols[0], ck);
-            glowLine(ctx, -a.W, cy + bh / 2, a.W * 2, cy + bh / 2, 1.5, cols[0], ck);
-        }
-        awakenText(a, hero, '#ffe27a', '#3a2a00');
         // 光をまとって一閃（まっすぐの金の線）
         streak(a, hero, cols, 8);
         const hk = win(p, T.hit, T.hit + 0.16), tg = tgOf(a.body);
@@ -436,8 +450,8 @@ const gold = {
                 petals(ctx, tg.x, y, 220, 100, hk * 2, `${a.seed}:goldleaf`, ['#3aa860', '#9be7b0', '#ffd166'], 1 - hk, 26, 0.6);
         }
         impactBurst(a, tg.x, tg.y, hk, cols[0], cols[1], 1.2);
-        flash(a, bump(p, T.flare - 0.004, T.flare + 0.02), '#fff6c8', 0.55);
-        flash(a, bump(p, T.hit - 0.003, T.hit + 0.035), '#ffffff', 0.85);
+        flash(a, bump(p, T.flare - 0.004, T.flare + 0.02), '#fff6c8', 0.18);
+        flash(a, bump(p, T.hit - 0.003, T.hit + 0.035), '#fff6c8', 0.5); // 当たる瞬間の閃光も、まぶしすぎないように
     },
 };
 // =====================================================================
@@ -466,21 +480,27 @@ const thunder = {
     },
     cam: (p, home, _f, body) => awakenCam(p, home, body),
     beats: () => [{ t: T.flare, stop: 0, shake: 3, sfx: 'thunder' }, { t: T.flare + 0.04, stop: 0, shake: 1, sfx: 'awakenFlare' }, ...[0, 1, 2, 3].map((i) => ({ t: ZIG(i) + 0.002, stop: 0.002, shake: 2, sfx: (i % 2 ? 'thunder' : 'slash') })), { t: T.hit, stop: 0.008, shake: 8, sfx: 'impactMagic' }, { t: T.hit + 0.02, stop: 0, shake: 3, sfx: 'thunder' }],
+    back(a, hero, w, look) {
+        const p = a.phase, fk = win(p, T.ready, T.flare) * (1 - win(p, T.blink, T.blink + 0.012));
+        if (fk <= 0)
+            return;
+        const pose = powerUp(p, a.frame, w);
+        glowDisc(a.ctx, hero.x, hero.y - 14, 26 * fk, TH[0], fk * 0.35, 0.2);
+        onHero(a, hero, look, pose, a.frame % 4 < 2 ? TH[1] : '#ffffff', fk * (a.frame % 6 < 4 ? 1 : 0.4), { outline: true });
+    },
     top(a, hero) {
         const { ctx, phase: p } = a;
-        // 雷をまとう: 体のまわりで小さな稲妻がはじけ続ける
+        // 雷をまとう: 体の外側で小さな稲妻がはじけ続ける（体の上には重ねない）
         const fk = win(p, T.ready, T.flare) * (1 - win(p, T.blink, T.blink + 0.012));
         if (fk > 0) {
             for (let i = 0; i < 5; i++) {
-                const an = (a.frame * 0.9 + i * 1.3) % TAU, r0 = 8, r1 = 20 + (i % 2) * 8;
-                bolt(ctx, hero.x + Math.cos(an) * r0, hero.y - 14 + Math.sin(an) * r0, hero.x + Math.cos(an) * r1, hero.y - 14 + Math.sin(an) * r1, `${a.seed}:thaura${i}${a.frame % 6}`, 1.2, i % 2 ? TH[0] : TH[1], fk, 5, 0);
+                const an = (a.frame * 0.9 + i * 1.3) % TAU, r0 = 14, r1 = 24 + (i % 2) * 8;
+                bolt(ctx, hero.x + Math.cos(an) * r0, hero.y - 14 + Math.sin(an) * r0 * 1.3, hero.x + Math.cos(an) * r1, hero.y - 14 + Math.sin(an) * r1 * 1.3, `${a.seed}:thaura${i}${a.frame % 6}`, 1, i % 2 ? TH[0] : TH[1], fk, 4, 0);
             }
-            glowDisc(ctx, hero.x, hero.y - 14, 30 * fk, TH[0], fk * 0.5, 0.5);
             if (p > T.flare && p < T.flare + 0.03)
-                bolt(ctx, hero.x + 4, -40, hero.x, hero.y - 20, `${a.seed}:thstrike${Math.floor(a.frame / 2)}`, 4, TH[0], bump(p, T.flare, T.flare + 0.03), 12, 2); // 天から落ちる雷を受ける
+                bolt(ctx, hero.x + 4, -40, hero.x, hero.y - 24, `${a.seed}:thstrike${Math.floor(a.frame / 2)}`, 3, TH[0], bump(p, T.flare, T.flare + 0.03), 12, 2); // 天から落ちる雷を、頭の上で受ける
         }
         eyes(ctx, hero, '#7fe0ff', win(p, T.flare, T.flare + 0.01) * (1 - win(p, T.blink, T.blink + 0.01)), a.frame);
-        awakenText(a, hero, '#ffe27a', '#1a1a3a');
         // ジグザグの雷の道と、通り過ぎざまの斬撃
         const pts = zig({ x: hero.x, y: hero.y }, a.body);
         for (let i = 0; i < 4; i++) {
@@ -501,7 +521,7 @@ const thunder = {
             sparkBurst(ctx, tg.x, tg.y, hk, `${a.seed}:thburst`, [TH[0], TH[1], '#ffffff'], 40, 110, 20);
         }
         impactBurst(a, tg.x, tg.y, hk, TH[0], TH[1], 1.2);
-        flash(a, bump(p, T.flare - 0.004, T.flare + 0.02), '#ffffff', 0.4);
+        flash(a, bump(p, T.flare - 0.004, T.flare + 0.02), '#ffffff', 0.25);
         flash(a, bump(p, T.hit - 0.003, T.hit + 0.035), '#ffffff', 0.85);
     },
 };

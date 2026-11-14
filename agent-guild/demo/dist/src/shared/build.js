@@ -147,8 +147,8 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
         err('tools', tl('tools はリストで書いてください'));
     for (const t of Array.isArray(raw.tools) ? raw.tools : []) {
         const id = str(t);
-        if (!id || !byId[id])
-            err('tools', TOOL_BY_ID[id ?? ''] ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
+        if (!id || !Object.hasOwn(byId, id))
+            err('tools', id && Object.hasOwn(TOOL_BY_ID, id) ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
         else if (tools.includes(id))
             err('tools', tl(`ツール「{0}」が重複しています`, id));
         else
@@ -222,8 +222,8 @@ export function validateBuild(raw, catalog = TOOL_CATALOG) {
                 const ctools = [];
                 for (const t of Array.isArray(c.tools) ? c.tools : []) {
                     const id = str(t);
-                    if (!id || !byId[id])
-                        err('companion.tools', TOOL_BY_ID[id ?? ''] ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
+                    if (!id || !Object.hasOwn(byId, id))
+                        err('companion.tools', id && Object.hasOwn(TOOL_BY_ID, id) ? tl(`ツール「{0}」はこの課題では使えません`, id) : tl(`ツール「{0}」はカタログにありません`, id ?? t));
                     else if (ctools.includes(id))
                         err('companion.tools', tl(`ツール「{0}」が重複しています`, id));
                     else {
@@ -336,7 +336,8 @@ export function computeCost(b, catalog = TOOL_CATALOG) {
         // 道具と巻物は共有なので、上で1回だけ数える（お供が使っても重さは増えない）
     }
     const total = items.reduce((a, x) => a + x.cost, 0);
-    return { items, total, limit: R.limit, over: total > R.limit };
+    // 重さが数として出せないときは、上限を超えた扱いにする（比べられない値を「範囲内」にしない）
+    return { items, total, limit: R.limit, over: !(total <= R.limit) };
 }
 export function parseBuild(yamlText, catalog = TOOL_CATALOG) {
     let raw;

@@ -15,6 +15,7 @@ import { poseFor } from '../chibi.js';
 import { WEAPON_LABELS } from '../../shared/catalog.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
+import { dodgeCands, dodgeOrder } from '../dodgepicks.js';
 // ---------------------------------------------------------------------------
 // アニメの進行役: 画面に見えている canvas だけを描き直す。ページを離れたら止まる。
 // 動きを減らす設定の人には、最初の1コマだけを見せる（自分で押した再生は動かす）
@@ -549,18 +550,57 @@ function gate(R, t) {
 function waveTime(r, time, dt, secondsPerWave) {
     return time + (dt / secondsPerWave) * r.slowFactor(time);
 }
+// 窓を大きくして見る: 窓（canvas と操作）を、画面いっぱいの重ね窓へそのまま移し、閉じたら元の場所へ戻す。
+// スマホ（iPhone の Safari）は canvas の全画面表示ができないので、全画面の API は使わずに重ね窓で広げる
+function zoomButton(target, hooks = {}) {
+    const btn = h('button', { class: 'lp-zoom-btn', type: 'button', title: tl('大きく見る'), 'aria-label': tl('大きく見る') }, h('span', { 'aria-hidden': 'true' }, '⛶'));
+    let overlay = null, spot = null;
+    const onKey = (e) => { if (e.key === 'Escape')
+        close(); };
+    const close = () => {
+        if (!overlay || !spot)
+            return;
+        spot.replaceWith(target);
+        overlay.remove();
+        overlay = spot = null;
+        document.body.classList.remove('lp-zoom-open');
+        removeEventListener('keydown', onKey);
+        hooks.close?.();
+        btn.focus();
+    };
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 窓の再生・一時停止のボタンには伝えない
+        if (overlay)
+            return;
+        spot = document.createComment('zoom');
+        target.before(spot);
+        const shut = h('button', { class: 'btn lp-zoom-close', type: 'button' }, tl('閉じる'));
+        shut.onclick = close;
+        overlay = h('div', { class: 'lp-zoom', role: 'dialog', 'aria-modal': 'true', 'aria-label': tl('大きく見る') }, h('div', { class: 'lp-zoom-box' }, target, shut));
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay)
+            close(); }); // 窓の外を押したら閉じる
+        document.body.append(overlay);
+        document.body.classList.add('lp-zoom-open');
+        addEventListener('keydown', onKey);
+        hooks.open?.();
+        shut.focus();
+    });
+    return btn;
+}
 function mainDemo(script, ticker, mine = []) {
     const canvas = h('canvas', { class: 'arena-canvas pixel', 'aria-label': tl('討伐の再生') });
     const r = new ArenaRenderer(canvas, script);
     r.muted = true; // 音は最初は消しておく
     r.mine = new Set(mine);
-    let time = 0, playing = false; // はじめは止めておき、再生ボタンで動かす
+    // 幕開け（ボスの登場と討伐隊の参戦）から流す。幕開けは再生の 0 より前（マイナスの時刻）にある
+    const start = -r.introLen;
+    let time = start, playing = false; // はじめは止めておき、再生ボタンで動かす
     const total = r.totalTime;
     const wn = h('span', { class: 'lp-demo-wave' });
     const title = h('span', { class: 'lp-demo-case' });
     const playBtn = h('button', { class: 'btn btn-icon', type: 'button' });
     const soundBtn = h('button', { class: 'btn lp-sound', type: 'button', 'aria-pressed': 'false' });
-    const seek = h('input', { type: 'range', min: 0, max: total, step: 0.01, value: 0, 'aria-label': tl('再生位置') });
+    const seek = h('input', { type: 'range', min: start, max: total, step: 0.01, value: start, 'aria-label': tl('再生位置') });
     const syncButtons = () => {
         playBtn.textContent = playing ? '❚❚' : '▶';
         playBtn.setAttribute('aria-label', playing ? tl('一時停止') : tl('再生'));
@@ -569,14 +609,19 @@ function mainDemo(script, ticker, mine = []) {
     };
     playBtn.onclick = () => { playing = !playing; syncButtons(); };
     soundBtn.onclick = () => { r.muted = !r.muted; setSfx(!r.muted); syncButtons(); };
-    seek.oninput = () => { time = Number(seek.value); r.draw(time); };
+    seek.oninput = () => { time = Number(seek.value); r.draw(time); hud(); };
     syncButtons();
-    let lastW = -1;
+    let lastW = -2;
     const hud = () => {
-        const w = Math.min(Math.floor(time), script.waves.length - 1);
+        const w = time < 0 ? -1 : Math.min(Math.floor(time), script.waves.length - 1); // -1 = 幕開け
         if (w === lastW)
             return;
         lastW = w;
+        if (w < 0) {
+            wn.textContent = '';
+            title.textContent = script.boss.name;
+            return;
+        }
         const wv = script.waves[w];
         wn.textContent = tl(`場面 {0} / {1}`, w + 1, script.waves.length);
         title.textContent = script.cases[wv.caseIndex]?.title ?? '';
@@ -585,15 +630,19 @@ function mainDemo(script, ticker, mine = []) {
         if (playing && dt > 0) {
             time = waveTime(r, time, dt, 3.4);
             if (time >= total)
-                time = 0;
+                time = start;
             seek.value = String(time);
         }
         r.draw(time);
         hud();
     }, () => playing);
-    r.draw(time); // 止まっていても、はじめの1コマを見せる
+    // 止まっているあいだは、幕開けの終わり（ボスと討伐隊がそろった1コマ）を見せる。再生は幕開けのはじめから
+    r.draw(-0.02);
     hud();
-    return h('div', { class: 'lp-demo' }, h('div', { class: 'lp-demo-hud' }, wn, title), h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'controls' }, playBtn, seek, soundBtn), h('p', { class: 'lp-sound-note' }, tl('iPhone などで音が出ないときは、消音（マナー）モードを切ってから「音：あり」を押してください。')));
+    const box = h('div', { class: 'lp-demo' }, h('div', { class: 'lp-demo-hud' }, wn, title), h('div', { class: 'canvas-wrap' }, canvas), h('div', { class: 'controls' }, playBtn, seek, soundBtn), h('p', { class: 'lp-sound-note' }, tl('iPhone などで音が出ないときは、消音（マナー）モードを切ってから「音：あり」を押してください。')));
+    // 大きくしたら、そのまま再生する（閉じても止めない。止めたいときは一時停止）
+    box.querySelector('.canvas-wrap').append(zoomButton(box, { open: () => { playing = true; syncButtons(); } }));
+    return box;
 }
 function clipDirector(ticker) {
     const clips = [];
@@ -646,6 +695,10 @@ function clipDirector(ticker) {
             else
                 pinned = c;
         },
+        /** 大きくして見ている窓は、ほかの窓より優先して動かす（閉じたら元に戻す） */
+        focus(c) { pinned = c; },
+        unfocus(c) { if (pinned === c)
+            pinned = null; },
     };
 }
 function clip(script, w, mine, ticker, dir, label, from = 0.08, to = 0.92) {
@@ -669,6 +722,7 @@ function clip(script, w, mine, ticker, dir, label, from = 0.08, to = 0.92) {
         },
     };
     btn.addEventListener('click', () => dir.toggle(st));
+    wrap.append(zoomButton(wrap, { open: () => dir.focus(st), close: () => dir.unfocus(st) }));
     dir.add(st);
     st.sync();
     ticker.add(canvas, (_t, dt) => {
@@ -714,6 +768,7 @@ function reel(script, segs, ticker, dir, label) {
         },
     };
     btn.addEventListener('click', () => dir.toggle(st));
+    wrap.append(zoomButton(wrap, { open: () => dir.focus(st), close: () => dir.unfocus(st) }));
     dir.add(st);
     st.sync();
     ticker.add(canvas, (_t, dt) => {
@@ -805,23 +860,16 @@ export async function renderAbout(root, opts = {}) {
         const e = (ev.find(mineGuarded) ?? ev.find(guarded) ?? ev.find(calm));
         fx.push({ title: tl('幻術と結界'), body: tl('ボスは偉い人の声をまねて、もっともらしい偽の命令を混ぜてくる。あやしい声が、光の壁にはじかれて砕け散る。'), w: illW, mine: [e.f] });
     }
-    // 見切りと反撃: ボスの攻撃の種類ごとに、討伐隊のかわし方と反撃を順に見せる（カメラは寄らずに全体）。
-    // 札はボスの攻撃（場面の見出し）だけ。かわし方の名前は答えになるので出さない
+    // 見切りと反撃: ボスの攻撃に、正しく動けた冒険者が見切ってかわす（ガード・跳ぶ・伏せる…）ところを、1人ずつ寄って見せる。
+    // 反撃は隣の「武器ごとの技」の窓で見せるので、ここでは反撃に移る直前で切る。同じ型が並ばないように選ぶ（dodgepicks.ts。回避モーションの見本帳で選べる）。
+    // 札はボスの攻撃（場面の見出し）と武器の名前だけ。かわし方の名前は答えになるので出さない
     const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
-    const okN = (wv) => wv.events.filter((e) => e.type === 'strike' && e.success).length;
-    const dodge = [];
-    for (const sc of ['breath', 'claw', 'dive', 'tail']) {
-        // その攻撃の最初の場面（正しく動けた人が多いもの。少なすぎるときは、いちばん多い場面）
-        const ws = full.waves.map((wv, i) => ({ wv, i })).filter(({ wv }) => full.cases[wv.caseIndex]?.scene === sc);
-        const most = Math.max(0, ...ws.map(({ wv }) => okN(wv)));
-        const bw = ws.find(({ wv }) => okN(wv) >= most - 1)?.i ?? -1;
-        // かわす瞬間（攻撃が届く前後）は、スローモーションで見せる（約3分の1の速さ）
-        if (bw >= 0 && most > 0)
-            dodge.push({ w: bw, from: 0.2, to: 0.95, slow: [0.34, 0.6, 0.35], tag: full.cases[full.waves[bw].caseIndex]?.title ?? '', cam: { mode: 'wide' } });
-    }
+    const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
+    const dodge = dodgeOrder(dodgeCands(full)).map((c) => ({
+        w: c.w, from: c.from, to: c.to, slow: c.slow, tag: `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f,
+    }));
     const dodgeTitle = tl('見切りと反撃');
     // 武器ごとの技: 武器のちがう冒険者を1人ずつ舞台に立たせて寄り、かわしてから反撃するまでを順に見せる（札は武器の名前）
-    const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
     const wpSegs = [];
     const seen = new Set();
     // 見せたい順（近接・飛び道具・魔法がまじるように）。見本にない武器は飛ばす

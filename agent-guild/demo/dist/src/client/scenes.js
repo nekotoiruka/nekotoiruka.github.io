@@ -10,6 +10,8 @@ import { counterFx } from './counterfx.js';
 import { puffs } from './fxkit.js';
 import { STYLE, spriteToWorld } from './bossstyle.js';
 import { ultMoveDef } from './ultmoves.js';
+import { drawChainFinale } from './chainfx.js';
+import { drawSword } from './pixart.js';
 import { dustCloud, flash, giantSprite, glowArc, glowLine, impactBurst, rocks, skyDisc, starSpark, SWORD_PAL, summonCircle, swordAt, text, ULT_T } from './ultkit.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
 export const isUltScene = (s) => !!s && ULT_SCENES.includes(s);
@@ -18,19 +20,19 @@ export const SCENE_LABEL = {
     tail: { head: tl('尾のなぎはらい'), color: '#e8d5a8' },
     dive: { head: tl('急降下の予兆'), color: '#9aa0c8' },
     claw: { head: tl('爪の叩きつけ'), color: '#ff5a6e' },
-    opening: { head: tl('隙あり！'), color: '#ffe27a' },
+    opening: { head: tl('隙あり'), color: '#ffe27a' },
     fog: { head: tl('霧の中'), color: '#c8d0e0' },
     spell: { head: tl('呪文の詠唱'), color: '#ff4fa0' },
-    ougi: { head: tl('奥義の好機！'), color: '#ffd166' },
+    ougi: { head: tl('奥義の好機'), color: '#ffd166' },
     rush: { head: tl('突進の予兆'), color: '#ff8a5a' },
-    summon: { head: tl('召喚の好機！'), color: '#9fe8ff' },
-    parry: { head: tl('見切りの好機！'), color: '#ffe9a0' },
-    seal: { head: tl('封印の好機！'), color: '#c8a8ff' },
-    awaken: { head: tl('覚醒の好機！'), color: '#ff9ce6' },
+    summon: { head: tl('召喚の好機'), color: '#9fe8ff' },
+    parry: { head: tl('見切りの好機'), color: '#ffe9a0' },
+    seal: { head: tl('封印の好機'), color: '#c8a8ff' },
+    awaken: { head: tl('覚醒の好機'), color: '#ff9ce6' },
     illusion: { head: tl('幻術の声'), color: '#b57bff' },
     memory: { head: tl('記憶の試練'), color: '#d9b77a' },
     ally: { head: tl('仲間の声'), color: '#7bed9f' },
-    chain: { head: tl('連携詠唱！'), color: '#ffe9a0' },
+    chain: { head: tl('連携詠唱'), color: '#ffe9a0' },
 };
 // 属性の名前。データの中の属性は日本語の1文字（炎氷雷風光闇）で持ち、画面に出すときだけ言語に合わせる
 export const elementLabel = (e) => ({ 炎: tl('炎'), 氷: tl('氷'), 雷: tl('雷'), 風: tl('風'), 光: tl('光'), 闇: tl('闇') }[e] ?? e);
@@ -79,16 +81,6 @@ function vignette(a, color, k) {
     ctx.restore();
 }
 // 正解したキャラたちの中心に、技の名前を一度だけ大きく出す
-export function partyLabel(a, color, k, dy = -58) {
-    const ok = alive(a).filter((v) => v.ok);
-    if (!ok.length || k <= 0)
-        return;
-    // 技の名前: 自分のキャラが正しく動けたら、その答え。それ以外は「かわした」（正解の名前はネタバレになるので出さない）
-    const own = ok.find((v) => v.mine);
-    const s = own ? own.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : tl('かわした');
-    const x = ok.reduce((t, v) => t + v.x, 0) / ok.length, y = Math.min(...ok.map((v) => v.y)) + dy;
-    text(a.ctx, tl(`{0}！`, s), x, Math.max(24, y), R(11 + 5 * bump(k, 0, 0.35)), color, Math.min(1, k * 4));
-}
 // ============ 奥（キャラより後ろ） ============
 export function sceneBack(a) {
     const { ctx, phase: p } = a;
@@ -764,8 +756,6 @@ function openingFx(a) {
             ctx.stroke();
         }
         ctx.restore();
-        if (v.mine)
-            text(ctx, tl('はじかれた！'), v.x, v.y - 44 - u * 6, 9, '#ffe27a', 1 - Math.max(0, u - 0.6) / 0.4, '#3a2a00');
     }
     // 反撃: 属性の大技が竜に降りそそぐ
     const firsts = alive(a).filter((v) => v.ok && v.atT !== undefined).map((v) => v.atT);
@@ -897,7 +887,6 @@ export function elementStrike(a, element, k) {
         }
     }
     ctx.restore();
-    text(ctx, tl(`{0}！`, elementLabel(element)), bx + 30, by - 40, R(12 + 6 * bump(k, 0, 0.5)), el.main, 1 - win(k, 0.7, 1), el.dark);
 }
 // ---- 霧: 戦場を覆う濃霧 → 気配の鈴の波紋 → 霧が晴れる ----
 function fogFx(a) {
@@ -1091,9 +1080,6 @@ function spellFx(a) {
     }
     // 放たれた！ 討伐隊へ迫る
     const party = spellPartyAt(a);
-    const warn = bump(p, T.launch, T.caught + 0.03);
-    if (warn > 0)
-        text(ctx, tl('来るぞ…！'), party.x, party.y - 46, R(11 + 3 * bump(p, T.launch, T.launch + 0.03)), a.frame % 6 < 3 ? sc.warn : sc.pale, Math.min(1, warn * 2), '#3a0a1e');
     // 魔法弾（溜め → 飛ぶ → つかまる → 押し返されて青く）
     if (orb.on) {
         const r = orb.r + Math.sin(a.frame / 2) * 1.5;
@@ -1299,9 +1285,9 @@ function spellFx(a) {
     const spell = mineV && !/^[（(]/.test(mineV.excerpt) ? mineV.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 12) : '';
     const tk = bump(p, T.push, T.back + 0.02);
     if (tk > 0) {
-        text(ctx, a.theme?.counter ?? tl('打ち消し！'), a.W / 2 + 10, 64, R(16 + 6 * bump(p, T.push, T.push + 0.03)), '#bfe8ff', Math.min(1, tk * 2), '#0a2a4a');
+        // 叫びの文字（打ち消し！・祓い！ など）は出さない。唱えた言葉だけを見せる
         if (spell)
-            text(ctx, `― ${spell} ―`, a.W / 2 + 10, 82, 10, '#ffffff', Math.min(1, tk * 2), '#0a2a4a');
+            text(ctx, `― ${spell} ―`, a.W / 2 + 10, 72, 11, '#ffffff', Math.min(1, tk * 2), '#0a2a4a');
     }
     // 4) 跳ね返し: 打ち消した魔法弾がボスに炸裂（破片・衝撃波・閃光）。打ち消せた人の反撃はこれ
     const hit = { x: a.body.x + 6, y: a.body.y - 18 };
@@ -1341,9 +1327,6 @@ function spellFx(a) {
         ctx.restore();
     }
     flash(a, bump(p, T.back - 0.005, T.back + 0.04), '#e0f6ff', 0.8);
-    const rk = bump(p, T.back, T.end);
-    if (rk > 0)
-        text(ctx, tl('跳ね返した！'), hit.x + 44, hit.y - 30 - 6 * win(p, T.back, T.end), R(20 + 10 * bump(p, T.back, T.back + 0.04)), a.frame % 6 < 3 ? '#ffffff' : '#ffe27a', Math.min(1, rk * 2), '#5a1a00');
 }
 // ---- 奥義: 綻びが光る → 映画のような帯 → 金の十字斬りと技名 ----
 function ougiFx(a) {
@@ -1553,7 +1536,6 @@ function voiceGlyphs(a, v, say, sx, sy, guarded) {
                 ctx.ellipse(tx + 4, ty + 2, 4 + kk * 18, 6 + kk * 24, 0, -Math.PI / 2, Math.PI / 2, true);
                 ctx.stroke();
             }
-            text(ctx, tl('弾いた！'), v.x, v.y - 50 - k * 6, 10, '#d8fff6', 1 - Math.max(0, k - 0.6) / 0.4, '#0a2a3a');
         }
         else {
             ctx.globalAlpha = (1 - k) * 0.8;
@@ -1856,12 +1838,12 @@ export const ULT_ART = {
     scythe: { style: 'heavy', rush: tl('死神の八連輪舞'), ougi: tl('断罪の月鎌・堕天'), summon: tl('冥府より来たれ、亡者の巨腕') },
     axe: { style: 'heavy', rush: tl('大地烈断・旋風八連'), ougi: tl('蒼天割り・竜断ちの大斧'), summon: tl('降臨せよ、巨神の拳') },
     hammer: { style: 'heavy', rush: tl('轟雷旋風・八連砕き'), ougi: tl('雷神の鉄槌・天地鳴動'), summon: tl('顕現せよ、光の戦鎚騎士') },
-    pan: { style: 'heavy', rush: tl('八連・黄金の目玉焼き無双'), ougi: tl('鉄鍋奥義・雷落とし'), summon: tl('厨房の神よ、火の玉を降らせ！') },
+    pan: { style: 'heavy', rush: tl('黄金の目玉焼き無双'), ougi: tl('鉄鍋奥義・雷落とし'), summon: tl('厨房の神よ、火の玉を降らせ！') },
     shield: { style: 'heavy', rush: tl('聖盾旋風・八連突撃'), ougi: tl('聖壁突貫・天墜シールドバッシュ'), summon: tl('顕現せよ、大地の守護拳') },
     umbrella: { style: 'heavy', rush: tl('八連・こうもり旋風'), ougi: tl('雨傘奥義・流星の大輪'), summon: tl('雨天来たれ、蒼き水の鳥') },
-    spear: { style: 'pierce', rush: tl('百烈穿天・八連の槍舞'), ougi: tl('竜騎士の蒼穹・天墜貫き'), summon: tl('天を衝け、神槍の竜巻') },
-    bow: { style: 'shot', rush: tl('八連・千本の矢'), ougi: tl('天弓一射・星墜とし'), summon: tl('天空より来たれ、炎の鳥') },
-    blaster: { style: 'shot', rush: tl('八連・フルバースト'), ougi: tl('最終兵器・メテオダイブ'), summon: tl('流星弾、全弾投下！') },
+    spear: { style: 'pierce', rush: tl('百烈穿天・槍の舞'), ougi: tl('竜騎士の蒼穹・天墜貫き'), summon: tl('天を衝け、神槍の竜巻') },
+    bow: { style: 'shot', rush: tl('千本の矢'), ougi: tl('天弓一射・星墜とし'), summon: tl('天空より来たれ、炎の鳥') },
+    blaster: { style: 'shot', rush: tl('フルバースト・光弾乱射'), ougi: tl('最終兵器・メテオダイブ'), summon: tl('流星弾、全弾投下！') },
     wand: { style: 'magic', rush: tl('五芒星陣・極光砲'), ougi: tl('星天の詠唱・雷刃招来'), summon: tl('万象の杖よ、大地の拳を') },
     book: { style: 'magic', rush: tl('八頁解放・星詠みの光'), ougi: tl('禁書解放・天より堕ちる雷'), summon: tl('禁断の魔導書・流星の章') },
     fan: { style: 'magic', rush: tl('八重・嵐扇の舞'), ougi: tl('風神の舞・月輪の暴風'), summon: tl('天扇来たれ、風の騎士') },
@@ -2124,12 +2106,9 @@ export function sceneTop(a) {
         const x = a.body.x + 40, y = a.body.y - 22 - ease(dk) * 10;
         if (a.ult.dmg > 0)
             text(ctx, fmtDmg(a.ult.dmg), x, y, R(22 * pop), a.frame % 6 < 3 ? '#ffffff' : '#ffe27a', al, '#5a1a00');
-        if (a.ult.crit && a.ult.dmg > 0)
-            text(ctx, tl('会心！'), x, y - 18 * pop, 9, '#ffef5a', al, '#5a1a00');
         const ck = bump(p, hitT + 0.01, hitT + 0.2);
         // 技の名前はボスの足元の手前に（ダメージ数字と重ならないように）
         const tx = a.body.x + 70, ty = a.foot.y + 24;
-        text(ctx, tl('大技を潰した！'), tx, ty, R(14 + 5 * bump(p, hitT, hitT + 0.05)), '#ffe9a0', Math.min(1, ck * 2), '#3a1a00');
         if (a.ult.skill)
             text(ctx, `― ${a.ult.skill} ―`, tx, ty + 16, 9, '#ffffff', Math.min(1, ck * 2), '#3a1a00');
     }
@@ -2198,7 +2177,7 @@ function sealUlt(a, hero) {
                 if (p < t0)
                     continue;
                 const ph = (i / 8) * TAU + 0.4, x = bc.x + Math.cos(ph) * 56, y = bc.y + 20 + Math.sin(ph) * 15;
-                swordAt(ctx, x, lerp(-50, y, k), 0.5, k < 1 ? 1 : 0.4, a.frame, pal);
+                drawSword(ctx, wp === 'katana' ? 'katana' : 'sword', x, lerp(-50, y, k), 40, { glow: wp === 'katana' ? '#ff9ab0' : colA, glowK: k < 1 ? 1 : 0.4, gem: pal.gem }); // ドット絵の剣（刀は刀の形）。#105
             }
         }
         else if (style === 'heavy') {
@@ -2593,9 +2572,10 @@ function giantWeapon(a, sx) {
     }
     else if (style === 'blade') {
         const tip = tipAt(p);
+        // 巨大な剣（ドット絵。剣は両刃の聖剣、刀は反りのある刀）。#105
         if (tip !== null) {
             speed(tip, sx);
-            swordAt(ctx, sx, tip, wp === 'katana' ? 1.25 : 1.15, glow, a.frame, SWORD_PAL[wp] ?? SWORD_PAL.sword);
+            drawSword(ctx, wp === 'katana' ? 'katana' : 'sword', sx, tip, wp === 'katana' ? 104 : 96, { glow: wp === 'katana' ? '#ff9ab0' : '#9fe8ff', glowK: glow });
         }
     }
     else if (style === 'pierce' || style === 'heavy') {
@@ -3313,51 +3293,10 @@ function chainTop(a, c) {
                 text(ctx, fmtDmg(c.dmg), a.body.x + 30, a.body.y - 20 - dk * 8, 10, '#c9ced8', Math.min(1, (1 - dk) * 4), '#2a2a3a');
         }
     }
-    // 大魔法: 魔法陣の中心からボスへ、極大の光の柱
+    // 大魔法（演出の案は chainfx.ts。見本帳で選ぶ）。特大のダメージ数字は、画面座標で（arena-hud.ts の chainDmg。会心と同じ色）
     if (c.full) {
-        const pk = win(p, c.impact - 0.02, c.impact) * (1 - win(p, c.impact + 0.06, c.impact + 0.2));
-        if (pk > 0) {
-            const w0 = 10 + 40 * ease(win(p, c.impact - 0.02, c.impact + 0.03));
-            const bx = a.body.x + 4, by = a.foot.y + 6;
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const g = ctx.createLinearGradient(bx - w0, 0, bx + w0, 0);
-            g.addColorStop(0, 'rgba(255,233,160,0)');
-            g.addColorStop(0.3, 'rgba(255,233,160,0.7)');
-            g.addColorStop(0.5, 'rgba(255,255,255,1)');
-            g.addColorStop(0.7, 'rgba(255,233,160,0.7)');
-            g.addColorStop(1, 'rgba(255,233,160,0)');
-            ctx.globalAlpha = pk;
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.moveTo(SKY.x - w0 * 0.6, SKY.y - 40);
-            ctx.lineTo(SKY.x + w0 * 0.6, SKY.y - 40);
-            ctx.lineTo(bx + w0, by);
-            ctx.lineTo(bx - w0, by);
-            ctx.closePath();
-            ctx.fill();
-            // 足元に広がる光の輪と、舞い上がる光の粒
-            ctx.strokeStyle = '#fff6c8';
-            ctx.lineWidth = 2;
-            const rk = win(p, c.impact, c.impact + 0.12);
-            if (rk > 0 && rk < 1) {
-                ctx.globalAlpha = 1 - rk;
-                ctx.beginPath();
-                ctx.ellipse(bx, by, 20 + rk * 150, 5 + rk * 34, 0, 0, TAU);
-                ctx.stroke();
-            }
-            const rng = new Rng(`${a.seed}:pillar`);
-            for (let i = 0; i < 40; i++) {
-                const x = bx + rng.range(-1, 1) * w0, sp = rng.range(0.5, 1.5), t = (p * 8 * sp + rng.next()) % 1;
-                ctx.globalAlpha = pk * (1 - t);
-                ctx.fillStyle = i % 2 ? '#ffffff' : '#ffe9a0';
-                ctx.fillRect(R(x), R(by - t * 140), 1, 3);
-            }
-            ctx.restore();
-        }
-        flash(a, bump(p, c.impact - 0.004, c.impact + 0.05), '#ffffff', 0.95);
-        flash(a, bump(p, c.doneT, c.doneT + 0.03), '#fff6c8', 0.5);
-        // 特大のダメージ数字は、画面座標で（arena-hud.ts の chainDmg。会心と同じ色）
+        const heads = c.chanters.map((_, i) => { const v = chanterOf(a, c, i); return v ? { x: v.x, y: v.y - 30 } : null; });
+        drawChainFinale(a, c, SKY, heads, c.chanters.map((_, i) => ringCol(c, i)));
     }
 }
 // 輪郭だけの色つきシルエット（カットインのふち取り）。キャラ×色ごとに一度だけ作る

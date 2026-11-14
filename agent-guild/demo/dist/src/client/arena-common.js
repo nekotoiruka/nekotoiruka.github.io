@@ -26,7 +26,6 @@ export const TOOL_SHORT = {
     kb_search: tl('ナレッジ検索'), customer_lookup: tl('顧客台帳'), history_lookup: tl('履歴照会'),
     regex_matcher: tl('正規表現'), calculator: tl('計算機'), clock: tl('時計'), json_validator: tl('形式チェック'), scan: tl('看破'), memory: tl('冒険日誌'), bell: tl('気配の鈴'), guardrail: tl('結界'),
 };
-export const EVADE_LABEL = { dodge: tl('よけた！'), block: tl('ガード！'), barrier: tl('はじいた！'), shoot: tl('撃ち落とした！'), slash: tl('斬った！'), jump: tl('跳んだ！'), crawl: tl('伏せた！'), step: tl('すり抜けた！'), turn: tl('受け止めた！'), turnCut: tl('斬り返した！'), chant: tl('打ち消した！'), resist: tl('弾いた！') };
 export const AGILE = new Set(['ninja', 'rogue', 'cat', 'bunny', 'frog', 'ghostie']);
 export const NO_GEAR = { back: [], fams: [], charms: [] };
 /** 討伐の1場面にかける秒数（再生の画面と同じ） */

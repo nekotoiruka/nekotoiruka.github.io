@@ -13,7 +13,7 @@ import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
 import { bossSilhouette } from './boss.js';
 import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
-import { aura, barrierFx, decoyGag, drawFighter, dust, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
+import { aura, barrierFx, decoyGag, drawFighter, dust, fighterPose, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
 import { bandWave, bandWindow, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
@@ -346,8 +346,11 @@ export class ArenaRenderer {
             return this.ultOf(w)?.f !== undefined && !this.wave(w).events.some((e) => e.type === 'hit');
         return false;
     }
-    /** 冒険者の足もと（いま描いている位置。輪・目印・明かりがキャラについていくように。drawFighter が毎コマ書く） */
-    footAt = new Map();
+    /** 冒険者の体を描く位置（このコマ。fighterPose が決め、drawFrame が毎コマ、描く前に入れる）。読むときは bodyOf で */
+    bodyAt = new Map();
+    /** 体を描く位置（動きのずれ・必殺技の姿勢・見本帳の型の位置を足した最後の位置）。
+     *  体力ゲージ・オーラ・目印・吹き出し・名札など、体に付くものは、みんなここから位置を取る（issue #103） */
+    bodyOf(v) { return this.bodyAt.get(v.f) ?? { x: v.x, y: v.y + 1, ground: v.y + 1 }; }
     hurtCache = new Map();
     hurtOf(w) {
         if (!this.motionProto)
@@ -458,10 +461,21 @@ export class ArenaRenderer {
             { x: 294, y: 34, r: 70 + Math.cos(this.frame / 3.4) * 4, a: 0.9, col: '#ffb050' },
             { x: this.bossBody.x, y: this.bossBody.y - 10, r: 80, a: 0.55 },
         ];
+        // 体を描く位置を、何かを描く前に決める（このあと描く、体に付くものがみんな使う）
+        this.bodyAt.clear();
+        const poses = new Map();
+        if (!this.intro)
+            for (const v of vis) {
+                const p = this.fighterPose(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), evaded.has(v.f), hits.get(v.f), targeted(v.f), atk);
+                poses.set(v.f, p);
+                this.bodyAt.set(v.f, p.body);
+            }
         for (const f of this.mine) {
-            const v = views[f], at = this.footAt.get(f);
-            if (v?.alive && !s.fighters[f].off)
-                this.lights.push({ x: at?.x ?? v.x, y: (at?.y ?? v.y) - 14, r: 46, a: 0.85, col: '#ffd166' });
+            const v = views[f];
+            if (v?.alive && !s.fighters[f].off) {
+                const b = this.bodyOf(v);
+                this.lights.push({ x: b.x, y: b.y - 15, r: 46, a: 0.85, col: '#ffd166' });
+            }
         }
         // --- 狙われた警告（隊列はないので、討伐隊ぜんたいに一つ） ---
         const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
@@ -543,14 +557,14 @@ export class ArenaRenderer {
         }
         // --- 巻物（必殺技）: 頭上で巻物が広がり、足元に魔法陣が描かれる（注目キャラ） ---
         if (spot?.st.used.skills.length && this.skillWave(w) && views[spot.f].alive && !chain) {
-            const v = views[spot.f];
+            const b = this.bodyOf(views[spot.f]); // 頭上の巻物と足もとの魔法陣は、体についていく
             const [u0] = this.ultWindow(spot.st, w);
             const ks = (phase - (u0 - 0.07)) / 0.08;
             if (ks > 0 && ks < 1)
-                this.scrollFx(ctx, v.x, v.y - 44, ks, this.colors[spot.f]?.main ?? '#ff6bd6');
+                this.scrollFx(ctx, b.x, b.y - 45, ks, this.colors[spot.f]?.main ?? '#ff6bd6');
             const kc = (phase - u0) / (spot.at.t + 0.04 - u0);
             if (kc > 0 && kc < 1 && ult?.f !== spot.f)
-                this.magicCircle(ctx, v.x, v.y + 1, kc, this.colors[spot.f]?.main ?? '#ff6bd6');
+                this.magicCircle(ctx, b.x, b.ground, kc, this.colors[spot.f]?.main ?? '#ff6bd6');
         }
         // --- スキル発動のオーラ（反撃の直前） ---
         for (const v of vis) {
@@ -560,7 +574,8 @@ export class ArenaRenderer {
             const a0 = at.t - 0.12, a1 = at.t - 0.02;
             if (phase < a0 || phase > a1)
                 continue;
-            skillAura(ctx, this.styles[v.f], this.colors[v.f], v.x, v.y + 1, (phase - a0) / (a1 - a0), this.frame, spot?.f === v.f, (dx, dy, alpha) => drawHero(ctx, this.looks[v.f], NO_GEAR, v.x - dx, v.y + 1 + dy, { frame: this.frame, flip: true, alpha, action: 'cast', t: 0.5, ring: false }));
+            const b = this.bodyOf(v); // 反撃に踏みこむ体についていく
+            skillAura(ctx, this.styles[v.f], this.colors[v.f], b.x, b.y, (phase - a0) / (a1 - a0), this.frame, spot?.f === v.f, (dx, dy, alpha) => drawHero(ctx, this.looks[v.f], NO_GEAR, b.x - dx, b.y + dy, { frame: this.frame, flip: true, alpha, action: 'cast', t: 0.5, ring: false }));
         }
         // --- キャラ（奥から順に） ---
         const order = vis.sort((a, b) => a.y - b.y || a.x - b.x);
@@ -569,7 +584,7 @@ export class ArenaRenderer {
                 this.introFighter(ctx, v);
         else
             for (const v of order)
-                this.drawFighter(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), evaded.has(v.f), hits.get(v.f), targeted(v.f), atk);
+                this.drawFighter(ctx, v, w, phase, outro, strikeOf.get(v.f), attackOf.get(v.f), targeted(v.f), atk, poses.get(v.f));
         // 決め手: あなたが正しく動けたときだけ、効いた道具（または巻物・結界）を頭上に一瞬掲げ、武器へ吸いこませてから動く
         if (!chain && outro === 0)
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
@@ -625,6 +640,7 @@ export class ArenaRenderer {
                 continue;
             const fl = age / 0.22;
             const v = 'f' in e && typeof e.f === 'number' ? views[e.f] : null;
+            const b = v ? this.bodyOf(v) : null; // 体のそばに出す文字・印は、体についていく（ダメージの数字と KO は、当たった所に出す）
             if (e.type === 'strike') { /* 正否は体のまわりのオーラで見せる（auras） */ }
             else if (e.type === 'hit' && v && e.dmg >= 0.5)
                 this.damageNum(v.x + 6, v.y - 30, e.dmg, fl, false, 'hurt');
@@ -633,39 +649,39 @@ export class ArenaRenderer {
                 const bx = this.bossBody.x + ((e.f * 37) % 40) - 20, by = this.bossBody.y - 20 - ((e.f * 13) % 16);
                 this.damageNum(bx, by, e.dmg, fl, e.crit, 'boss');
             }
-            else if (e.type === 'item' && v) {
+            else if (e.type === 'item' && b) {
                 ctx.globalAlpha = 1 - fl;
-                ctx.drawImage(e.item === 'potion' ? potionSprite() : shieldIcon(), Math.round(v.x - 2), Math.round(v.y - 38 - fl * 12));
+                ctx.drawImage(e.item === 'potion' ? potionSprite() : shieldIcon(), Math.round(b.x - 2), Math.round(b.y - 39 - fl * 12));
                 ctx.globalAlpha = 1;
-                this.floatText(ctx, e.item === 'potion' ? `+${Math.round(e.amount)}` : tl('シールド'), v.x + 8, v.y - 34 - fl * 10, '#7bed9f', 1 - fl);
+                this.floatText(ctx, e.item === 'potion' ? `+${Math.round(e.amount)}` : tl('シールド'), b.x + 8, b.y - 35 - fl * 10, '#7bed9f', 1 - fl);
             }
-            else if (e.type === 'mpOut' && v && !this.mine.has(e.f))
-                this.floatText(ctx, tl('行動力切れ'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
-            else if (e.type === 'lost' && v && !this.mine.has(e.f))
-                this.floatText(ctx, tl('途方に暮れた'), v.x, v.y - 38 - fl * 6, '#74b9ff', 1 - fl);
-            else if (e.type === 'endure' && v)
-                this.floatText(ctx, tl('ギリギリ耐えた！'), v.x, v.y - 40 - fl * 6, '#ffd166', 1 - fl, 9);
-            else if (e.type === 'revive' && v) {
-                this.floatText(ctx, tl('復活！'), v.x, v.y - 36 - fl * 8, '#7bed9f', 1 - fl, 9);
-                this.lights.push({ x: v.x, y: v.y - 14, r: 30, a: 0.8 * (1 - fl), col: '#bfffd0' });
+            else if (e.type === 'mpOut' && b && !this.mine.has(e.f))
+                this.floatText(ctx, tl('行動力切れ'), b.x, b.y - 39 - fl * 6, '#74b9ff', 1 - fl);
+            else if (e.type === 'lost' && b && !this.mine.has(e.f))
+                this.floatText(ctx, tl('途方に暮れた'), b.x, b.y - 39 - fl * 6, '#74b9ff', 1 - fl);
+            else if (e.type === 'revive' && b) {
+                this.floatText(ctx, tl('復活！'), b.x, b.y - 37 - fl * 8, '#7bed9f', 1 - fl, 9);
+                this.lights.push({ x: b.x, y: b.y - 15, r: 30, a: 0.8 * (1 - fl), col: '#bfffd0' });
             }
             else if (e.type === 'death' && v)
                 this.floatText(ctx, 'KO!', v.x, v.y - 26 - fl * 6, '#ff5a5a', 1 - Math.max(0, fl - 0.6) / 0.4, fl < 0.2 ? Math.round(8 + fl * 40) : 16);
         }
         const mvp = wv.events.find((e) => e.type === 'mvp');
-        if (mvp && mvp.type === 'mvp' && phase >= mvp.t && views[mvp.f].alive)
-            ctx.drawImage(crownSprite(), Math.round(views[mvp.f].x - 2), Math.round(views[mvp.f].y - 37 + Math.sin(this.frame / 5)));
+        if (mvp && mvp.type === 'mvp' && phase >= mvp.t && views[mvp.f].alive) {
+            const b = this.bodyOf(views[mvp.f]);
+            ctx.drawImage(crownSprite(), Math.round(b.x - 2), Math.round(b.y - 38 + Math.sin(this.frame / 5)));
+        }
         // 注目キャラの吹き出し（回答の抜粋）と、使った装備の名札
         const focus = this.selected ?? this.hovered;
         if (focus !== null && views[focus].alive) {
-            const st = strikeOf.get(focus), at = attackOf.get(focus), v = views[focus];
+            const st = strikeOf.get(focus), at = attackOf.get(focus), b = this.bodyOf(views[focus]); // 吹き出しと名札は、体についていく
             if (st && phase >= st.t && phase < st.t + 0.24)
-                this.bubble(ctx, st.excerpt, v.x, v.y - 48, st.success);
+                this.bubble(ctx, st.excerpt, b.x, b.y - 49, st.success);
             if (st && at) {
                 const g = clamp01((phase - (at.t - 0.12)) / 0.03) * clamp01((at.t + 0.08 - phase) / 0.03);
                 if (g > 0) {
                     [...(st.used.companion ? [{ t: tl('お供に頼んだ'), c: '#c59bff' }] : []), ...st.used.skills.map((x) => ({ t: x, c: '#ff9ce6' })), ...st.used.tools.map((x) => ({ t: TOOL_SHORT[x] ?? TOOL_BY_ID[x]?.name ?? x, c: '#8fd3ff' }))] // 役に立たない道具も同じ色（色で答えが分からないように）
-                        .slice(0, 4).forEach((l, i) => this.tag(ctx, l.t, l.c, v.x, v.y - 40, g, i + 1));
+                        .slice(0, 4).forEach((l, i) => this.tag(ctx, l.t, l.c, b.x, b.y - 41, g, i + 1));
                 }
             }
         }
@@ -732,7 +748,8 @@ export class ArenaRenderer {
     attackFxBack = attackFxBack; // arena-boss.ts
     attackFxFront = attackFxFront; // arena-boss.ts
     boom = boom; // arena-boss.ts
-    drawFighter = drawFighter; // arena-fighter.ts
+    drawFighter = drawFighter;
+    fighterPose = fighterPose; // arena-fighter.ts
     motes = motes; // arena-fighter.ts
     petFx = petFx; // arena-fighter.ts
     hpBar = hpBar; // arena-hud.ts

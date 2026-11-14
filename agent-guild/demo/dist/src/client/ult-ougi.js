@@ -2,6 +2,7 @@ import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
 import { ULT_T, R, TAU, bandArc, bolt, bump, clamp01, crater, dim, dustCloud, ease, flash, glowDisc, glowLine, groundRings, heroSilhouette, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { aura, blit, drawHole, kunaiSprite, moonSprite } from './pixart.js';
 const T = ULT_T.ougi;
 const land = (foot) => ({ x: foot.x + 34, y: foot.y + 6 });
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
@@ -137,6 +138,10 @@ const fall = {
         return [g, p < T.impact + 0.04 ? 1.35 : 1.15, L.x - 2, body.y - 14];
     },
     beats: (w) => [{ t: T.jump, stop: 0, shake: 2, sfx: 'jump' }, { t: T.fall, stop: 0, shake: 0, sfx: 'dive' }, { t: T.impact, stop: 0.007, shake: w === 'spear' ? 7 : 10, sfx: 'impactHeavy' }, { t: T.impact + 0.05, stop: 0, shake: 4, sfx: 'rumble' }],
+    back(a, _hero, w) {
+        const p = a.phase, L = land(a.foot);
+        drawHole(a.ctx, L.x - 2, a.foot.y + 5, 40 * ease(win(p, T.impact, T.impact + 0.025)), fallCol(w)[0], 1 - win(p, T.land, T.home), a.frame, 5);
+    },
     top(a, hero, w) {
         const { ctx, phase: p } = a;
         const cols = fallCol(w), L = land(a.foot), sx = L.x - 2, ground = a.foot.y;
@@ -203,7 +208,6 @@ const fall = {
             }
             groundRings(ctx, sx, ground + 4, ik, cols[0], 190);
         }
-        crater(ctx, sx, ground + 4, 26 * ease(win(p, T.impact, T.impact + 0.03)), 1 - win(p, T.land, T.home), cols[0]);
         rocks(a, sx, ground, win(p, T.impact, T.impact + 0.18), 'fallrock', 46, 150);
         dustCloud(a, sx, ground + 4, win(p, T.impact, T.impact + 0.16), 'falldust', 2.4);
         flash(a, bump(p, T.impact - 0.003, T.impact + 0.035), '#ffffff', 0.85);
@@ -214,6 +218,11 @@ const fall = {
 // =====================================================================
 const MOON_COL = { scythe: ['#c77dff', '#f0e0ff'], fan: ['#7bed9f', '#e3ffc8'] };
 const moonCol = (w) => MOON_COL[w] ?? ['#ffd166', '#fff6c8'];
+const MOON_PAL = {
+    sword: { o: '#6a4a10', d: '#d2b060', m: '#f2e0a0', l: '#fff6d2', h: '#ffffff' },
+    scythe: { o: '#3a1a5a', d: '#a88ad8', m: '#dccaf6', l: '#f4ecff', h: '#ffffff' },
+    fan: { o: '#1a4a2a', d: '#8ac898', m: '#cdeec8', l: '#effff0', h: '#ffffff' },
+};
 // 跳んだ頂点（満月の前）
 const moonApex = (foot, body) => ({ x: land(foot).x + 40, y: body.y - 46 });
 const moonCenter = (foot, body) => { const q = moonApex(foot, body); return { x: q.x + 4, y: q.y - 20 }; };
@@ -282,22 +291,10 @@ const moon = {
             ctx.closePath();
             ctx.clip();
             ctx.globalAlpha = out;
-            ctx.fillStyle = w === 'scythe' ? '#e8dcff' : w === 'fan' ? '#e8ffe0' : '#fff6c8';
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, TAU);
-            ctx.fill();
-            ctx.fillStyle = w === 'scythe' ? '#c8b0f0' : w === 'fan' ? '#c8f0c0' : '#f0dca0'; // 月の模様
-            for (const [mx, my, mr] of [[-12, -10, 8], [10, 7, 10], [-5, 17, 6], [17, -14, 5]]) {
-                ctx.beginPath();
-                ctx.arc(mx * rise, my * rise, mr * rise, 0, TAU);
-                ctx.fill();
-            }
+            // 満月のドット絵（クレーターと海を3段で）。昇るあいだは小さい月を拡大して見せる
+            const ms = moonSprite(40, MOON_PAL[w] ?? MOON_PAL.sword);
+            blit(ctx, ms, 0, 0, 41, 41, { sx: Math.max(0.05, rise), sy: Math.max(0.05, rise) });
             ctx.globalCompositeOperation = 'lighter';
-            ctx.strokeStyle = cols[1];
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(0, 0, r - 1, 0, TAU);
-            ctx.stroke(); // 明るい縁
             if (split > 0) {
                 ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 3;
@@ -309,7 +306,7 @@ const moon = {
             ctx.restore();
         };
         // 月の暈（かさ）
-        glowDisc(ctx, c.x, c.y, r * 2.4, cols[0], out * rise * 0.45, 0.4);
+        glowDisc(ctx, c.x, c.y, r * 1.8, cols[0], out * rise * 0.18, 0.2);
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         for (let i = 0; i < 2; i++) {
@@ -661,14 +658,12 @@ const boltMove = {
             if (p >= T.fall && p < T.impact)
                 glowLine(ctx, ap.x, ap.y - 14, pos.x, pos.y - 14, 8, cols[0], 0.8);
         }
-        // 突き刺さる: 稲妻が地面を左右へ走り、ボスの体を雷が駆けめぐる
+        // 突き刺さる: 稲妻が地面を左右へ走る（ボスの体を駆けめぐる稲妻は、空からの落雷の横で邪魔になるので出さない）
         const ik = win(p, T.impact, T.impact + 0.16);
         if (ik > 0 && ik < 1) {
             const run = ease(clamp01(ik * 1.8));
             for (const dir of [-1, 1])
                 bolt(ctx, L.x, ground + 2, L.x + dir * 150 * run, ground + 2, `${a.seed}:run${dir}${Math.floor(a.frame / 2)}`, 3, cols[0], 1 - ik, 6, 2);
-            for (let i = 0; i < 3; i++)
-                bolt(ctx, a.body.x + (i - 1) * 16, a.body.y - 40, a.body.x + (i - 1) * 10, a.body.y + 20, `${a.seed}:body${i}${Math.floor(a.frame / 2)}`, 2, cols[1], (1 - ik) * 0.9, 8, 1);
             bolt(ctx, L.x, -60, L.x, ground, `${a.seed}:pillar${Math.floor(a.frame / 2)}`, 7 * (1 - ik) + 2, cols[0], 1 - ik, 10, 3);
             groundRings(ctx, L.x, ground + 4, ik, cols[0], 150);
             sparkBurst(ctx, L.x, ground - 6, ik, `${a.seed}:boltspark`, [cols[0], cols[1], '#ffffff'], 34, 90, 40);
@@ -753,7 +748,7 @@ const shadow = {
                 heroSilhouette(ctx, (c) => drawHero(c, a.ult.look, { back: [], fams: [], charms: [] }, 32, 56, { frame: a.frame, flip: true, action: 'attack', t: 0.95, ring: false }), Q.x + 6, Q.y - 34 + 24, 1, '#1a0828', gk * 0.75, 1);
         });
         // 影を縫いとめる: ボスの足元の影に、紫の糸が何本も縫いこまれる
-        const nk = win(p, T.impact, T.impact + 0.04), nf = 1 - win(p, T.impact + 0.1, T.land + 0.04);
+        const nk = win(p, T.impact - 0.004, T.impact + 0.07), nf = 1 - win(p, T.impact + 0.1, T.land + 0.04);
         if (nk > 0 && nf > 0) {
             ctx.save();
             ctx.globalAlpha = nf * 0.7;
@@ -762,9 +757,44 @@ const shadow = {
             ctx.ellipse(a.foot.x + 8, a.foot.y + 4, 54, 12, 0, 0, TAU);
             ctx.fill();
             ctx.restore();
+            // 7本の苦無（ドット絵）が右上から左下へ斜めに降り、影に突き立つ。苦無は飛ぶ向き（左下）に切っ先を向ける。
+            // 刺さった所に小さな波紋、最後に紫の糸で輪をつなぐ
+            const ang = 0.42, kn = kunaiSprite(ang, 1.25), glow = aura('kunai', kn.spr, 1, SH[0]), pins = [];
             for (let i = 0; i < 7; i++) {
-                const x = a.foot.x - 34 + i * 12, k2 = ease(clamp01(nk * 1.6 - i * 0.08));
-                glowLine(ctx, x + 10, a.foot.y - 30, lerp(x + 10, x, k2), lerp(a.foot.y - 30, a.foot.y + 6, k2), 1.5, i % 2 ? SH[1] : SH[0], nf);
+                const x = a.foot.x - 34 + i * 12 + (i % 2) * 3, y = a.foot.y + 2 + ((i * 3) % 5) - 2, k2 = clamp01(nk * 1.8 - i * 0.11), u = k2 * k2;
+                if (k2 <= 0)
+                    continue;
+                const fx = x + Math.sin(ang) * 80 * (1 - u), fy = y - Math.cos(ang) * 80 * (1 - u), sink = k2 >= 1 ? 4 : 0;
+                if (k2 < 1)
+                    for (let j = 1; j <= 3; j++)
+                        blit(ctx, glow, fx + Math.sin(ang) * j * 8, fy - Math.cos(ang) * j * 8, kn.ax + 1, kn.ay + 1, { alpha: nf * (0.6 - j * 0.15), add: true }); // 残像（紫の光）
+                blit(ctx, glow, fx - Math.sin(ang) * sink, fy + Math.cos(ang) * sink, kn.ax + 1, kn.ay + 1, { alpha: nf * 0.7, add: true });
+                blit(ctx, kn.spr, fx - Math.sin(ang) * sink, fy + Math.cos(ang) * sink, kn.ax, kn.ay, { alpha: nf }); // 刺さると切っ先が影に沈む
+                if (k2 >= 1) {
+                    pins.push({ x: fx + Math.sin(ang) * 30, y: fy - Math.cos(ang) * 30 + 4 });
+                    const rk = clamp01((nk * 1.8 - i * 0.11 - 1) * 4);
+                    if (rk < 1) {
+                        ctx.save();
+                        ctx.globalAlpha = nf * (1 - rk);
+                        ctx.strokeStyle = SH[1];
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.ellipse(R(x) + 0.5, R(y) + 0.5, 3 + rk * 9, 1 + rk * 3, 0, 0, TAU);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
+            }
+            if (pins.length === 7) {
+                ctx.save();
+                ctx.globalAlpha = nf;
+                ctx.fillStyle = SH[1];
+                for (let i = 0; i < 6; i++) {
+                    const A = pins[i], B = pins[i + 1], n = Math.ceil(Math.hypot(B.x - A.x, B.y - A.y));
+                    for (let k = 0; k <= n; k += 2)
+                        ctx.fillRect(R(lerp(A.x, B.x, k / n)), R(lerp(A.y, B.y, k / n) + Math.sin((k / n) * Math.PI) * 4), 1, 1);
+                }
+                ctx.restore();
             }
             text(ctx, tl('縫'), a.body.x + 40, a.body.y - 40, R(14 + 6 * (1 - nk)), SH[1], nf * Math.min(1, nk * 3), '#14081e');
         }

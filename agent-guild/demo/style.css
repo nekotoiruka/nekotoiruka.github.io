@@ -781,6 +781,16 @@ nav a.locked::after { content: ' 🔒'; font-size: 10px; }
 .lp-clip.is-playing .lp-clip-mark { font-size: 10px; padding: 1px 6px; margin: 0 6px 6px 0; box-shadow: 0 0 0 1px var(--line); opacity: .8; }
 .lp-clip-tag { position: absolute; left: 6px; top: 6px; z-index: 1; font-size: 12px; line-height: 1.4; padding: 2px 8px; color: var(--accent); background: rgba(10, 10, 24, 0.85); box-shadow: 0 0 0 1px var(--accent); pointer-events: none; } /* 紹介ページのつなぎ窓の札（ボスの攻撃・武器の名前） */
 .lp-clip-tag:empty { display: none; }
+/* 紹介ページ: 窓を大きくして見る（右上のボタン → 画面いっぱいの重ね窓） */
+.lp-zoom-btn { position: absolute; right: 6px; top: 6px; z-index: 2; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; font: inherit; font-size: 18px; line-height: 1; color: var(--ink); background: rgba(10, 10, 24, 0.85); border: 0; box-shadow: 0 0 0 2px var(--ink); cursor: pointer; touch-action: manipulation; }
+.lp-zoom-btn:hover { background: rgba(40, 44, 80, 0.95); }
+.lp-zoom-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lp-zoom { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); background: rgba(5, 6, 13, 0.97); }
+.lp-zoom-box { position: relative; width: min(100%, calc((100dvh - 64px) * 16 / 9)); display: grid; gap: 10px; }
+.lp-zoom-box .lp-demo { width: min(100%, calc((100dvh - 230px) * 16 / 9)); justify-self: center; }
+.lp-zoom-box .lp-zoom-btn { display: none; }
+.lp-zoom-close { justify-self: center; min-width: 120px; }
+body.lp-zoom-open { overflow: hidden; }
 .lp-what { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
 .lp-what h3 { margin-top: 0; }
 .lp-fx figcaption { padding: 12px 6px 0; display: grid; gap: 4px; }

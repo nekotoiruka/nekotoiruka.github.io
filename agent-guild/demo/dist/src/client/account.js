@@ -14,14 +14,16 @@ export function loginForm(season, onDone) {
     const nameIn = h('input', { placeholder: tl('表示名（みんなに分かる名前）'), maxlength: 20, 'aria-label': tl('表示名'), autocomplete: 'username' });
     // 登録とログインが同じフォームなので、合言葉の欄は current-password のまま（次回も同じ合言葉を使うので、パスワード管理に保存できるようにしておく）。
     // パスワード管理の拡張機能の吹き出しが欄にかぶさったときは、Esc で欄から抜ければ（欄の外に出ると）閉じられるようにする
-    const passIn = h('input', { type: 'password', placeholder: tl('合言葉（4文字以上・次回も同じもの）'), 'aria-label': tl('合言葉'), autocomplete: 'current-password' });
+    const passIn = h('input', { type: 'password', placeholder: tl('合言葉（8文字以上・次回も同じもの）'), 'aria-label': tl('合言葉'), autocomplete: 'current-password' });
+    // 招待の合言葉: 運営が決めているときだけ欄を出す。案内の URL に ?invite=… が付いていれば、はじめから入れておく
+    const inviteIn = season.inviteRequired ? h('input', { placeholder: tl('招待の合言葉（初めての人だけ）'), maxlength: 200, 'aria-label': tl('招待の合言葉'), autocomplete: 'off', value: new URLSearchParams(location.search).get('invite') ?? '' }) : null;
     for (const el of [nameIn, passIn])
         el.addEventListener('keydown', (e) => { if (e.key === 'Escape')
             el.blur(); });
-    return h('div', {}, h('p', { class: 'small muted' }, tl('初めての人は、表示名と合言葉を決めると登録されます（メールアドレスは不要）。')), h('form', { class: 'login', onsubmit: async (e) => {
+    return h('div', {}, h('p', { class: 'small muted' }, tl('初めての人は、表示名と合言葉を決めると登録されます（メールアドレスは不要）。')), inviteIn ? h('p', { class: 'small muted' }, tl('初めての人は、運営から聞いた「招待の合言葉」も入れてください。')) : null, h('form', { class: 'login', onsubmit: async (e) => {
             e.preventDefault();
             try {
-                const me = (await login(nameIn.value.trim(), passIn.value)).user;
+                const me = (await login(nameIn.value.trim(), passIn.value, inviteIn?.value.trim() ?? '')).user;
                 setUser(me.name); // ほかの人の下書きなどは、このブラウザから消える
                 addAdminLink(me);
                 onDone(me);
@@ -29,7 +31,7 @@ export function loginForm(season, onDone) {
             catch (err) {
                 toast(err.message, 'err');
             }
-        } }, nameIn, passIn, h('button', { class: 'btn', type: 'submit' }, tl('ログイン / 登録'))));
+        } }, nameIn, passIn, inviteIn, h('button', { class: 'btn', type: 'submit' }, tl('ログイン / 登録'))));
 }
 // 戦果の揺れの説明（送り出しの確認と戦果の画面で同じ文言）
 // 模擬採点（モック）の断り書き。本物の AI は動かさず、準備の中身を言葉の一致で見て点を近似しているだけなので、

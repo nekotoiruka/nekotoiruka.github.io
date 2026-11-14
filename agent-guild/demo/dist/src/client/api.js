@@ -105,7 +105,7 @@ export async function getMe() {
         return null;
     return (await req('GET', 'api/me')).user;
 }
-export const login = (name, passcode) => req('POST', 'api/login', { name, passcode });
+export const login = (name, passcode, invite = '') => req('POST', 'api/login', { name, passcode, ...(invite ? { invite } : {}) });
 export const logout = () => req('POST', 'api/logout');
 export const enterSeason = (team) => req('POST', 'api/entry', { team: team ?? '' });
 export const submitBuild = (yaml) => req('POST', 'api/submissions', { yaml });

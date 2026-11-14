@@ -14,6 +14,7 @@ let TX = 26, TY = 46; // 吸血鬼の胸のあたり（腕の少し奥）
 let QUIET = false; // 主役以外: 画面全体の閃光・揺れ・カットインを出さない
 let BOSS_KIND = 'vampire';
 let PAIR_REACH = false; // ボスの攻撃を迎え撃つ（斬りはらう・打ち砕く・撃ち落とす）とき: 当てる先を、目の前の飛んでくるものにする
+let PROBE = false; // probeInArena: 体の位置を確かめるだけ（冒険者の絵は描かない）
 let DRAWN = null; // 最後に描いた冒険者の足もと（drawInArena が返す）
 let LIFT = null; // 近接の反撃で、元の列から寄せる分（drawInArena）
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -313,6 +314,8 @@ function makeEnv(c, t, f, L, hc = c) {
             const gy = FY + liftAt(x);
             y += liftAt(x);
             DRAWN = { x, y, ground: gy };
+            if (PROBE)
+                return;
             const img = heroSprite(L, action, at, f, o.flip ?? true);
             const src = o.tint ? tinted(img, o.tint, 'tint:' + o.tint) : img;
             const X = R(x) - 20, Y = R(y) - 36;
@@ -339,7 +342,7 @@ function makeEnv(c, t, f, L, hc = c) {
             return { x: R(x) - 20 + m.x, y: R(y) - 36 + m.y };
         },
         ghost(x, y, col, a, action = 'dash', at = 0) {
-            if (a <= 0.12)
+            if (a <= 0.12 || PROBE)
                 return;
             y += liftAt(x);
             const img = heroSprite(L, action, at, f, true);
@@ -4194,6 +4197,24 @@ export function drawInArena(c, d) {
     }
     const at = DRAWN;
     return at ? { ...at, x: mirror ? 2 * d.hx - at.x : at.x } : null; // 振り向く型は左右を反転して描いている
+}
+/** drawInArena が体を描く位置を、描く前に確かめる（小さな見えない絵に空まわしする）。
+ *  討伐画面で、体力ゲージ・オーラなど体に付くものを、体より先に（下に）描くため。同じ引数なら drawInArena が返す位置と同じ */
+let probeCtx = null;
+export function probeInArena(d) {
+    if (!probeCtx) {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = 1;
+        probeCtx = cv.getContext('2d');
+    }
+    probeCtx.setTransform(1, 0, 0, 1, 0, 0);
+    PROBE = true;
+    try {
+        return drawInArena(probeCtx, d);
+    }
+    finally {
+        PROBE = false;
+    }
 }
 // 型が前へ踏みこむか（近接か）を、いちど小さな絵に描いて冒険者の位置から確かめる（型ごとに覚えておく）
 const MELEE = new Map();

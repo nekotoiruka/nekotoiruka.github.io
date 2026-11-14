@@ -378,7 +378,8 @@ export function webNet(ctx, x, y, r, k, col = '#f4f6ff') {
     ctx.restore();
 }
 /** 小さなゴブリンのシルエット（突進する群れ用。槍つき）。s は大きさ */
-export function goblinSil(ctx, x, y, s, step, body = '#2e4a24', lit = '#6aa04a') {
+/** ゴブリンの影絵。charge: 槍を前（右）へ水平に構える（突撃のとき） */
+export function goblinSil(ctx, x, y, s, step, body = '#2e4a24', lit = '#6aa04a', charge = false) {
     const f = Math.sin(step * 3) > 0 ? 1 : 0;
     ctx.fillStyle = body;
     ctx.fillRect(R(x - 3 * s), R(y - 10 * s), R(6 * s), R(6 * s)); // 胴
@@ -389,8 +390,19 @@ export function goblinSil(ctx, x, y, s, step, body = '#2e4a24', lit = '#6aa04a')
     ctx.fillStyle = lit;
     ctx.fillRect(R(x), R(y - 14 * s), R(2 * s), R(1 * s));
     ctx.fillStyle = '#c8c8d0';
-    ctx.fillRect(R(x + 3 * s), R(y - 16 * s), R(1 * s), R(14 * s));
-    ctx.fillRect(R(x + 2 * s), R(y - 18 * s), R(3 * s), R(3 * s)); // 槍
+    if (charge) {
+        ctx.fillRect(R(x - 2 * s), R(y - 8 * s), R(16 * s), R(1 * s));
+        ctx.beginPath();
+        ctx.moveTo(R(x + 14 * s), R(y - 10 * s));
+        ctx.lineTo(R(x + 18 * s), R(y - 7.5 * s));
+        ctx.lineTo(R(x + 14 * s), R(y - 5 * s));
+        ctx.closePath();
+        ctx.fill();
+    } // 槍（前へ）
+    else {
+        ctx.fillRect(R(x + 3 * s), R(y - 16 * s), R(1 * s), R(14 * s));
+        ctx.fillRect(R(x + 2 * s), R(y - 18 * s), R(3 * s), R(3 * s));
+    } // 槍（立てる）
 }
 /** 雲のような霧のかたまり */
 export function mistBlob(ctx, x, y, rx, ry, col, a) {
