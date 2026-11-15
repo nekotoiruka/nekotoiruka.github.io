@@ -18,7 +18,7 @@ const NAMES = {
         head: {},
     },
     vampire: {
-        atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧からの斬撃'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
+        atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧の蝙蝠'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
         scene: { dive: tl('蝙蝠の急降下'), spell: tl('呪いの紋'), ougi: tl('伯爵の悪あがき'), rush: tl('血の秘術'), ally: tl('伯爵の一撃') },
         head: { breath: tl('蝙蝠の群れ'), claw: tl('伸びる爪'), dive: tl('蝙蝠の急降下'), tail: tl('背後の霧'), rush: tl('血の秘術') },
     },

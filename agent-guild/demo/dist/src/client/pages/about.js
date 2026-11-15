@@ -12,10 +12,10 @@ import { setSfx } from '../sfx.js';
 import { kitIcon } from '../kiticons.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
 import { poseFor } from '../chibi.js';
-import { WEAPON_LABELS } from '../../shared/catalog.js';
+import { WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
-import { dodgeCands, dodgeOrder } from '../dodgepicks.js';
+import { applyLook, dodgeCands, dodgeOrder, pickedCands, DODGE_PICKS } from '../dodgepicks.js';
 // ---------------------------------------------------------------------------
 // アニメの進行役: 画面に見えている canvas だけを描き直す。ページを離れたら止まる。
 // 動きを減らす設定の人には、最初の1コマだけを見せる（自分で押した再生は動かす）
@@ -744,9 +744,20 @@ function reel(script, segs, ticker, dir, label) {
     r.mine = new Set();
     const tag = h('span', { class: 'lp-clip-tag', 'aria-hidden': 'true' });
     let i = 0, time = 0;
+    const baseWeapon = r.looks.map((l) => l.weapon);
+    let looked = null;
     const enter = (k) => {
         i = k;
         const sg = segs[i];
+        // 見本帳で選んだ型は、その冒険者の武器と型を差し替えて見せる（前の区間の差し替えはもどす）
+        if (looked !== null) {
+            applyLook(r, looked, -1, undefined, baseWeapon[looked]);
+            looked = null;
+        }
+        if (sg.look) {
+            applyLook(r, sg.look.f, sg.w, sg.look.look, baseWeapon[sg.look.f]);
+            looked = sg.look.f;
+        }
         r.camOverride = sg.cam;
         r.solo = sg.solo ?? null;
         r.frame = 0;
@@ -775,7 +786,8 @@ function reel(script, segs, ticker, dir, label) {
         if (dt <= 0)
             return;
         const sl = segs[i].slow, ph = time - segs[i].w;
-        time = waveTime(r, time, sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt, 3.4);
+        const d = sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt;
+        time = segs[i].steady ? time + d / 3.4 : waveTime(r, time, d, 3.4);
         if (time >= segs[i].w + segs[i].to)
             enter((i + 1) % segs.length);
         r.draw(time);
@@ -865,8 +877,10 @@ export async function renderAbout(root, opts = {}) {
     // 札はボスの攻撃（場面の見出し）と武器の名前だけ。かわし方の名前は答えになるので出さない
     const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
     const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
-    const dodge = dodgeOrder(dodgeCands(full)).map((c) => ({
-        w: c.w, from: c.from, to: c.to, slow: c.slow, tag: `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f,
+    const dodgeList = DODGE_PICKS.length ? pickedCands(full, WEAPON_KINDS) : dodgeOrder(dodgeCands(full));
+    const dodge = dodgeList.map((c) => ({
+        w: c.w, from: c.from, to: c.to, slow: c.slow, steady: c.steady, tag: c.look && !c.look.pattern ? full.cases[full.waves[c.w].caseIndex]?.title ?? '' : `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f, // 伏せる・結界は武器によらないので、武器の名前は出さない
+        ...(c.look ? { look: { f: c.f, look: c.look } } : {}),
     }));
     const dodgeTitle = tl('見切りと反撃');
     // 武器ごとの技: 武器のちがう冒険者を1人ずつ舞台に立たせて寄り、かわしてから反撃するまでを順に見せる（札は武器の名前）

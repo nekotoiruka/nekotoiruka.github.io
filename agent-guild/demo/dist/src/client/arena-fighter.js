@@ -1,3 +1,4 @@
+import { CRAWL, FALLBACK_HALF, fallbackU, labTime } from './dodgetiming.js';
 import { GAG, GUARD_HIT, IMPACT, KO_TIME, NO_GEAR, bump, clamp01, ease, lerp } from './arena-common.js';
 import { CHAIN_T } from '../shared/simulate.js';
 import { Rng } from '../shared/rng.js';
@@ -30,7 +31,8 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     }
     // 回避: 溜め → 動作 → 着地・戻り を、区間ごとのイージングでつなぐ
     // 尾のなぎはらいは、竜に近い者から順に届く（跳ぶ順番がずれる）
-    const lag = this.sceneOf(w) === 'tail' ? clamp01((v.x - 150) / 234) * 0.12 : this.sceneOf(w) === 'breath' ? clamp01((v.x - 150) / 234) * 0.05 : 0;
+    const lag = this.lagOf(w, v.f); // 攻撃がこの冒険者に届くまでの遅れ（arrival.ts。ボス×攻撃×立ち位置ごと）
+    const plan = this.dodgePlanOf(w, v.f); // 回避の段取り（dodgetiming.ts。山場を、攻撃の届く時刻にそろえる）
     // 巻物の大技カウンターの主役: いつもの回避・反撃の動きの代わりに、大技の動き（跳躍・乱舞・詠唱）
     const ult = this.ultOf(w);
     const uHero = ult?.f === v.f && v.alive;
@@ -98,10 +100,11 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 ox += Math.sin(this.frame * 1.7) * 1;
         }
     }
-    // 見本帳で武器ごとに選んだ動き（見本帳は 0.40 で当たる。本番は IMPACT＝0.42 ＋ 届くまでの遅れ）
+    // 見本帳で武器ごとに選んだ動き。型の「当たる瞬間」（dodgetiming.ts の LAB_CONTACT）が、攻撃の届く時刻にくるよう、型の時刻をずらす
     const proto = evaded && !uHero && v.alive ? this.protoOf(w, v.f) : null;
-    const protoT = phase - lag - 0.02;
-    const protoOn = !atkOn && !!proto && !this.noThreat(w) && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.12 - lag : 0.86);
+    const shift = plan ? plan.shift : lag + 0.02; // 基本の4場面でないとき（霧・記憶など）は、今までどおり
+    const protoT = plan ? labTime(plan, phase) : phase - shift; // 溜めは、攻撃が見えてから（dodgetiming.ts の labTime。間に合わないときは速回し）
+    const protoOn = !atkOn && !!proto && !this.noThreat(w) && protoT > 0.12 && protoT < Math.min(0.86, at ? at.t - 0.1 - shift : 0.86);
     const calm = this.noThreat(w); // 攻撃が飛んでこない回（隙あり・外した人のいない大技）: よけたり受けたりせず、反撃に向けて構えるだけ
     if (calm && evaded && !uHero && v.alive) {
         const k = win(0.34, 0.46) * (1 - win(0.46, 0.52));
@@ -113,8 +116,10 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
     if (protoOn || calm) { /* 動きは drawInArena が描く・攻撃が来ないので身のこなしはしない */ }
     else if (evaded && !uHero && holdSc !== 'spell' && holdSc !== 'illusion') {
         const co = counterFor(this.script.theme?.kind, this.respScene(w)); // ボスごとの対応技（正解の動きに合わせた基本の場面）
-        const u = win(0.36 + lag, 0.56 + lag); // 回避の全体進行
-        if (u > 0 && u < 1) {
+        const mid = 0.46 + lag;
+        const u = plan ? fallbackU(plan, phase) : win(mid - FALLBACK_HALF, mid + FALLBACK_HALF); // 回避の全体進行（攻撃が見えてから動き出し、山場で 0.5）
+        const crawlK = plan?.hold ? ease(win(plan.hold[0] - (plan.down ?? CRAWL.down), plan.hold[0])) * (1 - ease(win(plan.hold[1], plan.hold[1] + CRAWL.up))) : -1; // 伏せる: 攻撃が見えてから伏せ、届く少し前に伏せきり、通りすぎるまで伏せている
+        if ((u > 0 && u < 1) || crawlK > 0) {
             const arc = Math.sin(u * Math.PI); // 0→1→0 のなめらかな山
             switch (this.evadeOf(w, v.f)) {
                 case 'jump': { // 高く跳んで宙返り
@@ -130,8 +135,9 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                     break;
                 }
                 case 'crawl': { // 地面に伏せる
-                    oy += arc * 6;
-                    tilt = arc * 1.2;
+                    const k = crawlK >= 0 ? crawlK : arc;
+                    oy += k * 6;
+                    tilt = k * 1.2;
                     set('guard', 1);
                     break;
                 }
@@ -309,7 +315,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         pat = { ...base, pattern: aPat, resp: 'cut', attack: true, reach: this.bossFoot.x + 42 + row * 12 + col * 8, reachY: this.bossFoot.y - 14 + row * 28, t: aT };
     }
     else if (protoOn)
-        pat = { ...base, pattern: proto.pattern, resp: proto.resp, t: protoT };
+        pat = { ...base, pattern: proto.pattern, resp: proto.resp, t: protoT, escape: plan?.escape }; // escape: 落ちる場所から抜けきる横の量（arrival.ts）
     // 跳んでいるあいだ、足もとの輪は床に残す（床の高さは変わる: 斬りかかりでボスの前の列へ寄るとき）
     const body = (pat && probeInArena(pat)) || { x, y: y + 1, ground: v.y + groundDy + 1 };
     return { body, x, y, flash, flip, action, act01, rot, alpha, ghosts, away, uHero, pat, fx, hidden: false };

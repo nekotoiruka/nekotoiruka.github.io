@@ -7,7 +7,7 @@ import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
 import { setUltQuiet } from './ultkit.js';
 import { ELEMENT_COLOR, isUltScene, ULT_SCENES, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
-import { AGILE, chainTiming, GAG, IMPACT, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
+import { AGILE, chainTiming, GAG, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
 import { bossBar, bubble, chainDmg, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
@@ -16,12 +16,14 @@ import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
 import { aura, barrierFx, decoyGag, drawFighter, dust, fighterPose, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
-import { bandWave, bandWindow, cues, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
-import { bossWeakness, counterFor, respondScene } from './bossmoves.js';
+import { bandWave, bandWindow, cues, dodgePlanOf, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
+import { bossWeakness, counterFor, isBaseScene, respondScene } from './bossmoves.js';
 import { bossLine, chainBeats } from './captions.js';
 import { introBoss, introFighter, introHud, introLen, introPlan } from './arena-intro.js';
 const BOSS_RED = '#ff6b7a';
-import { attackPattern, hurtPattern, protoPattern, respOf } from './motionlab.js';
+import { attackPattern, HIT_AT, hurtPattern, protoPattern, respOf } from './motionlab.js';
+import { counterEarliest } from './dodgetiming.js';
+const round3 = (v) => Math.round(v * 1000) / 1000;
 import { hurtFor } from './hurtmoves.js';
 import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
@@ -176,6 +178,8 @@ export class ArenaRenderer {
         const wv = this.script.waves[w];
         const scene = this.sceneOf(w);
         this.fxScene = scene;
+        if (wv && isBaseScene(scene))
+            return this.dodgeRetimed(w, wv);
         if (!wv || !isUltScene(scene))
             return wv;
         const key = `${w}:${[...this.mine].join(',')}`;
@@ -195,6 +199,43 @@ export class ArenaRenderer {
         const events = wv.events.map((e) => (e.type === 'attack' && at.has(e) ? { ...e, t: at.get(e) } : e.type === 'bossDown' ? { ...e, t: Math.max(e.t, last + 0.04) } : e.type === 'mvp' ? { ...e, t: Math.max(e.t, last + 0.03) } : e))
             .sort((a, b) => a.t - b.t);
         const out = { ...wv, events };
+        this.retimed.set(key, out);
+        return out;
+    }
+    /** 基本の4場面: 正しく動けた人の反撃は、自分の回避（伏せる・跳ぶ・受ける）を見せ終え、討伐隊のみんなに攻撃が届いてから始める（#102。dodgetiming.ts の counterEarliest）。
+     *  台本の反撃の時刻が早すぎる人だけ、反撃の時刻を遅らせる。順番・ダメージは台本のまま。
+     *  反撃の型は、当たる瞬間の (HIT_AT − 0.02) ÷ 3 だけ前から動きはじめる（arena-fighter.ts の aT） */
+    dodgeRetimed(w, wv) {
+        const key = `d${w}:${this.motionProto ? 1 : 0}`;
+        const hit = this.retimed.get(key);
+        if (hit)
+            return hit;
+        const evaders = new Set(wv.events.filter((e) => e.type === 'evade').map((e) => e.f));
+        const atks = wv.events.filter((e) => e.type === 'attack').sort((a, b) => a.t - b.t);
+        // 討伐隊のみんな（この回に立っている人）への、攻撃の届く時刻
+        const party = this.script.fighters.map((fi, i) => (!fi.off && (w === 0 || this.script.waves[w - 1]?.aliveAfter[i] !== false) ? this.dodgePlanOf(w, i) : null)).filter((q) => !!q);
+        const need = (e) => {
+            const pat = this.attackProtoOf(w, e.f), lead = ((pat ? HIT_AT[pat.id] ?? 0.42 : 0.42) - 0.02) / 3;
+            return counterEarliest(evaders.has(e.f) ? this.dodgePlanOf(w, e.f) : null, party, lead);
+        };
+        const at = new Map();
+        let prev = 0;
+        for (const e of atks) {
+            const t = Math.max(e.t, need(e), prev + (prev ? 0.015 : 0));
+            at.set(e, t);
+            prev = t;
+        }
+        // 遅らせて 0.92 を越えたら、はじめの反撃からの間を縮める
+        const first = atks.length ? at.get(atks[0]) : 0, last = Math.max(0, ...at.values());
+        if (last > 0.92 && atks.length > 1)
+            for (const e of atks)
+                at.set(e, first + ((at.get(e) - first) * (0.92 - first)) / (last - first));
+        const changed = atks.some((e) => Math.abs(at.get(e) - e.t) > 1e-6);
+        const out = !changed ? wv : (() => {
+            const lastT = Math.max(0, ...at.values());
+            const events = wv.events.map((e) => (e.type === 'attack' && at.has(e) ? { ...e, t: round3(at.get(e)) } : e.type === 'bossDown' ? { ...e, t: Math.max(e.t, lastT + 0.04) } : e.type === 'mvp' ? { ...e, t: Math.max(e.t, lastT + 0.03) } : e)).sort((a, b) => a.t - b.t);
+            return { ...wv, events };
+        })();
         this.retimed.set(key, out);
         return out;
     }
@@ -320,18 +361,23 @@ export class ArenaRenderer {
     bandWave = bandWave; // arena-timing.ts
     bandWindow = bandWindow; // arena-timing.ts
     slowFactor = slowFactor; // arena-timing.ts
+    dodgePlanOf = dodgePlanOf; // arena-timing.ts
     stopCache = new Map();
+    planCache = new Map(); // 回避の段取り（arena-timing.ts の dodgePlanOf）
     hitStop = hitStop; // arena-timing.ts
     lagOf = lagOf; // arena-timing.ts
     evadeOf = evadeOf; // arena-timing.ts
     /** ボスの攻撃への対応（ガード・回避・ジャンプ・反撃）を、モーション見本帳で武器ごとに選んだ動きで見せる。false で以前の動き（演出ギャラリーで見比べる） */
     motionProto = true;
+    /** 見本帳用: 場面・冒険者ごとに型を差し替える（undefined なら、ふだんの選び方） */
+    protoPick = null;
     protoOf(w, f) {
         if (!this.motionProto)
             return null;
         const co = counterFor(this.script.theme?.kind, this.respScene(w));
         const resp = co ? respOf(co.evade, co.fx) : null;
-        const pattern = resp ? protoPattern(resp, this.looks[f].weapon, w) : null; // 候補が2つある武器は、回ごとに交互に
+        const picked = this.protoPick?.(w, f);
+        const pattern = resp ? (picked !== undefined ? picked : protoPattern(resp, this.looks[f].weapon, w)) : null; // 候補が2つある武器は、回ごとに交互に
         return pattern && resp ? { pattern, resp } : null;
     }
     /** 外した人の被弾の動き（見本帳の「被弾」の型。割り当ては hurtmoves.ts）。null なら以前の動き（小さく下がる）。
@@ -477,14 +523,8 @@ export class ArenaRenderer {
                 this.lights.push({ x: b.x, y: b.y - 15, r: 46, a: 0.85, col: '#ffd166' });
             }
         }
-        // --- 狙われた警告（隊列はないので、討伐隊ぜんたいに一つ） ---
-        const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（狙う列の警告・攻撃のエフェクトを出さない）
-        const tele = atk === 'treasure' || chain || dazed ? 0 : clamp01((phase - 0.26) / 0.06) * (phase < IMPACT + 0.04 ? 1 : 0);
-        const xs = s.fighters.filter((fi) => !fi.off).map((fi) => fi.slot.x);
-        if (tele > 0 && xs.length) {
-            ctx.fillStyle = `rgba(255,60,80,${(0.1 + 0.12 * (Math.sin(this.frame / 3) * 0.5 + 0.5)) * tele})`;
-            ctx.fillRect(Math.round(Math.min(...xs) - 30), 84, Math.round(Math.max(...xs) - Math.min(...xs) + 60), 128);
-        }
+        // 狙われた範囲を四角く染める警告は出さない（ボスの攻撃の予兆そのもので見せる）
+        const dazed = this.sceneOf(w) === 'opening'; // 隙あり: ボスはよろめいていて、攻撃してこない（攻撃のエフェクトを出さない）
         // --- 場面演出の準備（課題の種類ごと） ---
         const scene = this.sceneOf(w);
         const cm = s.cases[wv.caseIndex];
@@ -498,6 +538,8 @@ export class ArenaRenderer {
             ult: ult ? { hero: ult.f, weapon: ult.f !== undefined ? this.looks[ult.f].weapon : undefined, look: ult.f !== undefined ? this.looks[ult.f] : undefined, dmg: ult.at?.dmg ?? 0, crit: !!ult.at?.crit, skill: ult.st?.used.skills.find((x) => x !== '？') ?? '' } : undefined,
             lights: this.lights,
             partyX: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)),
+            // 1人だけ見せる窓でも、蝙蝠の群れの通り道は討伐隊ぜんたいの段で決める（arena-timing.ts の dodgePlanOf と同じ並び）
+            ...(this.solo !== null ? { solo: this.solo, lanes: [...new Set(s.fighters.map((fi, i) => (!fi.off && (w === 0 || s.waves[w - 1]?.aliveAfter[i] !== false) ? Math.round(fi.slot.y) : null)).filter((y) => y !== null))] } : {}),
             bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;

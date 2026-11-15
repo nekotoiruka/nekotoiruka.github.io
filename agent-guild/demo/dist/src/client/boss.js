@@ -140,7 +140,7 @@ export function renderBoss(p, kind = 'dragon') {
 const cache = new Map();
 export function bossCanvas(p, flash = false, kind = 'dragon') {
     const q = (v) => Math.round(v * 2) / 2;
-    const key = `${kind}|${q(p.bob)}|${q(p.lean)}|${q(p.mouth)}|${q(p.wing)}|${q(p.tail)}|${q(p.squash)}|${p.eye}|${p.tint ?? ''}|${flash ? 1 : 0}`;
+    const key = `${kind}|${q(p.bob)}|${q(p.lean)}|${q(p.mouth)}|${q(p.wing)}|${q(p.tail)}|${q(p.squash)}|${p.eye}|${p.tint ?? ''}|${p.hide ?? 0}|${flash ? 1 : 0}`;
     let c = cache.get(key);
     if (c)
         return c;

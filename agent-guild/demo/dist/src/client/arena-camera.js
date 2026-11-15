@@ -1,6 +1,7 @@
 import { bump, GAG, IMPACT, lerp, win01 } from './arena-common.js';
 import { shoutEndT, ultCam, ultShake, verseAt } from './scenes.js';
 import { shakeScale } from './motion.js';
+import { counterFor } from './bossmoves.js';
 export function updateCamera(c) {
     const s = this.script;
     const { w: AW, h: AH } = s.arena;
@@ -15,6 +16,16 @@ export function updateCamera(c) {
             tz = 1.4;
             tx = (v.x + this.bossBody.x) / 2;
             ty = (v.y + this.bossBody.y) / 2 - 12;
+            // 背後から来る攻撃（振り向いて受ける・斬り返す）は、ボスではなく冒険者と背後を画面に入れる
+            const ev = counterFor(s.theme?.kind, this.respScene(w))?.evade;
+            if (ev === 'turn' || ev === 'turnCut') {
+                tx = v.x + 4;
+                ty = v.y - 24;
+            }
+            // 身のこなしで横へ抜けた体（前転・残像よけなど。arrival.ts の escapeDx）も、画面に入れる
+            const plan = this.dodgePlanOf(w, ov.f), half = AW / tz / 2;
+            if (plan)
+                tx = Math.max(tx, Math.min(v.x + Math.max(0, plan.escape) + 20, AW) - half);
         }
     }
     const wide = !!ov || ['spell', 'ougi', 'rush', 'summon', 'parry', 'seal', 'awaken', 'opening', 'chain'].includes(this.sceneOf(w) ?? '');

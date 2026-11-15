@@ -4,6 +4,7 @@ import { IMPACT, clamp01, lerp, win01 } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from './boss.js';
 import { reducedMotion } from './motion.js';
+import { flameBall, slashMark } from './fxkit.js';
 import { bossMotion, makeAt } from './bossmotion.js';
 // --- ボス: 構え → 攻撃 → 被弾でひるむ → 撃破で倒れる ---
 export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing = false, scene) {
@@ -90,7 +91,25 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
     // 足場（海面・霧の台座）は、体が跳ねても・傾いても動かさない。体は足場の線より上だけ描き、足場の帯は絵の下から切り出して同じ場所に描く
     const gr = STYLE[kind].ground;
     const moved = transformed || dy !== 0 || tr.y !== 0;
+    // 海の足場（クラーケン）: 動くときは、体だけの絵を動かし、海は動かさない（波が体についていかないように。#102）
+    const sea = !!gr?.sea && moved;
+    const bodyOnly = sea ? bossCanvas({ ...p, hide: 2 }, flash && !reducedMotion(), kind) : body;
     const drawBody = (offX, a, withGround = true) => {
+        if (sea) {
+            ctx.globalAlpha = a;
+            if (s.theme?.filter || s.theme?.hue)
+                ctx.filter = s.theme.filter ?? `hue-rotate(${s.theme.hue}deg)`;
+            ctx.save();
+            ctx.translate(Math.round(s.boss.x + dx + tr.x + offX), Math.round(s.boss.y + 2 + dy + tr.y));
+            ctx.rotate(rot);
+            ctx.scale(Math.max(0.12, Math.abs(face)) * sx * (face < 0 ? -1 : 1), sy);
+            ctx.drawImage(bodyOnly, -BW / 2, -(BH - 2));
+            ctx.restore();
+            if (withGround)
+                ctx.drawImage(bossCanvas({ ...BOSS_IDLE, bob: p.bob, eye: 'open', hide: 3 }, false, kind), Math.round(s.boss.x - BW / 2), Math.round(s.boss.y - BH + 2));
+            ctx.filter = 'none';
+            return;
+        }
         ctx.globalAlpha = a;
         if (s.theme?.filter || s.theme?.hue)
             ctx.filter = s.theme.filter ?? `hue-rotate(${s.theme.hue}deg)`; // ボスごとの色合い
@@ -186,37 +205,39 @@ export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items) {
         // 竜以外のボスは、ボスごとの飛び道具（蝙蝠・糸・矢・墨・岩・氷など）。竜は今までどおり
         if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
             continue;
-        if (atk === 'claw') {
-            const k = clamp01((phase - 0.4) / 0.06);
-            if (k > 0 && k < 1) {
+        if (atk === 'claw') { // 竜の爪: ひとり分の、三本の爪痕
+            const k = clamp01((phase - 0.4) / 0.06), fade = 1 - clamp01((phase - 0.48) / 0.1);
+            if (k > 0 && fade > 0) {
                 ctx.save();
-                ctx.globalAlpha = 1 - k * 0.5;
-                ctx.lineWidth = 2;
-                for (let i = 0; i < 3; i++) {
-                    ctx.strokeStyle = i === 1 ? '#ffffff' : '#ff6b6b';
-                    const ox = stopX - 10 + i * 5, oy = v.y - 28;
-                    ctx.beginPath();
-                    ctx.moveTo(ox, oy);
-                    ctx.lineTo(ox + 14 * k, oy + 22 * k);
-                    ctx.stroke();
-                }
+                ctx.globalAlpha = fade * 0.8;
+                for (let i = 0; i < 3; i++)
+                    slashMark(ctx, stopX - 10 + i * 5, v.y - 30, stopX - 2 + i * 5, v.y - 4, 2.5, -2, clamp01(k * 1.4 - i * 0.15), { line: '#1a0208', dark: '#8a0f22', body: '#ff5a6e', hi: '#ffe0e8' });
                 ctx.restore();
             }
         }
-        if (atk === 'breath') {
-            const k = clamp01((phase - 0.34) / 0.12);
-            if (k > 0 && k < 1) {
-                for (let i = 0; i < 14; i++) {
-                    const t = clamp01(k * 1.4 - i * 0.04);
-                    if (t <= 0)
+        if (atk === 'breath') { // 竜の炎: 炎のかたまりが飛んで（0.38〜0.43）、当たった人を包んで燃える（〜0.66。場面の炎の奔流と同じ時刻に消える）
+            const k = clamp01((phase - 0.38) / 0.05), burn = clamp01((phase - 0.43) / 0.23);
+            if (k > 0 && k < 1)
+                for (let i = 0; i < 3; i++) {
+                    const t = clamp01(k * 1.25 - i * 0.12);
+                    if (t <= 0 || t >= 1)
                         continue;
-                    const x = lerp(mouth.x, stopX, t), y = lerp(mouth.y, v.y - 12, t) + rng.range(-5, 5) * t;
-                    const r = 1 + t * 3;
-                    ctx.globalAlpha = 1 - Math.max(0, t - 0.85) * 5;
-                    ctx.fillStyle = t > 0.8 ? '#ff5a3a' : t > 0.4 ? '#feae34' : '#ffe27a';
-                    ctx.fillRect(Math.round(x - r), Math.round(y - r), Math.round(r * 2), Math.round(r * 2));
+                    flameBall(ctx, lerp(mouth.x, stopX, t), lerp(mouth.y, v.y - 12, t) + Math.sin(t * 9 + i) * 2, 2 + t * 3.5 - i * 0.6);
                 }
-                ctx.globalAlpha = 1;
+            if (k >= 1 && burn < 1) {
+                const fade = 1 - clamp01((burn - 0.6) / 0.4);
+                if (blocked) { // 鏡ではじかれた炎は、手前で上下に割れて散る
+                    for (let i = 0; i < 5; i++) {
+                        const u = (burn * 2.2 + i / 5) % 1, sgn = i % 2 ? 1 : -1;
+                        flameBall(ctx, stopX - 4 - u * 10, v.y - 12 + sgn * u * 16, (3 - u * 2.4) * fade, fade);
+                    }
+                }
+                else { // 体を包んで燃える炎（下から立ちのぼる）
+                    for (let i = 0; i < 6; i++) {
+                        const u = (burn * 2.6 + i / 6) % 1;
+                        flameBall(ctx, v.x - 7 + (i % 3) * 7 + Math.sin(this.frame / 2 + i) * 1.5, v.y - 2 - u * 22, (4.2 - u * 3.6) * fade, fade);
+                    }
+                }
             }
         }
         if (atk === 'meteor') {
