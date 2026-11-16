@@ -299,7 +299,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         // 倒れたまま、うっすら残る（正しく動ければ起き上がる）
         alpha = 1 - Math.min(0.45, Math.max(0, k - 0.75) * 2);
     }
-    const winNow = this.winner === v.f && v.alive && (outro > 0 || (w === s.waves.length - 1 && phase > (s.waves[w].events.find((e) => e.type === 'winner')?.t ?? 2)));
+    const winNow = (this.allWin || this.winner === v.f) && v.alive && (outro > 0 || (w === s.waves.length - 1 && phase > (s.waves[w].events.find((e) => e.type === 'winner')?.t ?? 2)));
     if (winNow)
         set('victory', (this.frame % 36) / 36);
     const x = v.x + ox, y = v.y + oy;

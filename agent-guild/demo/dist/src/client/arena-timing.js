@@ -1,3 +1,5 @@
+// 討伐画面の描画: 時間まわり（スロー・ヒットストップ・効果音の合図・決着の時刻）。ArenaRenderer のメソッド（this を受け取る関数）を、arena.ts から取り付ける
+import { focusOf } from './reach.js';
 import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND } from './arena-common.js';
 import { bossCue, counterFor, isBaseScene } from './bossmoves.js';
 import { dodgePlan } from './dodgetiming.js';
@@ -124,7 +126,7 @@ export function lagOf(w, f) {
 }
 /** 冒険者ひとりの回避の段取り（攻撃が届く時刻・回避の山場・見本帳の型のずらし）。基本の4場面だけ（ほかは null） */
 export function dodgePlanOf(w, f) {
-    const key = w * 1000 + f + (this.motionProto ? 0.5 : 0);
+    const key = w * 1000 + f + (this.motionProto ? 0.5 : 0) + (this.solo !== null ? (this.solo + 1) * 1e6 : 0);
     if (this.planCache.has(key))
         return this.planCache.get(key);
     const sc = this.sceneOf(w);
@@ -135,6 +137,8 @@ export function dodgePlanOf(w, f) {
         const ctx = {
             kind: (s.theme?.kind ?? 'dragon'), scene: sc, x: me.slot.x, y: me.slot.y, f, idx: Math.max(0, on.indexOf(f)), n: on.length,
             lanes: [...new Set(on.map((i) => Math.round(s.fighters[i].slot.y)))], foot: this.bossFoot, W: 384, partyX: Math.max(...s.fighters.filter((x) => !x.off).map((x) => x.slot.x)), xs: on.map((i) => s.fighters[i].slot.x),
+            // 大きな攻撃が狙う所（bossfx.ts の aimOf と同じ: 1人に寄る窓の人 → 自分の冒険者 → 討伐隊のまん中）
+            aim: focusOf(on.map((i) => ({ f: i, x: s.fighters[i].slot.x, y: s.fighters[i].slot.y, alive: true, mine: this.mine.has(i) })), this.solo) ?? undefined,
         };
         plan = dodgePlan(ctx, this.evadeOf(w, f), this.protoOf(w, f)?.pattern.id ?? null);
     }

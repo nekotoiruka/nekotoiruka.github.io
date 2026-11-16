@@ -494,7 +494,8 @@ export function slashMark(ctx, x0, y0, x1, y1, w, bow, t, P) {
     const m = Math.max(2, Math.round(n * clamp01(t)));
     for (let i = 0; i <= m; i++) {
         const u = i / n, b = Math.sin(u * Math.PI) * bow;
-        pts.push([lerp(x0, x1, u) + nx * b, lerp(y0, y1, u) + ny * b, (w / 2) * Math.pow(Math.sin(u * Math.PI), 0.8)]);
+        const tip = t < 1 ? clamp01((Math.min(t, m / n) - u) / 0.16) : 1; // 途中で止まった・裂けていく途中の先は、とがらせる（丸い切り口にしない）
+        pts.push([lerp(x0, x1, u) + nx * b, lerp(y0, y1, u) + ny * b, (w / 2) * Math.pow(Math.sin(u * Math.PI), 0.8) * Math.sqrt(tip)]);
     }
     band(ctx, pts, P);
 }

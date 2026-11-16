@@ -1,10 +1,36 @@
 import { STYLE, spriteToWorld } from './bossstyle.js';
-import { DIVE_FALL, giantSweepGeo, krakenArmShape, krakenSweepK, spiderLegsAt } from './bossfx.js';
+import { DIVE_AIM_DX, DIVE_FALL, GOBLIN_CHARGE, VAMP_BATS_DY, STREAM_AT, streamAim, INK_OVER, RIP, SWEEP_AT, giantStompAt, giantSweepGeo, golemCrackPath, krakenArmShape, krakenSweepK, pathAt, ripMarks, ripX, spiderLegsAt } from './bossfx.js';
+import { GUARD, MEET } from './reach.js';
 import { bossMotion, makeAt } from './bossmotion.js';
 import { BW0, BH0 } from './bossstyle.js';
 import { dragonTailAt } from './scenes.js';
 import { clamp01, ease, hash, lerp } from './fxkit.js';
 export const IMPACT_T = 0.42;
+const aimOf = (c) => c.aim ?? { x: c.x, y: c.y };
+/** 段の一覧（上から順）と、この冒険者の段の番号（ゴブリンの突撃・地割れ。bossfx.ts の goblinLanes と同じ並び） */
+const laneOf = (c) => { const ls = c.lanes.length ? [...c.lanes].sort((p, q) => p - q) : [c.y]; let j = 0; ls.forEach((l, i) => { if (Math.abs(l - c.y) < Math.abs(ls[j] - c.y))
+    j = i; }); return { ls, j }; };
+/** 折れ線のうえで、x に来るまでの長さの割合 */
+function fracAtX(pts, x) {
+    const L = pts.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - pts[i].x, q.y - pts[i].y), 0);
+    let d = 0;
+    for (let i = 1; i < pts.length; i++) {
+        const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        if (pts[i].x >= x)
+            return clamp01((d + l * clamp01((x - pts[i - 1].x) / Math.max(1e-6, pts[i].x - pts[i - 1].x))) / L);
+        d += l;
+    }
+    return 1;
+}
+/** 大きな爪痕のうち、この冒険者のいちばん近くを通る一本（受け止める・横へ抜ける所の高さで） */
+export function ripNear(c) {
+    const kind = c.kind === 'vampire' ? 'vampire' : 'dragon', R0 = RIP[kind], ty = c.y + R0.at.dy, tx = c.x + R0.at.dx;
+    const ms = ripMarks(c.W, kind, aimOf(c));
+    let i = 0;
+    ms.forEach((m, k) => { if (Math.abs(ripX(m, ty) - tx) < Math.abs(ripX(ms[i], ty) - tx))
+        i = k; });
+    return { i, m: ms[i], x: ripX(ms[i], ty), y: ty, all: ms.map((m) => ripX(m, ty)) };
+}
 /** その攻撃が、画面で見えはじめる時刻（攻撃そのものが動きだす: 奔流を吐きはじめる・振りはじめる・割れ目が走りはじめる など）。
  *  回避の動き出し（溜めの始まり）と、反撃は、これより前にしない（攻撃を見てからよけたように見せる）。
  *  溜めの予兆（口に光が集まる・腕を振りかぶる）は「来るぞ」の合図で、攻撃そのものではないので、ここには入れない */
@@ -113,10 +139,9 @@ export function arrivalOf(c) {
             return fixed(IMPACT_T);
         }
         case 'claw': {
-            if (kind === 'dragon' || kind === 'vampire') { // 討伐隊ぜんたいを裂く大きな爪痕: まん中の爪痕が、自分の高さを通る時刻
-                const [i, y0, a0, a1, sp] = kind === 'dragon' ? [1, 48, 0.39, 0.45, 1.5] : [2, 60, 0.4, 0.45, 1.6];
-                const t = easeInv(clamp01((y - 12 - y0) / (214 - y0)));
-                return fixed(a0 + (a1 - a0) * clamp01((t + i * 0.12) / sp), 0.5);
+            if (kind === 'dragon' || kind === 'vampire') { // 討伐隊ぜんたいを裂く大きな爪痕: いちばん近くを通る爪痕の先が、自分の高さ（受ける・抜ける所）を通る時刻
+                const R0 = RIP[kind], { i, m, y: ty } = ripNear(c), t = easeInv(clamp01((ty - m.y0) / (m.y1 - m.y0)));
+                return fixed(R0.a0 + (R0.a1 - R0.a0) * clamp01((t + i * 0.12) / R0.sp), 0.5);
             }
             if (kind === 'spider')
                 return fixed(0.4 + 0.07 * 0.6, 0.5); // 牙が閉じる
@@ -127,7 +152,7 @@ export function arrivalOf(c) {
             if (kind === 'giant')
                 return fixed(0.38 + 0.09 * clamp01((1 + (c.idx % Math.max(1, Math.min(6, c.n))) * 0.04) / 1.2), 0.5); // 槍が刺さる
             if (kind === 'kraken')
-                return scan(0.35, 0.5, (p) => { const k = krakenSweepK(p); return distTo(krakenArmShape({ foot, phase: p }, k.sw, k.back).map(([px, py]) => ({ x: px, y: py })), x, y - 2); }, 12); // 触手の薙ぎ
+                return scan(0.35, 0.5, (p) => { const k = krakenSweepK(p); return distTo(krakenArmShape({ foot, phase: p, aim: aimOf(c) }, k.sw, k.back).map(([px, py]) => ({ x: px, y: py })), x, y - 2); }, 12); // 触手の薙ぎ
             return fixed(IMPACT_T);
         }
         case 'dive': {
@@ -137,26 +162,27 @@ export function arrivalOf(c) {
                 return fixed(0.44, 0.5); // 投げた岩が落ちる
             if (kind === 'kraken')
                 return fixed(0.42, 0.5); // 足もとから触手が突き上がる
-            if (kind === 'golem') { // 地割れ: 着地（0.42）から右へ走る割れ目が、自分の x に届く時刻
-                const x0 = foot.x + 44, len = (W - foot.x) * 0.95;
-                return fixed(0.42 + 0.08 * easeInv(clamp01((x - x0) / (len * 0.98))), 0.56);
+            if (kind === 'golem') { // 地割れ: 着地（0.42）から、自分の段へ走る割れ目（bossfx.ts の golemCrackPath）が、自分の x に届く時刻
+                const { ls, j } = laneOf(c);
+                return fixed(0.42 + 0.08 * easeInv(fracAtX(golemCrackPath({ foot, W }, ls[j], j), x)), 0.56);
             }
-            if (kind === 'giant') { // 踏みつけ: 床を走る衝撃の輪が、自分の x に届く時刻
-                const b = clamp01((x - foot.x - 10 - 16) / 300);
-                return fixed(0.4 + 0.2 * b, 0.4 + 0.2 * b + 0.06);
+            if (kind === 'giant') { // 踏みつけ: 床を走る衝撃の輪が、自分の x に届く時刻（その時刻に、足もとから氷のとげが突き出す）
+                const t0 = giantStompAt({ foot }, x);
+                return fixed(t0, t0 + 0.06);
             }
             return fixed(IMPACT_T);
         }
         case 'tail': {
             if (kind === 'dragon')
-                return scan(0.34, 0.5, (p) => distTo(dragonTailAt({ foot, phase: p }).pts.map(([px, py]) => ({ x: px, y: py })), x, y - 2), 12);
+                return scan(0.34, 0.5, (p) => distTo(dragonTailAt({ foot, phase: p, aim: aimOf(c) }).pts.map(([px, py]) => ({ x: px, y: py })), x, y - 2), 12);
+            // 脚の薙ぎはらい: 脚が、迎え撃つ所（MEET）を通る時刻
             if (kind === 'spider')
-                return scan(0.35, 0.5, (p) => Math.min(...spiderLegsAt({ ...sa, phase: p }).map((l) => distTo(l.w, x, y - 2))), 10);
+                return scan(0.35, 0.5, (p) => Math.min(...spiderLegsAt({ ...sa, phase: p, aim: aimOf(c) }).map((l) => distTo(l.w, x + MEET.dx, y + MEET.dy))), 12);
             if (kind === 'kraken')
                 return fixed(0.42, 0.5); // 巻き取り: 0.4 に足もとへ届き、0.38〜0.5 で巻きつく
-            if (kind === 'golem' || kind === 'giant') { // 大きな弧の先の向きが、自分の向きを通る時刻
-                const pivot = spriteToWorld(foot, kind === 'golem' ? [58, 44] : [60, 42]);
-                const g = giantSweepGeo(sa, pivot), af = Math.atan2((y - g.cy) / g.sq, x - pivot.x);
+            if (kind === 'golem' || kind === 'giant') { // 大きな弧の先の向きが、自分の所（伏せた頭の上・迎え撃つ所）の向きを通る時刻
+                const pivot = spriteToWorld(foot, kind === 'golem' ? [58, 44] : [60, 42]), at = SWEEP_AT[kind];
+                const g = giantSweepGeo(sa, pivot, aimOf(c), at), af = Math.atan2((y + at.dy - g.cy) / g.sq, x + at.dx - pivot.x);
                 const p = 0.35 + 0.11 * easeInv((af - g.a0) / (g.a1 - g.a0));
                 return fixed(p, p + 0.05);
             }
@@ -164,9 +190,10 @@ export function arrivalOf(c) {
                 const d = hash(c.f, 3) * 0.03;
                 return fixed(0.39 + d + 0.05 * 0.5, 0.47 + d);
             } // 背後の蝙蝠が襲いかかる
-            if (kind === 'goblin') { // 突撃: 先頭のゴブリンが自分の x に来る時刻
-                const u = easeInv(clamp01((x - foot.x - 10 + 20) / (W + 70 - foot.x)));
-                return fixed(0.3 + 0.22 * u, 0.3 + 0.22 * u + 0.08);
+            if (kind === 'goblin') { // 突撃: 自分の段の先頭のゴブリンの槍の先が、受け止める所（GUARD）に来る時刻（bossfx.ts の goblin.tail）
+                const { j } = laneOf(c), lead = x + GUARD.dx - GOBLIN_CHARGE.reach + GOBLIN_CHARGE.back + GOBLIN_CHARGE.stag(j);
+                const u = easeInv(clamp01((lead - foot.x - 10) / (W + 70 - foot.x)));
+                return fixed(GOBLIN_CHARGE.t0 + 0.22 * u, GOBLIN_CHARGE.t0 + 0.22 * u + 0.08);
             }
             return fixed(IMPACT_T);
         }
@@ -174,38 +201,139 @@ export function arrivalOf(c) {
     return fixed(IMPACT_T);
 }
 void lerp;
-/** 攻撃が落ちる・叩きつける「場所」（その場所から逃げればかわせる攻撃だけ）。中心 x と、かかる半径 r（床の上の横の幅）。
- *  真上から降る急降下（竜・伯爵・大蜘蛛）・投石・岩の拳。それ以外（薙ぎ払い・奔流・矢の雨など）は null */
+/** 攻撃が落ちる・叩きつける「場所」（その場所から逃げればかわせる攻撃だけ）。中心 x と、かかる半径 r（床の上の横の幅）の一覧。
+ *  急降下（伯爵・大蜘蛛）・投石は狙う人（aim）の所、糸の網・落とし穴・岩の拳・氷の槍・氷のとげは自分の立ち位置、竜の爪痕は自分の高さを通る爪痕ぜんぶ。
+ *  それ以外（薙ぎ払い・奔流・矢の雨など）は空 */
+export function impactZones(c) {
+    const { kind, scene } = c;
+    if (scene === 'dive' && (kind === 'dragon' || kind === 'vampire' || kind === 'spider'))
+        return [{ x: aimOf(c).x + DIVE_AIM_DX, r: 58 }]; // bossfx.ts の fallingBoss（体の幅 96 を、着地のつぶれで少し広げた半分）
+    if (scene === 'dive' && kind === 'goblin')
+        return [{ x: aimOf(c).x, r: 22 }]; // 投石: 狙う人の足もとに落ちる大岩と砕けるかけら
+    if (scene === 'dive' && kind === 'giant')
+        return [{ x: c.x, r: 9 }]; // 足もとから突き出す氷のとげ
+    if (scene === 'claw' && kind === 'golem')
+        return [{ x: c.x, r: 22 }]; // 岩の拳: 立ち位置に落ちる（拳と指の幅）
+    if (scene === 'claw' && kind === 'goblin')
+        return [{ x: c.x, r: 15 }]; // 落とし穴
+    if (scene === 'claw' && kind === 'giant')
+        return [{ x: c.x, r: 16 }]; // 氷の槍が刺さる所（穂先が少し先まで出る）
+    if (scene === 'claw' && kind === 'dragon')
+        return ripNear(c).all.map((x) => ({ x, r: 9 })); // 爪痕（自分の高さを通る所）
+    if (scene === 'breath' && kind === 'spider')
+        return [{ x: c.x, r: 24 }]; // 糸の網（bossfx.ts の webNet の半径）
+    return [];
+}
+/** いちばん近い落ちる場所（なければ null） */
 export function impactZone(c) {
-    if (c.scene === 'dive' && (c.kind === 'dragon' || c.kind === 'vampire' || c.kind === 'spider'))
-        return { x: c.W * 0.68, r: 58 }; // bossfx.ts の fallingBoss（体の幅 96 を、着地のつぶれで少し広げた半分）
-    if (c.scene === 'dive' && c.kind === 'goblin') {
-        const xs = c.xs?.length ? c.xs : [c.x];
-        return { x: xs.reduce((a, b) => a + b, 0) / xs.length, r: 22 };
-    } // 投石: 討伐隊のまん中に落ちる大岩と砕けるかけら
-    if (c.scene === 'claw' && c.kind === 'golem')
-        return { x: c.x - 16, r: 16 }; // 岩の拳: 正しく動けた人の少し手前に落ちる
-    return null;
+    const zs = impactZones(c);
+    return zs.length ? zs.reduce((b, z) => (Math.abs(z.x - c.x) < Math.abs(b.x - c.x) ? z : b)) : null;
 }
 /** 身のこなし（前転・バックステップ・残像よけ・変わり身）で、体を横へ動かす量（画面のドット。+ が右＝ボスから離れる向き）。
- *  落ちる場所があれば、そこから体（半幅 8）が抜けきる所まで。なければ、ボスから離れる向きへ def */
+ *  落ちる場所があれば、どの場所からも体（半幅 8）が抜けきる所まで。なければ、ボスから離れる向きへ def */
 export function escapeDx(c, def = 30) {
-    const z = impactZone(c), lo = 150, hi = c.W - 10;
+    const zs = impactZones(c), lo = 150, hi = c.W - 10;
     const fit = (dx) => c.x + dx >= lo && c.x + dx <= hi;
-    if (!z)
+    if (!zs.length)
         return fit(def) ? def : -def;
-    const need = z.r + 8, first = c.x >= z.x ? 1 : -1;
-    // もともと落ちる場所の外にいる人は、そこから離れる向きへ（端に近ければ、動ける分だけ）
-    if (Math.abs(c.x - z.x) >= need) {
-        const room = first > 0 ? hi - c.x : c.x - lo;
-        return first * Math.max(0, Math.min(def, room));
+    const clear = (dx) => zs.every((z) => Math.abs(c.x + dx - z.x) >= z.r + 8);
+    const z = impactZone(c), first = c.x >= z.x ? 1 : -1;
+    // 離れる向きへ def から遠くへ → 離れる向きへ近くへ（端に近いとき）→ 逆の向きへ
+    for (const [dir, ms] of [[first, range(def, 140, 2)], [first, range(def - 2, 0, -2)], [-first, range(def, 140, 2)]])
+        for (const m of ms)
+            if (fit(dir * m) && clear(dir * m))
+                return dir * m;
+    return first * def;
+}
+const range = (a, b, st) => { const o = []; for (let v = a; st > 0 ? v <= b : v >= b; v += st)
+    o.push(v); return o; };
+/** 攻撃がこの冒険者に届く瞬間（t0）に、攻撃のいちばん当たる所（画面の座標）と、かかる幅 r。
+ *  正しく動けた人への攻撃（受け止められる・迎え撃たれる・元いた所に当たる）として。大きな攻撃は aim（ないときはこの冒険者）を狙う。
+ *  test/dodge-timing.test.ts が、回避の型（受ける所・迎え撃つ所・抜ける量・跳ぶ高さ・伏せる高さ）と合っているかを確かめる */
+export function strikeOf(c) {
+    const { kind, scene, x, y, foot, W } = c, aim = aimOf(c), a = arrivalOf(c);
+    const near = (pts, px, py) => { let b = pts[0], bd = 1e9; for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i], p1 = pts[i + 1], dx = p1.x - p0.x, dy = p1.y - p0.y, l2 = dx * dx + dy * dy || 1, t = clamp01(((px - p0.x) * dx + (py - p0.y) * dy) / l2), q = { x: p0.x + dx * t, y: p0.y + dy * t }, d = Math.hypot(q.x - px, q.y - py);
+        if (d < bd) {
+            bd = d;
+            b = q;
+        }
+    } return b; };
+    // 奔流: 自分の列（x）を通る、まん中の筋（広がりの 0.6）。下がり方と広がりは、狙う人を通るように（bossfx.ts の streamAim）
+    const stream = (S) => {
+        const mo = makeAt(foot, bossMotion(kind, 'breath', 'breath', a.t0), BW0, BH0)(STYLE[kind].mouth[0], STYLE[kind].mouth[1]);
+        const sa = streamAim(mo, W, aim.x + S.dx, aim.y + S.dy, S.drop, S.spread), u = Math.max(0.05, clamp01((x + S.dx - mo.x - 4) / (W + 30 - mo.x)));
+        return { x: x + S.dx, y: mo.y + 2 + sa.drop * u, r: 0.6 * sa.spread * Math.pow(u, 0.9), band: true };
+    };
+    const at = (dx, dy, r = 6) => ({ x: x + dx, y: y + dy, r });
+    switch (scene) {
+        case 'breath':
+            if (kind === 'dragon')
+                return stream(STREAM_AT.dragon);
+            if (kind === 'giant')
+                return stream(STREAM_AT.giant);
+            if (kind === 'vampire') {
+                const { ls, j } = laneOf(c);
+                return { x, y: ls[j] - VAMP_BATS_DY, r: 6 };
+            } // 蝙蝠の群れは、段の頭の高さを通る
+            if (kind === 'spider')
+                return at(0, -12, 24); // 糸の網（元いた所）
+            if (kind === 'kraken')
+                return at(INK_OVER.dx, INK_OVER.dy); // 伏せた頭の上を通る墨
+            return at(GUARD.dx - 4, kind === 'goblin' ? -2 : -6, 18); // 矢・石礫: 受け止めた人の前に刺さる・砕ける
+        case 'claw':
+            if (kind === 'dragon' || kind === 'vampire') {
+                const n = ripNear(c);
+                return { x: n.x, y: n.y, r: 7 };
+            }
+            if (kind === 'spider')
+                return at(GUARD.dx - 4, -20, 8); // 牙が受け止めた人の前で閉じる
+            if (kind === 'goblin')
+                return at(0, 2, 15); // 落とし穴
+            if (kind === 'golem')
+                return at(0, -2, 22); // 岩の拳
+            if (kind === 'giant')
+                return at(0, -12, 16); // 氷の槍
+            if (kind === 'kraken') {
+                const k = krakenSweepK(a.t0);
+                return { ...near(krakenArmShape({ foot, phase: a.t0, aim }, k.sw, k.back).map(([px, py]) => ({ x: px, y: py })), x, y - 2), r: 8 };
+            }
+            break;
+        case 'dive':
+            if (kind === 'dragon' || kind === 'vampire' || kind === 'spider')
+                return { x: aim.x + DIVE_AIM_DX, y: aim.y, r: 58 };
+            if (kind === 'goblin')
+                return { x: aim.x, y: aim.y - 4, r: 22 };
+            if (kind === 'kraken')
+                return at(0, 0, 8); // 足もとから突き上がる触手
+            if (kind === 'giant')
+                return at(0, 1, 9); // 足もとの氷のとげ
+            if (kind === 'golem') {
+                const { ls, j } = laneOf(c);
+                return { ...pathAt(golemCrackPath({ foot, W }, ls[j], j), clamp01(ease(clamp01((a.t0 - 0.42) / 0.08)))), r: 4 };
+            }
+            break;
+        case 'tail':
+            if (kind === 'dragon')
+                return { ...near(dragonTailAt({ foot, phase: a.t0, aim }).pts.map(([px, py]) => ({ x: px, y: py })), x, y - 2), r: 8 };
+            if (kind === 'spider') {
+                const ls = spiderLegsAt({ foot, phase: a.t0, partyX: c.partyX, scene, aim });
+                const ps = ls.map((l) => near(l.w, x + MEET.dx, y + MEET.dy));
+                return { ...ps.reduce((b, q) => (Math.hypot(q.x - x - MEET.dx, q.y - y - MEET.dy) < Math.hypot(b.x - x - MEET.dx, b.y - y - MEET.dy) ? q : b)), r: 6 };
+            }
+            if (kind === 'kraken')
+                return at(MEET.dx + 4, MEET.dy + 6); // 迎え撃つ所まで這い上がる触手の先
+            if (kind === 'vampire')
+                return at(26, -18); // 背後の蝙蝠（振り向いて迎え撃つ所）
+            if (kind === 'goblin')
+                return at(GUARD.dx, -8); // 槍の先
+            if (kind === 'golem' || kind === 'giant') {
+                const pivot = spriteToWorld(foot, kind === 'golem' ? [58, 44] : [60, 42]), sa = SWEEP_AT[kind], g = giantSweepGeo({ foot, W }, pivot, aim, sa);
+                const af = Math.atan2((y + sa.dy - g.cy) / g.sq, x + sa.dx - pivot.x);
+                return { x: pivot.x + Math.cos(af) * g.r, y: g.cy + Math.sin(af) * g.r * g.sq, r: 11 };
+            }
+            break;
     }
-    const go = (dir) => { const dx = z.x + dir * need - c.x; return Math.abs(dx) < def ? dir * def : dx; };
-    for (const dir of [first, -first]) {
-        const dx = go(dir);
-        if (fit(dx))
-            return dx;
-    }
-    return go(first);
+    return at(0, -12);
 }
 //# sourceMappingURL=arrival.js.map

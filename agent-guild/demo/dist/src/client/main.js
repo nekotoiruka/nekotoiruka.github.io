@@ -1,6 +1,6 @@
 // エントリポイント: ハッシュルーティング
 import { demoMode, detectMode, getMe, mySubmissions } from './api.js';
-import { renderAdmin } from './pages/admin.js';
+import { renderAdmin, setAdminNav } from './pages/admin.js';
 import { renderArena } from './pages/arena.js';
 import { renderBuild } from './pages/build.js';
 import { renderHome } from './pages/home.js';
@@ -34,7 +34,7 @@ const routes = [
     [/^#\/ranking$/, (r) => renderRanking(r)],
     [/^#\/task$/, (r) => renderTask(r)],
     [/^#\/build\/(.+)$/, (r, id) => renderBuild(r, decodeURIComponent(id))],
-    [/^#\/admin$/, (r) => renderAdmin(r)],
+    [/^#\/admin(?:\/(\w+))?$/, (r, tab) => renderAdmin(r, tab)],
 ];
 let lastHash = location.hash || '#/';
 async function route() {
@@ -110,8 +110,8 @@ else {
     // 運営の入り口: 管理者（ADMIN_USERS の表示名、または管理者パスワードでログイン中）なら上のメニューに「運営」を出す。
     // そうでない人にも、いちばん下に小さく入り口を置く（ADMIN_PASSWORD で入る。パスワードを知らなければ何もできない）
     fetch('api/me').then((r) => r.json()).then((j) => {
-        if (j.admin && !document.querySelector('nav a[href="#/admin"]'))
-            document.querySelector('nav').append(h('a', { href: '#/admin' }, tl('運営')));
+        if (j.admin)
+            setAdminNav(true);
     }).catch(() => undefined);
     document.body.append(h('footer', { class: 'site-foot small muted' }, h('a', { href: '#/admin' }, tl('運営の方へ（管理者画面）'))));
 }

@@ -49,7 +49,7 @@ export class ArenaRenderer {
     evades;
     selected = null;
     /** 紹介ページの見本の窓で、カメラの動きを決め打ちする。wide: 寄らずに全体（注目の暗転もしない）／follow: その冒険者とボスのあいだに寄ったまま */
-    camOverride = null;
+    camOverride = null; // shot: 決めた所・倍率で止める（バナーの絵）
     /** 紹介ページの見本の窓で、この冒険者だけを舞台に立たせる（ほかの冒険者と、その数字は描かない） */
     solo = null;
     hovered = null;
@@ -82,6 +82,7 @@ export class ArenaRenderer {
         return d && this.chainOf(d.wave)?.view.full ? { wave: d.wave, t: d.t + chainTiming.delay } : d;
     }
     winner = null;
+    allWin = false; // 全員が勝ちポーズ（結果発表のバナー: 戦果1位を伏せる）
     lastTime = 0;
     // 光源（毎フレーム集める）: 暗がりの中で、松明・火花・魔法陣・自分のキャラのまわりだけ明るくする
     lights = [];
@@ -327,7 +328,7 @@ export class ArenaRenderer {
     }
     // 注目キャラ: 選択中 → 自分 → このウェーブの MVP の順で、反撃でツール・スキル・仲間を使ったキャラ
     spotlight(w) {
-        if (this.camOverride?.mode === 'wide')
+        if (this.camOverride?.mode === 'wide' || this.camOverride?.mode === 'shot')
             return null;
         const sel = this.camOverride?.mode === 'follow' ? this.camOverride.f : this.selected;
         const key = w * 1000 + (sel ?? 999);
@@ -632,7 +633,7 @@ export class ArenaRenderer {
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
         this.fxLayer(ctx, (c) => {
             if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
-                this.attackFxFront(c, atk, phase, vis, targeted, evaded, items);
+                this.attackFxFront(c, atk, phase, vis, targeted, evaded, items, w);
             if (sa)
                 sceneFront({ ...sa, ctx: c });
         });

@@ -24,8 +24,10 @@ export function updateCamera(c) {
             }
             // 身のこなしで横へ抜けた体（前転・残像よけなど。arrival.ts の escapeDx）も、画面に入れる
             const plan = this.dodgePlanOf(w, ov.f), half = AW / tz / 2;
-            if (plan)
+            if (plan) {
                 tx = Math.max(tx, Math.min(v.x + Math.max(0, plan.escape) + 20, AW) - half);
+                tx = Math.min(tx, Math.max(v.x + Math.min(0, plan.escape) - 20, 0) + half);
+            }
         }
     }
     const wide = !!ov || ['spell', 'ougi', 'rush', 'summon', 'parry', 'seal', 'awaken', 'opening', 'chain'].includes(this.sceneOf(w) ?? '');
@@ -107,6 +109,11 @@ export function updateCamera(c) {
         tx = v.x;
         ty = v.y - 28;
     }
+    if (ov?.mode === 'shot') {
+        tz = ov.z;
+        tx = ov.x;
+        ty = ov.y;
+    } // 決め打ち（バナーの絵）は、ほかのどの寄り方より優先
     const kk = this.frame < 3 ? 1 : camK;
     this.cam.z = lerp(this.cam.z, tz, kk);
     const vw = AW / this.cam.z / 2, vh = AH / this.cam.z / 2;

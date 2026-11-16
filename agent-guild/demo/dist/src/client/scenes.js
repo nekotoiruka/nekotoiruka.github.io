@@ -5,9 +5,9 @@ import { Rng } from '../shared/rng.js';
 import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
-import { bossFxFor, fallingBoss, fallingShadow } from './bossfx.js';
+import { aimOf, bossFxFor, diveSpot, fallingBoss, fallingShadow, ripMarks, ripX, RIP, STREAM_AT, streamAim } from './bossfx.js';
 import { counterFx } from './counterfx.js';
-import { band, billowStream, FIRE5, flameBall, fract, hash, puffs, slashMark, sparkle } from './fxkit.js';
+import { billowStream, FIRE5, flameBall, fract, hash, puffs, slashMark, sparkle } from './fxkit.js';
 import { BW0, BH0, STYLE, spriteToWorld } from './bossstyle.js';
 import { bossMotion, makeAt } from './bossmotion.js';
 import { ultMoveDef } from './ultmoves.js';
@@ -101,8 +101,9 @@ export function sceneBack(a) {
     switch (a.scene) {
         // 竜の炎は、四角く染めない（炎のかたまりの奔流だけで見せる）
         case 'dive':
-            fallingShadow(a);
-            break; // 床に、降ってくるボスの影（冒険者の足もと＝奥に描く）
+            if (kindOf(a) === 'dragon')
+                fallingShadow(a);
+            break; // 床に、降ってくる竜の影（冒険者の足もと＝奥に描く）。投石・突き上げ・地割れ・踏みつけのボスは降ってこない
         case 'spell': { // 竜の足元の真紅の魔法陣（反撃で砕ける）
             const k = win(p, 0.04, 0.2), broke = win(p, 0.46, 0.56), cancel = alive(a).some((v) => v.ok);
             if (k > 0 && (!cancel || broke < 1) && p < 0.7) {
@@ -293,18 +294,19 @@ function breathFx(a, boss = true) {
     if (head > 0 && cut < 1) {
         const reach = a.W + 30 - m.x;
         ctx.save();
-        billowStream(ctx, m.x, m.y, reach, head, cut, p, FIRE5);
+        const A = aimOf(a), sa = streamAim(m, a.W, A.x + STREAM_AT.dragon.dx, A.y + STREAM_AT.dragon.dy, STREAM_AT.dragon.drop, STREAM_AT.dragon.spread); // 狙う人の受け止める所を通る
+        billowStream(ctx, m.x, m.y, reach, head, cut, p, FIRE5, { drop: sa.drop, spread: sa.spread });
         for (let i = 0; i < 26; i++) { // 火の粉: 奔流のふちから舞い上がる
             const u = fract(hash(i, 8) + p * 2.6);
             if (u > head || u < cut)
                 continue;
-            const x = m.x + reach * u + (hash(i, 9) - 0.5) * 20, y = m.y + 44 * u - 70 * u * hash(i, 10) - fract(p * 6 + hash(i, 11)) * 14;
+            const x = m.x + reach * u + (hash(i, 9) - 0.5) * 20, y = m.y + sa.drop * u - 70 * u * hash(i, 10) - fract(p * 6 + hash(i, 11)) * 14;
             ctx.fillStyle = i % 2 ? '#feae34' : '#fff2b0';
             ctx.fillRect(R(x), R(y), 1, 1);
         }
         // 燃えつきたあとの煙
         if (cut > 0)
-            puffs(ctx, m.x + reach * cut * 0.6, m.y + 30 * cut, { n: 10, t: p * 2, dx: 40, dy: -26, spread: 90, r0: 3, r1: 9, color: '#4a3a3a', alpha: 0.55 * bump(cut, 0, 1), seed: 9 });
+            puffs(ctx, m.x + reach * cut * 0.6, m.y + sa.drop * 0.7 * cut, { n: 10, t: p * 2, dx: 40, dy: -26, spread: 90, r0: 3, r1: 9, color: '#4a3a3a', alpha: 0.55 * bump(cut, 0, 1), seed: 9 });
         ctx.restore();
         flash(a, bump(p, 0.41, 0.46), '#ffb070', 0.35);
     }
@@ -345,14 +347,17 @@ export function tailPts(a, s, len) {
     //   体の動き（bossmotion.ts の tail）を含めて計算するので、尾は体の後ろから続いて伸びる（胴の手前から生えて見えないように）
     const root = makeAt(a.foot, bossMotion('dragon', 'tail', 'tail', a.phase), BW0, BH0)(10, 54);
     const floor = a.foot.y + 2;
+    // 狙う人（bossfx.ts の aimOf）の足もとの向きまで振り抜く（手前の下の段の人にも、尾が届くように）
+    const to = a.aim ? Math.max(TAIL_TO, Math.atan2((a.aim.y - 2 - floor) / TAIL_DEPTH, a.aim.x - root.x) + 0.12) : TAIL_TO;
+    const far = a.aim ? Math.max(1, Math.hypot(a.aim.x - root.x, (a.aim.y - 2 - floor) / TAIL_DEPTH) / (TAIL_N * TAIL_L * 0.92)) : 1; // 遠い人にも届く長さ
     const pts = [[root.x, root.y, 10]];
     let gx = 0, gz = 0;
     for (let i = 0; i < TAIL_N; i++) {
         const u = (i + 1) / TAIL_N;
         const si = ease(clamp01(s * 1.35 - i * 0.022)); // 先ほど遅れる
-        const th = lerp(TAIL_FROM, TAIL_TO, si) + 0.05 * Math.sin(i * 0.8 + s * 7) * (1 - si);
-        gx += Math.cos(th) * TAIL_L * len;
-        gz += Math.sin(th) * TAIL_L * len;
+        const th = lerp(TAIL_FROM, to, si) + 0.05 * Math.sin(i * 0.8 + s * 7) * (1 - si);
+        gx += Math.cos(th) * TAIL_L * len * far;
+        gz += Math.sin(th) * TAIL_L * len * far;
         const lift = (floor - root.y) * Math.pow(1 - u, 2); // 付け根は高く、先は床をこする
         pts.push([root.x + gx, floor + gz * TAIL_DEPTH - lift, Math.max(2.2, 10 - i * 0.52)]);
     }
@@ -380,7 +385,8 @@ export function dragonTailAt(a) {
     const s = win(p, 0.34, 0.47), back = win(p, 0.5, 0.6), len = (0.55 + 0.45 * ease(win(p, 0.34, 0.38))) * (1 - 0.7 * ease(back));
     return { s, back, len, pts: tailPts(a, s, len) };
 }
-function dragonTail(a) {
+function dragonTail(a0) {
+    const a = { ...a0, aim: aimOf(a0) };
     const { ctx, phase: p } = a;
     const { s, back, len } = dragonTailAt(a);
     const alpha = 1 - win(p, 0.54, 0.6);
@@ -525,22 +531,23 @@ function diveFx(a, boss = true) {
     // 着弾: 衝撃波・岩・白い閃光
     const b = win(p, 0.42, 0.56);
     if (boss && b > 0 && b < 1) {
+        const at = diveSpot(a, 'dragon'), cy = at.y + 4; // 竜が落ちた所（狙う人の少し手前。bossfx.ts の diveSpot）
         ctx.save();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 4 * (1 - b);
         ctx.globalAlpha = 1 - b;
         ctx.beginPath();
-        ctx.ellipse(a.W * 0.68, 160, 20 + b * 220, 6 + b * 60, 0, 0, TAU);
+        ctx.ellipse(at.x, cy, 20 + b * 220, 6 + b * 60, 0, 0, TAU);
         ctx.stroke();
         ctx.strokeStyle = '#c8b48a';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.ellipse(a.W * 0.68, 160, 10 + b * 160, 3 + b * 44, 0, 0, TAU);
+        ctx.ellipse(at.x, cy, 10 + b * 160, 3 + b * 44, 0, 0, TAU);
         ctx.stroke();
         const rng = new Rng(`${a.seed}:rocks`);
         for (let i = 0; i < 18; i++) {
             const ang = rng.range(Math.PI * 1.05, Math.PI * 1.95), sp = rng.range(40, 120);
-            const x = a.W * 0.68 + Math.cos(ang) * sp * b, y = 160 + Math.sin(ang) * sp * b + 160 * b * b;
+            const x = at.x + Math.cos(ang) * sp * b, y = cy + Math.sin(ang) * sp * b + 160 * b * b;
             ctx.fillStyle = i % 2 ? '#6a5a4a' : '#8a7a62';
             const s = rng.range(2, 5);
             ctx.fillRect(R(x), R(y), R(s), R(s));
@@ -561,23 +568,18 @@ function clawFx(a, boss = true) {
         }
     }
     // 竜の大きな爪が三本、討伐隊ぜんたいを左上から右下へ裂く（爪の先が通ったあとに、先細りの爪痕が残る。山場 0.42〜0.45）
-    const rip = win(p, 0.39, 0.45), gone = win(p, 0.48, 0.62);
+    const rip = win(p, RIP.dragon.a0, RIP.dragon.a1), gone = win(p, 0.48, 0.62);
     if (boss && rip > 0 && gone < 1) {
         ctx.save();
         ctx.globalAlpha = 1 - gone;
-        for (let i = 0; i < 3; i++) {
-            const t = ease(clamp01(rip * 1.5 - i * 0.12));
-            const x0 = a.W * 0.36 + i * 32, y0 = 44 + i * 4, x1 = x0 + 104, y1 = 214;
-            slashMark(ctx, x0, y0, x1, y1, lerp(14, 5, gone), -12, t, DRAGON_RIP);
-            // 爪そのもの（裂いている間だけ）: 骨色のかぎ爪が、爪痕の先をえぐる
+        const marks = ripMarks(a.W, 'dragon', aimOf(a)); // 狙う人の所を、右端の爪痕が通る（bossfx.ts の RIP）
+        for (let i = 0; i < marks.length; i++) {
+            const t = ease(clamp01(rip * RIP.dragon.sp - i * 0.12));
+            const { x0, y0, x1, y1, bow } = marks[i];
+            slashMark(ctx, x0, y0, x1, y1, lerp(14, 5, gone), bow, t, DRAGON_RIP);
+            // 裂けていく先の閃き（爪そのものは描かない。爪痕だけで、裂く向きと勢いを見せる）
             if (t > 0.02 && t < 1) {
-                const hx = lerp(x0, x1, t), hy = lerp(y0, y1, t), ang = Math.atan2(y1 - y0, x1 - x0);
-                const pts = [];
-                for (let j = 0; j <= 10; j++) {
-                    const u = j / 10, an = ang + Math.PI - 0.5 + 1.3 * u;
-                    pts.push([hx + Math.cos(an) * 30 * Math.sin(u * 1.4), hy + Math.sin(an) * 30 * Math.sin(u * 1.4), lerp(0.4, 4.5, Math.pow(u, 0.6))]);
-                } // 先がとがって反る、かぎ爪
-                band(ctx, pts.reverse(), CLAW_BONE);
+                const hx = ripX(marks[i], lerp(y0, y1, t)), hy = lerp(y0, y1, t);
                 sparkle(ctx, hx, hy, 4, '#ffffff', 1);
             }
         }
@@ -586,7 +588,6 @@ function clawFx(a, boss = true) {
     }
 }
 const DRAGON_RIP = { line: '#1a0208', dark: '#8a0f22', body: '#ff5a6e', hi: '#ffe0e8' };
-const CLAW_BONE = { line: '#1a120c', dark: '#6e5a40', body: '#cbb894', hi: '#fff6e0' };
 // ---- 隙: よろめくボス → （竜は）看破のモノクルで弱点の紋章 → 弱点の属性の大技（属性のないボスは白い会心の一撃） ----
 function openingFx(a) {
     const { ctx, phase: p } = a;

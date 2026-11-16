@@ -6,6 +6,7 @@ import './bosses/index.js';
 import { drawHero, muzzleOf } from './hero.js';
 import { bossCanvas, BOSS_IDLE, BH } from './boss.js';
 import { MOTION_PICKS } from './motionpicks.js';
+import { MEET } from './reach.js';
 // ---------------------------------------------------------------- 画面と時間
 // 1枚の大きさ（ドット）・床の高さ・冒険者の立ち位置・攻撃が当たる所（ボスの胸）。12人の画面では、1人ずつ描く前に入れ替える
 export let W = 144, H = 88, FY = 80;
@@ -1219,17 +1220,23 @@ const EVADE = [
                 dust(e.c, x - dir * 8, (k * 3) % 1, 0.5, Math.floor(k * 3));
             dust(e.c, HX + dx, win(t, 0.38, 0.52), 0.8, 9); // 転がり終えた所
         } },
-    { id: 'evade-log', name: '変わり身', note: 'ボフッと煙。元の場所には丸太が残り、本人は少しうしろにあらわれる。', draw(e) {
+    { id: 'evade-log', name: '変わり身', note: 'ボフッと煙。元の場所には丸太が残り、本人は少しうしろにあらわれる。攻撃は丸太に当たり、丸太は砕けて散る。', draw(e) {
             const t = e.t;
             e.bg();
             e.boss();
             slashAt(e, 0.44);
             const swap = t > 0.36 && t < 0.82, dx = ESCAPE ?? 20;
-            if (swap && t < 0.7) {
+            if (swap && t < 0.44) {
                 P(e.c, HX - 4, FY - 14, '#8a5a2a', 8, 14);
                 P(e.c, HX - 4, FY - 14, '#c8905a', 8, 2);
                 P(e.c, HX - 2, FY - 8, '#5a3a1a', 2, 2);
             }
+            const br = win(t, 0.44, 0.56); // 当たる瞬間（0.44）に、丸太が木っ端になって散る
+            if (br > 0 && br < 1)
+                for (let i = 0; i < 8; i++) {
+                    const a = -Math.PI * (0.15 + 0.7 * (i / 7)), d = 3 + 14 * ease(br);
+                    P(e.c, HX + Math.cos(a) * d * (i % 2 ? 1 : -1) - 1, FY - 8 + Math.sin(a) * d + 10 * br * br, i % 3 ? '#8a5a2a' : '#c8905a', 2, 2);
+                }
             if (!swap || t > 0.4)
                 e.hero(swap ? HX + dx : HX, FY, 'idle', 0, { a: swap ? win(t, 0.4, 0.46) : 1 });
             for (const [cx, at] of [[HX, 0.36], [HX + dx, 0.4]]) {
@@ -3842,7 +3849,7 @@ export const BOSS_LIST = [
 ];
 // [ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類]
 export const PAIRS = {
-    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '伏せる', 'crawl'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
+    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '飛びのく', 'dodge'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
     vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
     spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['脚の薙ぎ払い', '低く斬りはらう', 'cut'] },
     goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['槍の突撃', '穂先をはらう', 'parry'] },
@@ -4217,9 +4224,9 @@ export function drawInArena(c, d) {
     // attack: ボスへの反撃（通常攻撃の型）。近接はボスの前（reach）まで踏みこみ、飛び道具と魔法はボスの体を狙う
     const meet = !d.attack && (d.resp === 'cut' || d.resp === 'smash' || d.resp === 'shoot' || d.resp === 'turnCut');
     PAIR_REACH = meet;
-    TX = meet ? d.hx - 30 : d.boss.x;
-    TY = meet ? d.fy - 18 : d.boss.y;
-    REACH_TO = d.attack ? d.reach ?? null : null;
+    TX = meet ? d.hx + MEET.dx : d.boss.x;
+    TY = meet ? d.fy - 1 + MEET.dy : d.boss.y;
+    REACH_TO = d.attack ? d.reach ?? null : null; // 迎え撃つ所は、ボスの攻撃が届く所（reach.ts の MEET）
     // 近接の反撃は、ボスの前へ斜めに踏みこむ（下の列の人がボスの足元より下を斬らないように）。
     // 型の中の足元（FY）をボスの前の高さに置きかえ、冒険者の絵だけ、踏みこんだ分に応じて元の列から寄せる
     const lift = d.attack && d.reachY !== undefined && REACH_TO !== null && isMelee(d) ? d.fy - d.reachY : 0;
@@ -4251,16 +4258,17 @@ export function drawInArena(c, d) {
 /** drawInArena が体を描く位置を、描く前に確かめる（小さな見えない絵に空まわしする）。
  *  討伐画面で、体力ゲージ・オーラなど体に付くものを、体より先に（下に）描くため。同じ引数なら drawInArena が返す位置と同じ */
 let probeCtx = null;
-export function probeInArena(d) {
-    if (!probeCtx) {
+export function probeInArena(d, ctx) {
+    if (!ctx && !probeCtx) {
         const cv = document.createElement('canvas');
         cv.width = cv.height = 1;
         probeCtx = cv.getContext('2d');
     }
-    probeCtx.setTransform(1, 0, 0, 1, 0, 0);
+    const c = ctx ?? probeCtx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
     PROBE = true;
     try {
-        return drawInArena(probeCtx, d);
+        return drawInArena(c, d);
     }
     finally {
         PROBE = false;

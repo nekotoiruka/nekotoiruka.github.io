@@ -193,7 +193,9 @@ export function attackFxBack(ctx, atk, phase, views, targeted, scene) {
     }
 }
 // 攻撃エフェクト（キャラの前）: 爪・炎・隕石・宝箱。防いだキャラの手前で止まる
-export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items) {
+/** 身をかわす動き（攻撃は、元いた所を通りすぎる） */
+const PASS_EVADES = ['step', 'dodge', 'jump', 'crawl'];
+export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items, w = -1) {
     const kind = (this.script.theme?.kind ?? 'dragon');
     const mouth = kind === 'dragon' ? { x: this.bossFoot.x + 46, y: this.bossFoot.y - 50 } : spriteToWorld(this.bossFoot, STYLE[kind].mouth);
     const rng = new Rng(`fx:${Math.floor(this.lastTime)}`);
@@ -201,9 +203,11 @@ export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items) {
         if (!targeted(v.f))
             continue;
         const blocked = evaded.has(v.f);
-        const stopX = v.x - (blocked ? 12 : 0);
+        // かわした人（横へ抜ける・跳ぶ・伏せる）への攻撃は、元いた所（立ち位置）まで届く（体は回避の動きで抜けている。#120）。受け止める・迎え撃つ人の前では、手前で止まる
+        const pass = blocked && w >= 0 && PASS_EVADES.includes(this.evadeOf(w, v.f));
+        const stopX = v.x - (blocked && !pass ? 12 : 0), over = pass && this.evadeOf(w, v.f) === 'crawl';
         // 竜以外のボスは、ボスごとの飛び道具（蝙蝠・糸・矢・墨・岩・氷など）。竜は今までどおり
-        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
+        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, pass, ...(over ? { ty: v.y - 30 } : {}), mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
             continue;
         if (atk === 'claw') { // 竜の爪: ひとり分の、三本の爪痕
             const k = clamp01((phase - 0.4) / 0.06), fade = 1 - clamp01((phase - 0.48) / 0.1);

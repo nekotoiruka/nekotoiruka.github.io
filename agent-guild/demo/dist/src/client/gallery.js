@@ -24,7 +24,7 @@ const BOSSES = [
 // 正しく動けた冒険者の対応技（bossmoves.ts の COUNTERS と同じ組み合わせ）。ギャラリーで動きと見比べるための説明で、本番の画面には出さない
 // （本番の技名は、自分の冒険者がその場面で答えた言葉。ほかの人は「かわした」）
 const COUNTER_NAMES = {
-    dragon: { breath: '鏡で炎を受ける', claw: '影を残してすり抜ける', dive: '伏せる', tail: '跳んでかわす' },
+    dragon: { breath: '鏡で炎を受ける', claw: '影を残してすり抜ける', dive: '飛びのく', tail: '跳んでかわす' },
     vampire: { breath: '聖なる光で蝙蝠を散らす', claw: '爪をはじく', dive: '飛びのく', tail: '振り向いて受け止める' },
     spider: { breath: '糸を斬りはらう', claw: '横へ跳ぶ', dive: '影を残してすり抜ける', tail: '脚を跳び越える' },
     goblin: { breath: '盾をかかげて矢を受ける', claw: '落とし穴を跳び越える', dive: '投石から飛びのく', tail: '穂先をはらう' },
