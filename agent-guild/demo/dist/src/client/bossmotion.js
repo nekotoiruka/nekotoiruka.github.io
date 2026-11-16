@@ -1,7 +1,10 @@
 import { reducedMotion } from './motion.js';
 import { STYLE } from './bossstyle.js';
+import { drawBoulder } from './pixart.js';
 import { bump, dustRing, ease, fract, glowAt, hash, lerp, puffs, sparkle, TAU, win } from './fxkit.js';
 export { STYLE };
+/** 大蜘蛛の脚の薙ぎはらいで、演出（bossfx.ts）が前脚を描いている時間と、そのときの体の前のめり */
+export const SPIDER_SWEEP = { from: 0.35, to: 0.58, lean: (p) => 9 * bump(p, 0.36, 0.5) };
 const identity = () => ({ move: null, pose: {}, dx: 0, dy: 0, sx: 1, sy: 1, rot: 0, face: 1, alpha: 1, tremble: 0, ghosts: [], shadow: 1, fx: null });
 /** 場面 → 動き。ボスの種類ごとに、技の意味に合わせる（尾を使うのは竜だけ、など）。
  *  場面が「その場の出来事」（記憶・仲間の声など）のときは、ボスの攻撃の種類で決める */
@@ -38,14 +41,15 @@ function breath({ kind, p, S }) {
     const m = identity();
     m.move = 'breath';
     const inh = ease(win(p, 0.04, 0.34)), hold = win(p, 0.28, 0.4), wind = win(p, 0.28, 0.4), rel = win(p, 0.38, 0.44), strike = bump(p, 0.38, 0.5);
-    const out = 1 - win(p, 0.46, 0.6); // 吐き終わり
+    const long = kind === 'dragon'; // 竜の炎は長く吐きつづける（scenes.ts の breathFx。0.66 まで）
+    const out = 1 - (long ? win(p, 0.58, 0.65) : win(p, 0.46, 0.6)); // 吐き終わり
     const k = Math.max(inh * 0.75, hold) * (1 - rel) * (p < 0.46 ? 1 : 0); // 溜まり具合
     m.pose = { eye: p > 0.18 && p < 0.56 ? 'angry' : 'open', lean: -3 * Math.max(inh * 0.6, wind) + 4 * strike, mouth: Math.min(2, Math.max(0.55 * inh, wind) * (p < 0.46 ? 1 : out) + strike), wing: 2 * Math.max(inh * 0.5, wind) * (p < 0.46 ? 1 : out) };
     m.sy = 1 + 0.06 * inh * (1 - rel) - 0.03 * strike;
     m.sx = 1 - 0.03 * inh * (1 - rel) + 0.04 * strike;
     m.dx = -2 * inh * (1 - rel) - 4 * bump(p, 0.4, 0.52); // 吐くときの反動
     m.tremble = 0.5 * hold * (1 - rel) * (1 - win(p, 0.42, 0.46));
-    const open = p > 0.1 && p < 0.58;
+    const open = p > 0.1 && p < (long ? 0.65 : 0.58);
     // 種類ごとの形: 山はいっしょ（口に力が集まって、吐く）で、出てくるもの（光・煙）が違う
     if (kind === 'vampire') {
         m.pose.wing = 2 * Math.max(inh, wind) * (p < 0.46 ? 1 : out);
@@ -220,8 +224,8 @@ function claw({ kind, p, S }) {
         if (!lay && strike > 0.05)
             puffs(ctx, foot.x - 14, foot.y - 1, { n: 7, t: (p - 0.38) * 6, dx: -20, dy: -4, spread: 8, r0: 2, r1: 6, color: trail, alpha: 0.7 * strike, seed: 9 });
         if (lay) {
-            const e = at(S.eye[0], S.eye[1]);
-            if (kind !== 'golem')
+            const e = at(S.eye[0], S.eye[1]); // 竜は目ではなく、前足の爪が光る（scenes.ts の clawFx）
+            if (kind !== 'golem' && kind !== 'dragon')
                 glowAt(ctx, e.x, e.y, 3 + 3 * wind, '#ffffff', '#ff3040', 0.8 * wind * (1 - win(p, 0.46, 0.56)));
             if (kind === 'spider' && strike > 0.1) {
                 const mo = at(S.mouth[0], S.mouth[1]);
@@ -274,18 +278,8 @@ function dive({ kind, p, S }) {
                 return;
             const h = at(70, 10); // 頭の上に抱えた石
             const up = wind * (1 - win(p, 0.34, 0.4));
-            if (up > 0) {
-                ctx.save();
-                ctx.globalAlpha = Math.min(1, up * 2);
-                const r = 3 + 5 * up;
-                ctx.fillStyle = '#6a5a4a';
-                ctx.beginPath();
-                ctx.arc(Math.round(h.x), Math.round(h.y - 6 - 8 * up), r, 0, TAU);
-                ctx.fill();
-                ctx.fillStyle = '#9a8a72';
-                ctx.fillRect(Math.round(h.x - r * 0.5), Math.round(h.y - 6 - 8 * up - r * 0.6), 2, 2);
-                ctx.restore();
-            }
+            if (up > 0)
+                drawBoulder(ctx, h.x, h.y - 6 - 8 * up, 9, 0, 3, Math.min(1, up * 2)); // 頭の上に抱えた大岩（投げる岩と同じ絵）
         };
         return m;
     }
@@ -302,25 +296,34 @@ function dive({ kind, p, S }) {
                 puffs(ctx, foot.x + 4, foot.y - 4, { n: 8, t: p * 3, dx: 0, dy: -20, spread: 70, r0: 1, r1: 3, color: '#d8f2ff', alpha: 0.5 * (sink + thrust), seed: 12 });
             if (layer === 'back')
                 dustRing(ctx, foot.x + 8, foot.y - 4, win(p, 0.4, 0.58), 64, '#bfe8ff');
+            if (layer === 'front' && thrust > 0.15) { // 海から飛び出した体から、しずくが海面へ落ちる（海は海面の高さに残る。arena-boss.ts）
+                puffs(ctx, foot.x + 4, foot.y - 10, { n: 14, t: p * 4, dx: 0, dy: 22 * thrust, spread: 56, r0: 1, r1: 2, color: '#d8f2ff', alpha: 0.9 * thrust, seed: 13 });
+                puffs(ctx, foot.x + 4, foot.y - 12, { n: 8, t: p * 3, dx: 0, dy: -16, spread: 64, r0: 1.5, r1: 3.5, color: '#ffffff', alpha: 0.7 * thrust, seed: 14 }); // 海面のしぶき
+            }
         };
         return m;
     }
     // 舞い上がる（竜・伯爵）／糸で登る（蜘蛛）: かがんで跳び、画面の外へ。着地は影が落ちたあと、もとの場所へ
-    const up = ease(win(p, 0.18, 0.34)), away = p > 0.32 && p < 0.44;
-    const drop = ease(win(p, 0.44, 0.5));
-    const height = p < 0.44 ? up : 1 - drop; // 0（地面）〜 1（画面の外）
+    // 竜・伯爵・大蜘蛛は、早めに飛び去り（〜0.26）、討伐隊の真上から突っこむ姿（bossfx.ts の fallingBoss・0.27〜0.42）を見せる。
+    //   突っこんだあと（0.5〜0.56）、もとの場所へ舞いもどる
+    const sky = kind === 'dragon' || kind === 'vampire' || kind === 'spider';
+    const up = sky ? ease(win(p, 0.12, 0.26)) : ease(win(p, 0.18, 0.34)), away = p > 0.32 && p < 0.44;
+    const drop = sky ? ease(win(p, 0.5, 0.56)) : ease(win(p, 0.44, 0.5));
+    const height = p < (sky ? 0.5 : 0.44) ? up : 1 - drop; // 0（地面）〜 1（画面の外）
     m.dy = -190 * height;
     m.pose = { eye: 'angry', wing: kind === 'dragon' || kind === 'vampire' ? 2 * bump(p, 0.14, 0.5) + Math.sin(p * 70) * 1.2 * (up > 0 && drop < 1 ? 1 : 0) : 1.5 * bump(p, 0.1, 0.5), lean: -3 * crouch * (1 - up) + 4 * land * (1 - settle), mouth: kind === 'dragon' ? 1 : 0 };
-    m.sy = 1 - 0.14 * crouch * (1 - win(p, 0.16, 0.2)) + 0.12 * up * (1 - win(p, 0.3, 0.34)) - 0.16 * bump(p, 0.47, 0.6);
-    m.sx = 1 + 0.09 * crouch * (1 - win(p, 0.16, 0.2)) - 0.06 * up * (1 - win(p, 0.3, 0.34)) + 0.12 * bump(p, 0.47, 0.6);
-    m.tremble = 0.5 * crouch * (1 - win(p, 0.16, 0.2));
+    const cr = sky ? ease(win(p, 0.03, 0.1)) * (1 - win(p, 0.1, 0.13)) : crouch * (1 - win(p, 0.16, 0.2)); // 跳ぶ前のかがみ
+    const sq = sky ? bump(p, 0.53, 0.66) : bump(p, 0.47, 0.6); // 着地のつぶれ
+    m.sy = 1 - 0.14 * cr + 0.12 * up * (1 - win(p, sky ? 0.22 : 0.3, sky ? 0.26 : 0.34)) - 0.16 * sq;
+    m.sx = 1 + 0.09 * cr - 0.06 * up * (1 - win(p, sky ? 0.22 : 0.3, sky ? 0.26 : 0.34)) + 0.12 * sq;
+    m.tremble = 0.5 * cr;
     m.shadow = Math.max(0.15, 1 - 0.85 * height);
     if (away && p > 0.34 && p < 0.44)
         m.alpha = 1; // 画面の外にいる
     m.fx = (ctx, layer, at, foot) => {
         if (layer === 'back') {
-            dustRing(ctx, foot.x + 6, foot.y, win(p, 0.18, 0.34), 40); // 飛び立つとき
-            dustRing(ctx, foot.x + 6, foot.y, win(p, 0.46, 0.62), 56); // 着地
+            dustRing(ctx, foot.x + 6, foot.y, sky ? win(p, 0.12, 0.28) : win(p, 0.18, 0.34), 40); // 飛び立つとき
+            dustRing(ctx, foot.x + 6, foot.y, sky ? win(p, 0.54, 0.68) : win(p, 0.46, 0.62), 56); // 着地
             if (kind === 'spider' && height > 0.02) {
                 ctx.save();
                 ctx.strokeStyle = '#e4e7f0';
@@ -423,8 +426,9 @@ function tail({ kind, p, S, reach }) {
                 puffs(ctx, foot.x + 20 * dash, foot.y - 1, { n: 9, t: p * 5, dx: -50, dy: -6, spread: 10, r0: 2, r1: 7, color: '#c8b48a', alpha: 0.75 * dash, seed: 15 });
         } };
     }
-    else if (kind === 'spider') { // 脚の薙ぎはらい: 前脚を高く掲げ、横ざまに振り抜く
-        m.pose = { eye: m.pose.eye, wing: 2 * wind * (1 - win(p, 0.38, 0.46)), lean: -3 * ww * (1 - win(p, 0.38, 0.4)) + 9 * sw };
+    else if (kind === 'spider') { // 脚の薙ぎはらい: 前脚を高く掲げ、横ざまに振り抜く（振るあいだの前脚は bossfx.ts が大きく描く。絵の側は hide で描かない）
+        const fxLeg = p >= SPIDER_SWEEP.from && p < SPIDER_SWEEP.to;
+        m.pose = { eye: m.pose.eye, wing: 2 * wind * (1 - win(p, 0.38, 0.46)), lean: fxLeg ? SPIDER_SWEEP.lean(p) : -3 * ww + 9 * sw, ...(fxLeg ? { hide: 1 } : {}) };
         m.dy = -3 * wind * (1 - win(p, 0.36, 0.4));
         m.dx = 12 * sw;
         m.rot = -0.05 * wind * (1 - win(p, 0.36, 0.4)) + 0.09 * sw;
@@ -466,18 +470,17 @@ function tail({ kind, p, S, reach }) {
                 puffs(ctx, foot.x + 30, foot.y - 2, { n: 8, t: (p - 0.38) * 5, dx: 26, dy: -6, spread: 12, r0: 2, r1: 6, color: '#c8b48a', alpha: 0.7 * sw, seed: 16 });
         } };
     }
-    else { // vampire 背後の霧: 霧にほどけて消え、霧の流れの先（背後）で姿をあらわして切りつける
-        const fade = win(p, 0.08, 0.24), back = win(p, 0.34, 0.4), strike2 = bump(p, 0.4, 0.5), home = win(p, 0.5, 0.58);
-        m.alpha = p < 0.34 ? 1 - fade : p < 0.5 ? back * (1 - win(p, 0.46, 0.5)) : win(p, 0.52, 0.6);
-        m.dx = p < 0.34 ? 0 : p < 0.5 ? reach : 0;
-        m.face = p >= 0.34 && p < 0.5 ? -1 : 1; // 背後では、こちらへ向きなおる
-        m.pose = { eye: 'angry', wing: 1.5 * fade * (1 - back), lean: 8 * strike2, mouth: strike2 };
+    else { // vampire 背後の霧: 霧にほどけて消え、霧が床を這って討伐隊の背後へ流れる。
+        //   襲うのは、霧から湧く蝙蝠（冒険者ひとりずつの背後に2匹。bossfx.ts）。本体は 0.52〜0.6 にもとの場所で姿をもどす
+        const fade = win(p, 0.08, 0.24), home = win(p, 0.52, 0.6);
+        m.alpha = p < 0.5 ? 1 - fade : home;
+        m.pose = { eye: 'angry', wing: 1.5 * fade * (1 - home), mouth: 0 };
         m.sy = 1 - 0.02 * fade;
-        m.tremble = 0.5 * fade * (1 - back);
+        m.tremble = 0.5 * fade * (1 - win(p, 0.24, 0.28));
         m.fx = (ctx, layer, _a, foot) => {
-            if (layer === 'back' && p > 0.06 && p < 0.62) {
-                const dens = Math.max(fade * (1 - back), win(p, 0.46, 0.5) * (1 - home), home * (1 - win(p, 0.58, 0.62)));
-                puffs(ctx, foot.x + (p < 0.34 ? 0 : p < 0.5 ? reach : 0), foot.y - 26, { n: 12, t: p * 3, dx: 0, dy: -16, spread: 46, r0: 3, r1: 9, color: S.smoke, alpha: 0.7 * dens, seed: 17 });
+            if (layer === 'back' && p > 0.06 && p < 0.64) {
+                const dens = Math.max(fade * (1 - win(p, 0.3, 0.4)), bump(p, 0.48, 0.62));
+                puffs(ctx, foot.x, foot.y - 26, { n: 12, t: p * 3, dx: 0, dy: -16, spread: 46, r0: 3, r1: 9, color: S.smoke, alpha: 0.7 * dens, seed: 17 });
                 if (p > 0.2 && p < 0.38)
                     puffs(ctx, foot.x + 20, foot.y - 14, { n: 14, t: (p - 0.2) * 3, dx: reach - 10, dy: 0, spread: 22, r0: 3, r1: 8, color: S.smoke, alpha: 0.55, seed: 18 }); // 霧が背後へ流れる
             }

@@ -56,6 +56,7 @@ const setMove = (s, w) => {
     r.retimed.clear();
     r.cueCache.clear();
     r.stopCache.clear();
+    r.planCache.clear();
     r.looks[hero()].weapon = weapon;
 };
 const drawAt = (t, frame) => { r.looks[hero()].weapon = weapon; r.frame = frame; r.draw(ultW + t); };

@@ -443,4 +443,133 @@ export function skyDark(ctx, W, H, k, top = 'rgba(5,4,12,0.85)', mid = 'rgba(5,4
     ctx.fillRect(-W, -H, W * 3, H * 3);
     ctx.restore();
 }
+function bandStroke(ctx, pts, col, k, add, off) {
+    ctx.strokeStyle = col;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0, r0] = pts[i], [x1, y1, r1] = pts[i + 1];
+        const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = (y1 - y0) / l, ny = -(x1 - x0) / l; // 上側の法線
+        const w = ((r0 + r1) / 2) * 2 * k + add;
+        if (w < 0.6)
+            continue;
+        ctx.lineWidth = Math.max(1, w);
+        ctx.beginPath();
+        ctx.moveTo(x0 + nx * off * r0, y0 + ny * off * r0);
+        ctx.lineTo(x1 + nx * off * r1, y1 + ny * off * r1);
+        ctx.stroke();
+    }
+}
+/** 太さの変わる帯を、縁 → 影 → 地（上へ寄せる）→ 照り（さらに上の細い筋）の順に重ねる。光は左上から */
+export function band(ctx, pts, P) {
+    if (pts.length < 2)
+        return;
+    ctx.save();
+    bandStroke(ctx, pts, P.line, 1, 2, 0);
+    bandStroke(ctx, pts, P.dark, 1, 0, 0);
+    bandStroke(ctx, pts, P.body, 0.62, 0, 0.3);
+    bandStroke(ctx, pts, P.hi, 0.2, 0, 0.62);
+    ctx.restore();
+}
+/** 振り抜いた跡の弧（先が太く、根もとへ細くなる）。中心 (cx,cy)・半径 r・角度 a0 → a1、t: どこまで振り抜いたか、w: いちばん太い所の太さ、len: 弧の尾の長さ（角度の割合） */
+export function sweepArc(ctx, cx, cy, r, a0, a1, t, w, squash, P, len = 0.6) {
+    if (t <= 0)
+        return;
+    const head = lerp(a0, a1, clamp01(t)), tailA = lerp(a0, a1, clamp01(t - len));
+    if (Math.abs(head - tailA) < 0.01)
+        return;
+    const n = 18, pts = [];
+    for (let i = 0; i <= n; i++) {
+        const u = i / n, a = lerp(tailA, head, u), rr = r - w * 0.3 * (1 - u);
+        pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * squash, (w / 2) * Math.pow(u, 1.4) * (u > 0.92 ? 1 - (u - 0.92) * 6 : 1)]);
+    }
+    band(ctx, pts, P);
+}
+/** 刃のような斬撃の跡（両端がとがった三日月）。(x0,y0) → (x1,y1)、bow: ふくらみ（+で進む向きの左）、t: どこまで裂けたか */
+export function slashMark(ctx, x0, y0, x1, y1, w, bow, t, P) {
+    if (t <= 0)
+        return;
+    const n = 14, pts = [];
+    const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / l, ny = (x1 - x0) / l;
+    const m = Math.max(2, Math.round(n * clamp01(t)));
+    for (let i = 0; i <= m; i++) {
+        const u = i / n, b = Math.sin(u * Math.PI) * bow;
+        const tip = t < 1 ? clamp01((Math.min(t, m / n) - u) / 0.16) : 1; // 途中で止まった・裂けていく途中の先は、とがらせる（丸い切り口にしない）
+        pts.push([lerp(x0, x1, u) + nx * b, lerp(y0, y1, u) + ny * b, (w / 2) * Math.pow(Math.sin(u * Math.PI), 0.8) * Math.sqrt(tip)]);
+    }
+    band(ctx, pts, P);
+}
+/** ドットの炎の玉（縁・赤・橙・黄・白の芯）。r: 大きさ */
+export function flameBall(ctx, x, y, r, a = 1) {
+    if (r <= 0.5 || a <= 0)
+        return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, a);
+    const disc = (c, rr, ox, oy) => { if (rr < 0.6)
+        return; ctx.fillStyle = c; ctx.beginPath(); ctx.arc(R(x + ox), R(y + oy), Math.max(1, R(rr)), 0, TAU); ctx.fill(); };
+    disc('#5a0e08', r + 1.5, 0, 0);
+    disc('#c0281a', r, 0, 0);
+    disc('#ff6a2a', r * 0.74, -r * 0.12, -r * 0.14);
+    disc('#feae34', r * 0.5, -r * 0.2, -r * 0.24);
+    disc('#fff2b0', r * 0.24, -r * 0.26, -r * 0.3);
+    ctx.restore();
+}
+/** 白黒の絵（シルエット）を、ひとつの色に塗りかえた写し（縁の光などに使う） */
+const tintCache = new WeakMap();
+export function tinted(src, col) {
+    let m = tintCache.get(src);
+    if (!m) {
+        m = new Map();
+        tintCache.set(src, m);
+    }
+    let c = m.get(col);
+    if (c)
+        return c;
+    c = document.createElement('canvas');
+    c.width = src.width;
+    c.height = src.height;
+    const x = c.getContext('2d');
+    x.drawImage(src, 0, 0);
+    x.globalCompositeOperation = 'source-in';
+    x.fillStyle = col;
+    x.fillRect(0, 0, c.width, c.height);
+    m.set(col, c);
+    return c;
+}
+export const FIRE5 = ['#5a0e08', '#c0281a', '#ff6a2a', '#feae34', '#fff2b0'];
+export const FROST5 = ['#1e3a5a', '#4a8ac0', '#a8dcff', '#e6f6ff', '#ffffff'];
+/** 口から流れ出る、かたまりの奔流（炎・冷気）。丸いかたまりを、縁 → 暗 → 中 → 明 → 芯 の順に段ごとに重ねる（四角い光や、まっすぐな帯にしない）。
+ *  (x,y): 口 / reach: 先までの長さ / head: 先がどこまで届いたか 0〜1 / cut: 根もとからどこまで消えたか 0〜1 / t: 流れの時刻 */
+export function billowStream(ctx, x, y, reach, head, cut, t, P, o = {}) {
+    const drop = o.drop ?? 44, spread = o.spread ?? 46, size = o.size ?? 1, n = o.n ?? 120;
+    const balls = [];
+    for (let i = 0; i < n; i++) {
+        const u = fract(hash(i, 5) + t * 3.4);
+        if (u > head || u < cut)
+            continue;
+        const core = i < n / 3;
+        const side = core ? (hash(i, 6) - 0.5) * 0.5 : (hash(i, 6) - 0.5) * 2, wob = Math.sin(t * 50 + i) * 2;
+        const bx = x + 4 + reach * u, by = y + 2 + drop * u + side * spread * Math.pow(u, 0.9) + wob;
+        const end = cut > 0 ? win(u, cut, cut + 0.12) : 1; // 燃えつきる根もとの側だけ小さく
+        balls.push([bx, by, (3 + (core ? 16 : 11) * Math.pow(u, 0.7)) * (0.75 + 0.45 * hash(i, 7)) * end * size, (1 - u) * (core ? 1 : 0.6)]);
+    }
+    if (head > 0 && cut < 1)
+        balls.push([x + 3, y + 1, 4 * (1 - cut) * head * size, 1]);
+    const pass = (col, k, ox = 0, oy = 0) => {
+        ctx.fillStyle = col;
+        for (const [bx, by, r, h] of balls) {
+            const rr = k(r, h);
+            if (rr < 0.7)
+                continue;
+            ctx.beginPath();
+            ctx.arc(R(bx + ox * r), R(by + oy * r), R(rr), 0, TAU);
+            ctx.fill();
+        }
+    };
+    pass(P[0], (r) => r + 1.5);
+    pass(P[1], (r) => r);
+    pass(P[2], (r, h) => r * (0.55 + 0.25 * h), -0.12, -0.16);
+    pass(P[3], (r, h) => r * (0.25 + 0.3 * h), -0.2, -0.24);
+    pass(P[4], (r, h) => r * 0.28 * h * h, -0.24, -0.28);
+}
 //# sourceMappingURL=fxkit.js.map

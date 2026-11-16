@@ -651,4 +651,30 @@ export function pixelSlash(ctx, x0, y0, x1, y1, wMax, pal, alpha = 1) {
     }
     ctx.restore();
 }
+// =====================================================================
+// 大岩（ゴブリンの投石など）: ごつごつした輪郭・岩肌の割れ目・苔のない乾いた岩。光は左上から
+// =====================================================================
+/** 大岩のドット絵。r: 半径（ドット）。seed で形を変える。(ax, ay) は中心 */
+export function boulderSprite(r, seed = 0, pal = ROCK) {
+    r = Math.max(2, Math.round(r));
+    const S = r * 2 + 4, c = r + 2, n = 9;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + hash(i, seed) * 0.3, rr = r * (0.78 + hash(i, seed + 7) * 0.3) * (i % 3 === 0 ? 1.08 : 1);
+        pts.push([c + Math.cos(a) * rr, c + Math.sin(a) * rr * 0.88]);
+    }
+    const body = poly(pts);
+    const chip = ell(c - r * 0.25, c - r * 0.3, r * 0.42, r * 0.32); // 左上の出っぱり（照りの面）
+    const crack = (x, y) => { const u = (x - c) / r, v = (y - c) / r; return Math.abs(v - 0.35 * u - 0.15 + 0.12 * Math.sin(u * 7 + seed)) < 0.09 && u > -0.4 ? -1 : Math.abs(u + 0.5 * v - 0.3) < 0.07 && v > 0 ? -1 : hash(x * 31 + y, seed) < 0.06 ? -0.6 : 0; };
+    const parts = [
+        { s: body, pal, tex: crack, bevel: Math.max(1, Math.round(r / 5)) },
+        { s: (x, y) => body(x, y) && chip(x, y), pal, tex: crack, bevel: 1 },
+    ];
+    return { spr: sprite(`boulder:${r}:${seed}:${pal.m}`, S, S, parts), ax: c, ay: c };
+}
+/** 大岩を描く（rot で回す） */
+export function drawBoulder(ctx, x, y, r, rot = 0, seed = 0, alpha = 1, pal = ROCK) {
+    const b = boulderSprite(r, seed, pal);
+    blit(ctx, b.spr, x, y, b.ax, b.ay, { rot: Math.round(rot / (Math.PI / 4)) * (Math.PI / 4), alpha }); // 回転は45度きざみ（ドットがにじまないように）
+}
 //# sourceMappingURL=pixart.js.map

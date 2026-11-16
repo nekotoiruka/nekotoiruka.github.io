@@ -270,6 +270,17 @@ export function render(p) {
     }
     // ── 海面（水面より下は暗い水に沈んで見える）
     const surf = (x) => 71 + Math.round(1.2 * Math.sin(x * 0.42 + p.bob * 0.8) + 0.6 * Math.sin(x * 0.17 + 1)) + Math.max(0, Math.abs(x - 48) - 40) * 0.8;
+    // hide 2: 体だけ（海面より下を消し、海は描かない）/ hide 3: 海だけ（体は描かない）。
+    //   跳び上がるとき、体は体の動きで持ち上げ、海は海面の高さに残す（arena-boss.ts の drawBody。STYLE の ground.sea）
+    if (p.hide === 2) {
+        for (let x = 0; x < BW; x++)
+            for (let y = Math.floor(surf(x)) + 1; y < BH; y++)
+                g.set(x, y, null);
+        return outline(g);
+    }
+    const sea = new Set(), set0 = g.set.bind(g);
+    if (p.hide === 3)
+        g.set = (x, y, c) => { sea.add(Math.round(y) * BW + Math.round(x)); set0(x, y, c); };
     for (let x = 0; x < BW; x++) {
         const sy = surf(x);
         for (let y = Math.floor(sy); y < BH; y++) {
@@ -327,6 +338,13 @@ export function render(p) {
     if (p.squash >= 3)
         for (let i = 0; i < 6; i++)
             g.set(30 + i * 7, 62 - (i % 3) * 2, SEA.foam);
+    if (p.hide === 3) {
+        g.set = set0;
+        for (let y = 0; y < BH; y++)
+            for (let x = 0; x < BW; x++)
+                if (!sea.has(y * BW + x))
+                    g.set(x, y, null);
+    }
     void BW;
     return outline(g);
 }

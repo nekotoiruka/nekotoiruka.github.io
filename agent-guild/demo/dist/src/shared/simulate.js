@@ -102,6 +102,7 @@ const accuracyOf = (e) => weightedAccuracy(e.result.cases);
 // 立ち位置: ボスは左、冒険者は中央から右へ3列に並ぶ（見た目だけ。隊列による差はない）
 export const BOSS_POS = { x: 74, y: 150 };
 const ROW_X = { front: 178, mid: 248, back: 318 };
+const STAGGER = 8; // 段ごとに半身ずつ右へずらす（手前の段ほど右）
 export function layout(rows) {
     const out = rows.map(() => ({ x: 0, y: 0 }));
     for (const r of ['front', 'mid', 'back']) {
@@ -114,7 +115,7 @@ export function layout(rows) {
         ids.forEach((f, k) => {
             const c = cols === 2 ? k % 2 : 0;
             const j = cols === 2 ? Math.floor(k / 2) : k;
-            out[f] = { x: ROW_X[r] + (cols === 2 ? (c ? 14 : -14) : 0), y: 146 + (j - (perCol - 1) / 2) * gap + (cols === 2 && c ? gap / 2 - gap / 4 : -(cols === 2 ? gap / 4 : 0)) };
+            out[f] = { x: ROW_X[r] + (cols === 2 ? (c ? 14 : -14) : 0) + (j - (perCol - 1) / 2) * STAGGER, y: 146 + (j - (perCol - 1) / 2) * gap + (cols === 2 && c ? gap / 2 - gap / 4 : -(cols === 2 ? gap / 4 : 0)) };
         });
     }
     return out;

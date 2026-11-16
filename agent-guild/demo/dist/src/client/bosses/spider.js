@@ -202,7 +202,9 @@ export function render(p) {
     // 頭胸部と頭
     blob(g, C[0], C[1], 13 - sq * 0.2, 10 - sq * 0.3, body, true);
     // 手前の脚（頭はこのあと上に描く）
-    NEAR.forEach((L, i) => drawLeg(L, i, false));
+    // hide: 脚の薙ぎ払いでは、いちばん前の2本を演出（bossfx.ts）が大きく描くので、ここでは描かない
+    NEAR.forEach((L, i) => { if (!(p.hide && i >= 2))
+        drawLeg(L, i, false); });
     const H = [C[0] + 13 + Math.max(0, p.lean) * 0.25, C[1] - 10 + Math.max(0, p.lean) * 0.2];
     blob(g, H[0], H[1], 10, 9, body);
     // 甲羅のすじ

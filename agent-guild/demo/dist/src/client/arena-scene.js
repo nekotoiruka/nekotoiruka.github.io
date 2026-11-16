@@ -113,13 +113,17 @@ export function foreground(ctx) {
     const { w: AW, h: AH } = this.script.arena;
     const px = -(this.cam.x - AW / 2) * 0.5;
     ctx.save();
-    for (const [x0, wdt] of [[-14, 22], [AW - 6, 24]]) {
+    // 寄ったとき（ズーム）は、手前の柱が冒険者のすぐ横まで入りこんで、背後の動き（背後の霧の蝙蝠など）を隠すので、寄るほど薄くする
+    const keep = 1 - Math.min(1, Math.max(0, (this.cam.z - 1.08) / 0.2));
+    for (const [x0, wdt] of (keep > 0 ? [[-14, 22], [AW - 6, 24]] : [])) {
+        ctx.globalAlpha = keep;
         const x = Math.round(x0 + px);
         ctx.fillStyle = '#0c0916';
         ctx.fillRect(x, -20, wdt, AH + 40);
         ctx.fillStyle = '#1a1430';
         ctx.fillRect(x + (x0 < 0 ? wdt - 3 : 0), -20, 3, AH + 40);
     }
+    ctx.globalAlpha = 1;
     // 塵
     const rng = new Rng('dust:' + this.script.seed);
     ctx.fillStyle = '#ffe9c0';

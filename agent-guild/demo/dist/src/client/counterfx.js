@@ -278,9 +278,9 @@ const DRAW = {
         for (let i = 0; i < n; i++) {
             ctx.save();
             ctx.globalAlpha = k;
-            arrow(ctx, x - 7 + i * 5, y - 2, 1.9 + (hash(i) - 0.5) * 0.4, 8);
+            arrow(ctx, x - 7 + i * 5, y - 2, Math.PI - 1.9 + (hash(i) - 0.5) * 0.4, 8);
             ctx.restore();
-        }
+        } // 盾に刺さった矢も、左上から右下へ（矢の雨と同じ向き）
         if (p > 0.4 && p < 0.5)
             sparkle(ctx, x - 7 + (n % 4) * 5, y - 3, 3, '#ffffff', 1 - win(p, 0.4, 0.5));
     },

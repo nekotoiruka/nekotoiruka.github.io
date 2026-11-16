@@ -6,6 +6,7 @@ import './bosses/index.js';
 import { drawHero, muzzleOf } from './hero.js';
 import { bossCanvas, BOSS_IDLE, BH } from './boss.js';
 import { MOTION_PICKS } from './motionpicks.js';
+import { MEET } from './reach.js';
 // ---------------------------------------------------------------- 画面と時間
 // 1枚の大きさ（ドット）・床の高さ・冒険者の立ち位置・攻撃が当たる所（ボスの胸）。12人の画面では、1人ずつ描く前に入れ替える
 export let W = 144, H = 88, FY = 80;
@@ -20,6 +21,7 @@ let LIFT = null; // 近接の反撃で、元の列から寄せる分（drawInAre
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const liftAt = (x) => (LIFT ? R(LIFT.dy * (1 - clamp01((LIFT.from - x) / Math.max(1, LIFT.from - LIFT.to)))) : 0);
 let REACH_TO = null; // 討伐画面の反撃: 近接の型が踏みこむ先（ボスの前）。null なら見本帳の位置
+let ESCAPE = null; // 討伐画面の身のこなし: 体を横へ動かす量（攻撃の落ちる場所から抜けきる所まで。arrival.ts の escapeDx）。null なら見本帳の量
 let NO_ATTACK = false; // ボスの攻撃とセットで見るとき: 見本の中の仮の攻撃（赤い玉・赤い弧）を描かない
 const LOOP = 2.0; // 1回の長さ（秒）
 const clamp = (x) => Math.max(0, Math.min(1, x));
@@ -396,6 +398,8 @@ function approach(t, t0, t1, t2, t3, to = 64) {
         return to;
     return R(lerp(to, HX, ease(win(t, t2, t3))));
 }
+// 跳んで降りる先（跳び叩き・跳び突き）: 見本帳ではボスの前（def）。迎え撃つときは目の前の迫る攻撃の所、反撃のときはボスの前（REACH_TO）
+const landTo = (def) => (PAIR_REACH ? HX - 26 : REACH_TO !== null ? REACH_TO : def);
 // 当たった瞬間だけ時間を止める（ヒットストップ）。at からの dur を、その瞬間に固定
 function stop(t, at, dur) { return t < at ? t : t < at + dur ? at : t - dur; }
 const hitBoss = (e, at, len = 0.08, push = 3) => { const k = e.t - at; e.boss({ hit: k >= 0 && k < len, dx: k >= 0 && k < len * 2 ? -push * (1 - k / (len * 2)) : 0 }); };
@@ -419,21 +423,22 @@ const SLASH = [
             e.bg();
             const cut = 0.55;
             hitBoss(e, cut, 0.1, 4);
+            const to = PAIR_REACH ? HX - 40 : REACH_TO !== null ? REACH_TO - 30 : 6; // すれ違って抜ける先（迎え撃つときは、迫る攻撃の向こう側。反撃のときは、ボスの前を抜けた所）
             let x = HX;
             if (t > 0.18 && t < 0.3)
-                x = R(lerp(HX, 6, win(t, 0.18, 0.24)));
+                x = R(lerp(HX, to, win(t, 0.18, 0.24)));
             else if (t >= 0.3 && t < 0.75)
-                x = 6;
+                x = to;
             else if (t >= 0.75)
-                x = R(lerp(6, HX, ease(win(t, 0.75, 0.92))));
+                x = R(lerp(to, HX, ease(win(t, 0.75, 0.92))));
             if (t > 0.18 && t < 0.26)
                 for (let i = 1; i < 5; i++)
-                    e.ghost(lerp(HX, 6, win(t, 0.18, 0.24) - i * 0.05), FY, '#c8f0ff', 0.5 - i * 0.1);
+                    e.ghost(lerp(HX, to, Math.max(0, win(t, 0.18, 0.24) - i * 0.05)), FY, DECOY, 0.5 - i * 0.1); // 速さの残像は、本体の通った道に
             e.hero(x, FY, t > 0.24 && t < 0.7 ? 'guard' : t >= 0.75 ? 'dash' : 'idle', 1, { flip: !(t > 0.24 && t < 0.75) });
             const lk = bump(t, 0.24, 0.62) * (t > 0.24 ? 1 : 0);
             if (lk > 0) {
                 const th = t > cut ? 3 : 1;
-                rampLine(e.c, 0, TY + 4, W, TY - 6, t > cut ? PAL.steel : ['#ffffff'], th, t > cut ? 1 - win(t, cut, 0.66) : 1);
+                rampLine(e.c, PAIR_REACH ? to - 16 : 0, TY + 4, PAIR_REACH ? HX + 6 : W, TY - 6, t > cut ? PAL.steel : ['#ffffff'], th, t > cut ? 1 - win(t, cut, 0.66) : 1);
             }
             if (t > cut) {
                 flash(e.c, bump(t, cut, cut + 0.04) * 0.6);
@@ -459,22 +464,28 @@ const SLASH = [
                 sparks(e.c, TX + 6, TY, win(t, h, h + 0.1), i === 2 ? 12 : 6, i === 2 ? 14 : 8, PAL.steel, 10 + i);
             });
         } },
-    { id: 'slash-afterimage', name: '残像の踏み込み', note: '青い残像を3つ残して一気に間合いを詰め、小さく鋭い軌跡。速さを残像で見せる。', draw(e) {
+    { id: 'slash-afterimage', name: '残像の踏み込み', note: '色の抜けた残像をその場に残して、一気に踏みこみ、小さく鋭い軌跡。迫る攻撃は残像に当たって砕け、本体は踏みこんだ先で斬っている。', draw(e) {
             const t = e.t;
             e.bg();
             hitBoss(e, 0.36);
-            const x = approach(t, 0.2, 0.28, 0.6, 0.74);
-            if (t > 0.2 && t < 0.4)
+            // 踏みこむ先（approach と同じ）。残像と速さの線は、本体が実際に通った道に置く（以前は見本帳の位置 64 に固定で、討伐画面では本体と離れた所に出ていた）
+            const to = PAIR_REACH ? HX - 26 : REACH_TO ?? 64;
+            const x = t < 0.2 ? HX : t < 0.26 ? R(lerp(HX, to, ease(win(t, 0.2, 0.26)))) : t < 0.6 ? to : t < 0.74 ? R(lerp(to, HX, ease(win(t, 0.6, 0.74)))) : HX;
+            // 迎え撃つとき: 元の場所に残像（身代わり）を残し、迫る攻撃はそこへ当たって砕ける（当たる時刻 0.36）。反撃のときは、速さの残像だけ
+            if (PAIR_REACH)
+                decoy(e, HX, FY, t < 0.6 ? t : 0, 0.2, 0.36);
+            else if (t > 0.2 && t < 0.3)
                 for (let i = 1; i <= 3; i++)
-                    e.ghost(lerp(HX, 64, ease(win(t - i * 0.025, 0.2, 0.28))), FY, i === 1 ? '#8ad8ff' : '#3a8ad8', 0.7 - i * 0.18);
+                    e.ghost(lerp(HX, to, ease(win(t - i * 0.02, 0.2, 0.26))), FY, DECOY, 0.6 - i * 0.12);
+            streak(e, HX, x, FY, win(t, 0.2, 0.28));
             if (t > 0.6 && t < 0.74)
                 for (let i = 1; i <= 2; i++)
-                    e.ghost(lerp(64, HX, ease(win(t - i * 0.03, 0.6, 0.74))), FY, '#3a8ad8', 0.4);
-            e.hero(x, FY, t > 0.2 && t < 0.28 ? 'dash' : t > 0.28 && t < 0.46 ? 'attack' : t > 0.6 && t < 0.74 ? 'dash' : 'idle', win(t, 0.28, 0.44), { flip: !(t > 0.6 && t < 0.74) });
-            const k = win(t, 0.3, 0.36), fade = 1 - win(t, 0.4, 0.5);
+                    e.ghost(lerp(to, HX, ease(win(t - i * 0.03, 0.6, 0.74))), FY, DECOY, 0.4);
+            e.hero(x, FY, t > 0.2 && t < 0.26 ? 'dash' : t > 0.26 && t < 0.46 ? 'attack' : t > 0.6 && t < 0.74 ? 'dash' : 'idle', win(t, 0.26, 0.44), { flip: !(t > 0.6 && t < 0.74) });
+            const k = win(t, 0.28, 0.36), fade = 1 - win(t, 0.4, 0.5);
             if (k > 0 && fade > 0)
                 band(e.c, x - 8, FY - 15, 7, 12, Math.PI + 1.6, lerp(Math.PI + 1.6, Math.PI - 1.4, ease(k)), PAL.ice, fade, 1.1);
-            star(e.c, TX + 6, TY, R(3 * bump(t, 0.36, 0.44)));
+            star(e.c, PAIR_REACH ? x - 10 : TX + 6, PAIR_REACH ? FY - 15 : TY, R(3 * bump(t, 0.36, 0.44)));
         } },
     { id: 'slash-wave', name: '飛ぶ斬撃', note: 'その場で振り抜き、三日月の刃が飛んでいく。通ったあとに点の尾が残る。', draw(e) {
             const t = e.t;
@@ -553,21 +564,22 @@ const THRUST = [
             e.bg();
             hitBoss(e, 0.5, 0.1, 2);
             let x = HX, y = FY;
+            const to = landTo(58), hop = Math.min(50, 14 + Math.abs(HX - to)); // 近い所へは低く跳ぶ（画面の外へ出ない）
             if (t > 0.15 && t < 0.5) {
                 const k = win(t, 0.15, 0.5);
-                x = R(lerp(HX, 58, k));
-                y = R(FY - Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.9) * 50 * (1 - easeIn(win(k, 0.7, 1))));
+                x = R(lerp(HX, to, k));
+                y = R(FY - Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.9) * hop * (1 - easeIn(win(k, 0.7, 1))));
             }
             else if (t >= 0.5 && t < 0.68)
-                x = 58;
+                x = to;
             else if (t >= 0.68)
-                x = R(lerp(58, HX, ease(win(t, 0.68, 0.85))));
+                x = R(lerp(to, HX, ease(win(t, 0.68, 0.85))));
             e.hero(x, y, t > 0.35 && t < 0.6 ? 'attack' : t > 0.15 && t < 0.35 ? 'victory' : 'idle', win(t, 0.35, 0.6));
             if (t > 0.38 && t < 0.5)
                 for (let i = 1; i < 4; i++)
                     e.ghost(x + i * 3, y - i * 6, '#8ad8ff', 0.5 - i * 0.12, 'attack', 0.5);
-            ringK(e.c, 50, FY - 1, R(4 + 22 * win(t, 0.5, 0.64)), PAL.steel[1], 1, 1 - win(t, 0.55, 0.66), 0.25);
-            dust(e.c, 52, win(t, 0.5, 0.75), 1.2);
+            ringK(e.c, to - 8, FY - 1, R(4 + 22 * win(t, 0.5, 0.64)), PAL.steel[1], 1, 1 - win(t, 0.55, 0.66), 0.25);
+            dust(e.c, to - 6, win(t, 0.5, 0.75), 1.2);
             sparks(e.c, TX + 8, TY + 6, win(t, 0.5, 0.6), 8, 12, PAL.steel, 4, Math.PI, -Math.PI / 2);
         } },
     { id: 'thrust-sweep', name: '薙ぎ払い', note: '長い柄で横に大きく払う。平たい楕円の軌跡が足元をなでる。', draw(e) {
@@ -684,26 +696,27 @@ const BLUNT = [
             e.bg();
             hitBoss(e, 0.5, 0.12, 0);
             let x = HX, y = FY;
+            const to = landTo(60), hop = Math.min(54, 16 + Math.abs(HX - to)); // 近い所へは低く跳ぶ（画面の外へ出ない）
             if (t > 0.12 && t < 0.5) {
                 const k = win(t, 0.12, 0.5);
-                x = R(lerp(HX, 60, k));
-                y = R(FY - Math.sin(k * Math.PI) * 54 * (k < 0.5 ? 1 : 1));
+                x = R(lerp(HX, to, k));
+                y = R(FY - Math.sin(k * Math.PI) * hop);
                 if (k > 0.5)
-                    y = R(lerp(FY - 54 * Math.sin(0.5 * Math.PI), FY, easeIn((k - 0.5) * 2)));
+                    y = R(lerp(FY - hop, FY, easeIn((k - 0.5) * 2)));
             }
             else if (t >= 0.5 && t < 0.7)
-                x = 60;
+                x = to;
             else if (t >= 0.7)
-                x = R(lerp(60, HX, ease(win(t, 0.7, 0.86))));
+                x = R(lerp(to, HX, ease(win(t, 0.7, 0.86))));
             e.hero(x, y, t > 0.3 && t < 0.6 ? 'attack' : t > 0.12 && t < 0.3 ? 'victory' : 'idle', win(t, 0.3, 0.6));
             if (t > 0.38 && t < 0.5)
                 for (let i = 1; i < 5; i++)
                     line(e.c, x - 6 + i * 3, y - 30 - i * 3, x - 6 + i * 3, y - 40 - i * 4, '#9aa0c8');
             const k = win(t, 0.5, 0.66);
-            ringK(e.c, 50, FY - 1, R(6 + 34 * k), PAL.gold[2], 2, 1 - k, 0.22);
-            ringK(e.c, 50, FY - 1, R(3 + 20 * k), '#ffffff', 1, 1 - k, 0.22);
+            ringK(e.c, to - 10, FY - 1, R(6 + 34 * k), PAL.gold[2], 2, 1 - k, 0.22);
+            ringK(e.c, to - 10, FY - 1, R(3 + 20 * k), '#ffffff', 1, 1 - k, 0.22);
             flash(e.c, bump(t, 0.5, 0.54) * 0.4);
-            dust(e.c, 50, win(t, 0.5, 0.8), 1.6);
+            dust(e.c, to - 10, win(t, 0.5, 0.8), 1.6);
         } },
     { id: 'blunt-upper', name: 'かち上げ', note: '下から上へすくい上げる。火花が上に飛び、ボスが少し浮く。', draw(e) {
             const t = e.t;
@@ -1101,6 +1114,37 @@ const GUARD = [
             star(e.c, HX - 10, FY - 14, R(4 * bump(t, 0.4, 0.48)), PAL.blood[1]);
         } },
 ];
+// ---- 残像（身代わり）の共通の描き方 ----
+// 「攻撃が来る → 本体は残像を残して抜ける → 攻撃が残像に当たり、残像が砕けて消える → 抜けた先に本体がはっきり見える」が一目で分かるように。
+//   残像: 色を抜いた青灰色の縁どりと、うすい網かけ（本体より明らかに薄い）。本体: ふつうの色のまま
+//   抜ける一瞬: 残像から本体まで、白い速さの線 / 当たる一瞬: 残像が白く光ってから、粒になって散る / 本体が着いた所: 小さな光と砂ぼこり
+const DECOY = '#9aaac8';
+/** 残像（身代わり）。hit: 攻撃が当たる時刻（ここで白く光って砕ける） */
+function decoy(e, x, y, t, from, hit, action = 'idle', at = 0) {
+    if (t < from)
+        return;
+    if (t < hit) {
+        e.ghost(x, y, DECOY, 0.78, action, at);
+        return;
+    }
+    const k = win(t, hit, hit + 0.12);
+    if (k >= 1)
+        return;
+    if (k < 0.25)
+        e.ghost(x, y, '#ffffff', 0.8, action, at); // 当たった一瞬、白く光る
+    for (let i = 0; i < 14; i++) { // 粒になって散る
+        const a = (i / 14) * TAU + 0.3, d = 2 + 16 * ease(k), px = x + Math.cos(a) * d * 0.8, py = y - 12 + Math.sin(a) * d * 0.9 - 6 * k;
+        P(e.c, px, py, i % 3 ? DECOY : '#ffffff', 2, 2);
+    }
+}
+/** 残像から本体へ抜ける一瞬の、白い速さの線（x0 → x1） */
+function streak(e, x0, x1, y, k) {
+    if (k <= 0 || k >= 1)
+        return;
+    const a = 1 - k;
+    for (let i = 0; i < 4; i++)
+        line(e.c, Math.min(x0, x1), y - 6 - i * 6, Math.max(x0, x1), y - 6 - i * 6, i % 2 ? '#c8f0ff' : '#ffffff', 1, a);
+}
 // ================================================================ 7. 回避
 const slashAt = (e, at, y = FY - 14) => { if (NO_ATTACK)
     return; const k = win(e.t, at - 0.1, at + 0.06), fade = 1 - win(e.t, at + 0.04, at + 0.14); if (k > 0 && fade > 0)
@@ -1111,31 +1155,33 @@ const EVADE = [
             e.bg();
             e.boss({ pose: { lean: t > 0.3 && t < 0.45 ? 4 : 0 } });
             slashAt(e, 0.4);
+            const dx = ESCAPE ?? 18; // 討伐画面では、攻撃の落ちる場所から抜けきる所まで跳ぶ
             let x = HX, y = FY;
-            if (t > 0.32 && t < 0.5) {
-                const k = win(t, 0.32, 0.5);
-                x = R(lerp(HX, HX + 18, k));
+            if (t > 0.32 && t < 0.4) {
+                const k = win(t, 0.32, 0.4);
+                x = R(lerp(HX, HX + dx, k));
                 y = R(FY - Math.sin(k * Math.PI) * 10);
             }
-            else if (t >= 0.5 && t < 0.8)
-                x = HX + 18;
+            else if (t >= 0.4 && t < 0.8)
+                x = HX + dx;
             if (t >= 0.8)
-                x = R(lerp(HX + 18, HX, win(t, 0.8, 0.95)));
-            e.hero(x, y, t > 0.32 && t < 0.5 ? 'dash' : 'idle', 0.5);
-            dust(e.c, HX + 18, win(t, 0.5, 0.7), 0.8);
+                x = R(lerp(HX + dx, HX, win(t, 0.8, 0.95)));
+            e.hero(x, y, t > 0.32 && t < 0.4 ? 'dash' : 'idle', 0.5, { flip: dx > 0 });
+            dust(e.c, HX + dx, win(t, 0.4, 0.6), 0.8);
         } },
-    { id: 'evade-ghost', name: '残像よけ', note: '一瞬で横へずれ、元の場所に残像が残る。攻撃は残像だけを切る。', draw(e) {
+    { id: 'evade-ghost', name: '残像よけ', note: '一瞬で横へ抜け、元の場所に色の抜けた残像が残る。攻撃は残像に当たり、残像は砕けて消える。抜けた先の本体ははっきり見える。', draw(e) {
             const t = e.t;
             e.bg();
             e.boss();
             slashAt(e, 0.42);
-            const moved = t > 0.36 && t < 0.78;
-            if (moved)
-                e.ghost(HX, FY, '#8ad8ff', 0.6 * (1 - win(t, 0.42, 0.6)), 'idle');
-            e.hero(moved ? HX + 16 : HX, FY, 'idle', 0);
-            if (t > 0.36 && t < 0.4)
-                for (let i = 0; i < 4; i++)
-                    line(e.c, HX - 4, FY - 6 - i * 6, HX + 10, FY - 6 - i * 6, '#c8f0ff');
+            const dx = ESCAPE ?? 24, moved = t > 0.36 && t < 0.78;
+            decoy(e, HX, FY, moved ? t : 0, 0.36, 0.42);
+            streak(e, HX, HX + dx, FY, win(t, 0.36, 0.4));
+            const back = win(t, 0.78, 0.9);
+            e.hero(moved ? HX + dx : t >= 0.78 ? R(lerp(HX + dx, HX, ease(back))) : HX, FY, t >= 0.78 && t < 0.9 ? 'dash' : 'idle', 0, { flip: t >= 0.78 && t < 0.9 ? dx > 0 : true });
+            if (t > 0.36 && t < 0.42)
+                star(e.c, HX + dx, FY - 30, R(3 * bump(t, 0.36, 0.42))); // 本体が姿を見せる
+            dust(e.c, HX + dx, win(t, 0.36, 0.5), 0.6);
         } },
     { id: 'evade-duck', name: '伏せる', note: 'さっと身を低くして、頭の上を攻撃が通りすぎる。', draw(e) {
             const t = e.t;
@@ -1153,37 +1199,47 @@ const EVADE = [
             if (low)
                 P(e.c, HX - 10, FY + 1, '#1f1a2e', 20, 8);
         } },
-    { id: 'evade-roll', name: '前転', note: '転がって相手の脇をくぐる。回転は90度ずつなのでドットが崩れない。', draw(e) {
+    { id: 'evade-roll', name: '前転', note: '転がって、攻撃の当たる場所から抜けきる。回転は90度ずつなのでドットが崩れない。', draw(e) {
             const t = e.t;
             e.bg();
             e.boss();
             slashAt(e, 0.4);
-            const k = win(t, 0.3, 0.52);
+            // 討伐画面では、攻撃の落ちる場所（急降下の着地点・投石・拳）から体が抜けきる所まで転がる（arrival.ts の escapeDx）。見本帳では相手の脇をくぐる
+            const dx = ESCAPE ?? -30, dir = dx < 0 ? -1 : 1;
+            const k = win(t, 0.3, 0.38); // 当たる瞬間（0.40）の前に、転がり終える
             let x = HX;
-            if (t > 0.3 && t < 0.52)
-                x = R(lerp(HX, HX - 30, k));
-            else if (t >= 0.52 && t < 0.72)
-                x = HX - 30;
+            if (t > 0.3 && t < 0.38)
+                x = R(lerp(HX, HX + dx, k));
+            else if (t >= 0.38 && t < 0.72)
+                x = HX + dx;
             else if (t >= 0.72)
-                x = R(lerp(HX - 30, HX, ease(win(t, 0.72, 0.9))));
-            e.hero(x, FY, 'idle', 0, k > 0 && k < 1 ? { rot: -Math.floor(k * 8) } : { flip: !(t > 0.72 && t < 0.9) });
+                x = R(lerp(HX + dx, HX, ease(win(t, 0.72, 0.9))));
+            const backing = t > 0.72 && t < 0.9;
+            e.hero(x, FY, backing ? 'dash' : 'idle', 0, k > 0 && k < 1 ? { rot: dir * Math.floor(k * 8), flip: dir < 0 } : { flip: backing ? dir > 0 : true });
             if (k > 0 && k < 1)
-                dust(e.c, x + 8, (k * 3) % 1, 0.5, Math.floor(k * 3));
+                dust(e.c, x - dir * 8, (k * 3) % 1, 0.5, Math.floor(k * 3));
+            dust(e.c, HX + dx, win(t, 0.38, 0.52), 0.8, 9); // 転がり終えた所
         } },
-    { id: 'evade-log', name: '変わり身', note: 'ボフッと煙。元の場所には丸太が残り、本人は少しうしろにあらわれる。', draw(e) {
+    { id: 'evade-log', name: '変わり身', note: 'ボフッと煙。元の場所には丸太が残り、本人は少しうしろにあらわれる。攻撃は丸太に当たり、丸太は砕けて散る。', draw(e) {
             const t = e.t;
             e.bg();
             e.boss();
             slashAt(e, 0.44);
-            const swap = t > 0.36 && t < 0.82;
-            if (swap && t < 0.7) {
+            const swap = t > 0.36 && t < 0.82, dx = ESCAPE ?? 20;
+            if (swap && t < 0.44) {
                 P(e.c, HX - 4, FY - 14, '#8a5a2a', 8, 14);
                 P(e.c, HX - 4, FY - 14, '#c8905a', 8, 2);
                 P(e.c, HX - 2, FY - 8, '#5a3a1a', 2, 2);
             }
+            const br = win(t, 0.44, 0.56); // 当たる瞬間（0.44）に、丸太が木っ端になって散る
+            if (br > 0 && br < 1)
+                for (let i = 0; i < 8; i++) {
+                    const a = -Math.PI * (0.15 + 0.7 * (i / 7)), d = 3 + 14 * ease(br);
+                    P(e.c, HX + Math.cos(a) * d * (i % 2 ? 1 : -1) - 1, FY - 8 + Math.sin(a) * d + 10 * br * br, i % 3 ? '#8a5a2a' : '#c8905a', 2, 2);
+                }
             if (!swap || t > 0.4)
-                e.hero(swap ? HX + 20 : HX, FY, 'idle', 0, { a: swap ? win(t, 0.4, 0.46) : 1 });
-            for (const [cx, at] of [[HX, 0.36], [HX + 20, 0.4]]) {
+                e.hero(swap ? HX + dx : HX, FY, 'idle', 0, { a: swap ? win(t, 0.4, 0.46) : 1 });
+            for (const [cx, at] of [[HX, 0.36], [HX + dx, 0.4]]) {
                 const k = win(t, at, at + 0.14);
                 if (k > 0 && k < 1)
                     for (let i = 0; i < 6; i++) {
@@ -3793,8 +3849,8 @@ export const BOSS_LIST = [
 ];
 // [ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類]
 export const PAIRS = {
-    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '伏せる', 'crawl'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
-    vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧からの斬撃', '振り向いて斬る', 'turnCut'] },
+    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '飛びのく', 'dodge'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
+    vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
     spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['脚の薙ぎ払い', '低く斬りはらう', 'cut'] },
     goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['槍の突撃', '穂先をはらう', 'parry'] },
     kraken: { breath: ['墨の噴射', '物陰に伏せる', 'crawl'], claw: ['触手の薙ぎ', '跳んでかわす', 'jump'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['触手の巻き取り', '触手を斬る', 'cut'] },
@@ -4157,19 +4213,20 @@ export function attackPattern(weapon, variant = 0) {
 }
 /** 討伐画面の座標のまま、1人ぶんの動きを描く（ボスと背景は描かない。ボスの攻撃は本番の演出が描く） */
 export function drawInArena(c, d) {
-    const keep = { W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO };
+    const keep = { W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO, ESCAPE };
     W = d.aw;
     H = d.ah;
     HX = d.hx;
     FY = d.fy;
     QUIET = d.quiet;
     NO_ATTACK = true;
+    ESCAPE = d.escape ?? null;
     // attack: ボスへの反撃（通常攻撃の型）。近接はボスの前（reach）まで踏みこみ、飛び道具と魔法はボスの体を狙う
     const meet = !d.attack && (d.resp === 'cut' || d.resp === 'smash' || d.resp === 'shoot' || d.resp === 'turnCut');
     PAIR_REACH = meet;
-    TX = meet ? d.hx - 30 : d.boss.x;
-    TY = meet ? d.fy - 18 : d.boss.y;
-    REACH_TO = d.attack ? d.reach ?? null : null;
+    TX = meet ? d.hx + MEET.dx : d.boss.x;
+    TY = meet ? d.fy - 1 + MEET.dy : d.boss.y;
+    REACH_TO = d.attack ? d.reach ?? null : null; // 迎え撃つ所は、ボスの攻撃が届く所（reach.ts の MEET）
     // 近接の反撃は、ボスの前へ斜めに踏みこむ（下の列の人がボスの足元より下を斬らないように）。
     // 型の中の足元（FY）をボスの前の高さに置きかえ、冒険者の絵だけ、踏みこんだ分に応じて元の列から寄せる
     const lift = d.attack && d.reachY !== undefined && REACH_TO !== null && isMelee(d) ? d.fy - d.reachY : 0;
@@ -4192,7 +4249,7 @@ export function drawInArena(c, d) {
     }
     finally {
         c.restore();
-        ({ W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO } = keep);
+        ({ W, H, FY, HX, TX, TY, QUIET, NO_ATTACK, PAIR_REACH, REACH_TO, ESCAPE } = keep);
         LIFT = null;
     }
     const at = DRAWN;
@@ -4201,16 +4258,17 @@ export function drawInArena(c, d) {
 /** drawInArena が体を描く位置を、描く前に確かめる（小さな見えない絵に空まわしする）。
  *  討伐画面で、体力ゲージ・オーラなど体に付くものを、体より先に（下に）描くため。同じ引数なら drawInArena が返す位置と同じ */
 let probeCtx = null;
-export function probeInArena(d) {
-    if (!probeCtx) {
+export function probeInArena(d, ctx) {
+    if (!ctx && !probeCtx) {
         const cv = document.createElement('canvas');
         cv.width = cv.height = 1;
         probeCtx = cv.getContext('2d');
     }
-    probeCtx.setTransform(1, 0, 0, 1, 0, 0);
+    const c = ctx ?? probeCtx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
     PROBE = true;
     try {
-        return drawInArena(probeCtx, d);
+        return drawInArena(c, d);
     }
     finally {
         PROBE = false;

@@ -2,7 +2,7 @@ import { respondScene } from './bossmoves.js';
 // ボス × 基本の4場面（[技の名前] → 型）
 export const HURT_BY_BOSS = {
     dragon: { breath: 'hurt-scorch', claw: 'hurt-daze', dive: 'hurt-crush', tail: 'hurt-fly' }, // 火炎ブレス→黒こげ / ひっかき / 急降下→つぶれる / 尾のなぎはらい→吹っ飛ぶ
-    vampire: { breath: 'hurt-daze', claw: 'hurt-daze', dive: 'hurt-crush', tail: 'hurt-daze' }, // 蝙蝠の群れ / 伸びる爪 / 真上からの一撃→つぶれる / 背後の霧からの斬撃
+    vampire: { breath: 'hurt-daze', claw: 'hurt-daze', dive: 'hurt-crush', tail: 'hurt-daze' }, // 蝙蝠の群れ / 伸びる爪 / 真上からの一撃→つぶれる / 背後の霧の蝙蝠
     spider: { breath: 'hurt-web', claw: 'hurt-curse', dive: 'hurt-crush', tail: 'hurt-fly' }, // 糸の網→ぐるぐる巻き / 毒牙→毒がまわる / 天井からの落下→つぶれる / 脚の薙ぎ払い→吹っ飛ぶ
     goblin: { breath: 'hurt-arrow', claw: 'hurt-daze', dive: 'hurt-daze', tail: 'hurt-fly' }, // 矢の雨→頭に矢 / 落とし穴 / 投石→たんこぶ / 槍の突撃→吹っ飛ぶ
     kraken: { breath: 'hurt-ink', claw: 'hurt-fly', dive: 'hurt-daze', tail: 'hurt-daze' }, // 墨の噴射→墨まみれ / 触手の薙ぎ→吹っ飛ぶ / 海からの突き上げ / 触手の巻き取り

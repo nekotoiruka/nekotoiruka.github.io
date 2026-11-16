@@ -18,7 +18,7 @@ const NAMES = {
         head: {},
     },
     vampire: {
-        atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧からの斬撃'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
+        atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧の蝙蝠'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
         scene: { dive: tl('蝙蝠の急降下'), spell: tl('呪いの紋'), ougi: tl('伯爵の悪あがき'), rush: tl('血の秘術'), ally: tl('伯爵の一撃') },
         head: { breath: tl('蝙蝠の群れ'), claw: tl('伸びる爪'), dive: tl('蝙蝠の急降下'), tail: tl('背後の霧'), rush: tl('血の秘術') },
     },
@@ -67,8 +67,9 @@ export function sceneHead(kind, scene) {
 // 対応技には、画面に出す名前をつけない（シーズンの正解の言葉と重ならないように。名前は、正しく動けた人の答えから出る）
 const C = (evade, fx, sfx, color) => ({ evade, fx, sfx, color });
 export const COUNTERS = {
-    // 竜: 炎は鏡で受け、爪は影を残してすり抜け、急降下は伏せ、尾は跳んでかわす（今までどおり）
-    dragon: { breath: C('block', 'mirror', 'guard', '#bfe8ff'), claw: C('step', 'shadow', 'whoosh', '#e2c2ff'), dive: C('crawl', 'dust', 'whoosh', '#c8d0ff'), tail: C('jump', 'trail', 'jump', '#ffffff') },
+    // 竜: 炎は鏡で受け、爪は影を残してすり抜け、急降下は落ちてくる場所から飛びのき、尾は跳んでかわす。
+    //   急降下は、伯爵・大蜘蛛と同じく狙う人の上へ落ちる体当たりなので、伏せてもつぶされる。落ちる場所から抜ける動きにした（2026-11-16、#120）
+    dragon: { breath: C('block', 'mirror', 'guard', '#bfe8ff'), claw: C('step', 'shadow', 'whoosh', '#e2c2ff'), dive: C('dodge', 'roll', 'whoosh', '#c8d0ff'), tail: C('jump', 'trail', 'jump', '#ffffff') },
     // 伯爵: 蝙蝠の群れは床に伏せてやり過ごし（床伏せ）、爪は銀の盾で受け（銀盾受け）、急降下は柱の陰へ駆けこみ（柱陰走り）、背後の霧は振り向いて斬る（背面斬り）。
     //   動きはシーズンの正解の中身に合わせる（2026-10-24。以前は聖なる光・はじく・受け止める で、正解の名前と絵が食い違っていた）
     vampire: { breath: C('crawl', 'dust', 'whoosh', '#e0c8f0'), claw: C('block', 'parry', 'guard', '#ffd0da'), dive: C('dodge', 'roll', 'whoosh', '#e0c8f0'), tail: C('turnCut', 'backGuard', 'slash', '#ffd0e0') },

@@ -1,5 +1,8 @@
-import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND, clamp01 } from './arena-common.js';
-import { bossCue, counterFor } from './bossmoves.js';
+// 討伐画面の描画: 時間まわり（スロー・ヒットストップ・効果音の合図・決着の時刻）。ArenaRenderer のメソッド（this を受け取る関数）を、arena.ts から取り付ける
+import { focusOf } from './reach.js';
+import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND } from './arena-common.js';
+import { bossCue, counterFor, isBaseScene } from './bossmoves.js';
+import { dodgePlan } from './dodgetiming.js';
 import { MELEE_WEAPONS } from '../shared/catalog.js';
 import { isUltScene, shoutEndT, SPELL_T, ultBeats, ultHitT, verseAt } from './scenes.js';
 import { play } from './sfx.js';
@@ -116,11 +119,31 @@ export function hitStop(w, phase) {
             return f;
     return 0;
 }
-// 尾のなぎはらい・ブレスは、ボスに近い者から順に届く
+// 攻撃がその冒険者に届くまでの遅れ（IMPACT からの差）。基本の4場面は、ボス×攻撃×立ち位置ごとに、攻撃の演出が届く時刻（arrival.ts）から。
+// 被弾ののけぞり・ヒットストップ・効果音・対応技の光（counterfx.ts）は、みんなこの時刻に合わせる（#102）
 export function lagOf(w, f) {
-    const x = this.script.fighters[f].slot.x;
+    return this.dodgePlanOf(w, f)?.arrive.t0 !== undefined ? this.dodgePlanOf(w, f).arrive.t0 - IMPACT : 0;
+}
+/** 冒険者ひとりの回避の段取り（攻撃が届く時刻・回避の山場・見本帳の型のずらし）。基本の4場面だけ（ほかは null） */
+export function dodgePlanOf(w, f) {
+    const key = w * 1000 + f + (this.motionProto ? 0.5 : 0) + (this.solo !== null ? (this.solo + 1) * 1e6 : 0);
+    if (this.planCache.has(key))
+        return this.planCache.get(key);
     const sc = this.sceneOf(w);
-    return sc === 'tail' ? clamp01((x - 150) / 234) * 0.12 : sc === 'breath' ? clamp01((x - 150) / 234) * 0.05 : 0;
+    let plan = null;
+    if (isBaseScene(sc)) {
+        const s = this.script, on = s.fighters.map((fi, i) => (!fi.off && (w === 0 || s.waves[w - 1]?.aliveAfter[i] !== false) ? i : -1)).filter((i) => i >= 0);
+        const me = s.fighters[f];
+        const ctx = {
+            kind: (s.theme?.kind ?? 'dragon'), scene: sc, x: me.slot.x, y: me.slot.y, f, idx: Math.max(0, on.indexOf(f)), n: on.length,
+            lanes: [...new Set(on.map((i) => Math.round(s.fighters[i].slot.y)))], foot: this.bossFoot, W: 384, partyX: Math.max(...s.fighters.filter((x) => !x.off).map((x) => x.slot.x)), xs: on.map((i) => s.fighters[i].slot.x),
+            // 大きな攻撃が狙う所（bossfx.ts の aimOf と同じ: 1人に寄る窓の人 → 自分の冒険者 → 討伐隊のまん中）
+            aim: focusOf(on.map((i) => ({ f: i, x: s.fighters[i].slot.x, y: s.fighters[i].slot.y, alive: true, mine: this.mine.has(i) })), this.solo) ?? undefined,
+        };
+        plan = dodgePlan(ctx, this.evadeOf(w, f), this.protoOf(w, f)?.pattern.id ?? null);
+    }
+    this.planCache.set(key, plan);
+    return plan;
 }
 // 正しく動けたときの身のこなし: 基本の4場面は、ボスごとの対応技の動き。それ以外は、キャラごとの得意な動き
 export function evadeOf(w, f) {

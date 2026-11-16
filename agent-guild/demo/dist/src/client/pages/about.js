@@ -12,10 +12,10 @@ import { setSfx } from '../sfx.js';
 import { kitIcon } from '../kiticons.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
 import { poseFor } from '../chibi.js';
-import { WEAPON_LABELS } from '../../shared/catalog.js';
+import { WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
-import { dodgeCands, dodgeOrder } from '../dodgepicks.js';
+import { applyLook, dodgeCands, dodgeOrder, pickedCands, DODGE_PICKS } from '../dodgepicks.js';
 // ---------------------------------------------------------------------------
 // アニメの進行役: 画面に見えている canvas だけを描き直す。ページを離れたら止まる。
 // 動きを減らす設定の人には、最初の1コマだけを見せる（自分で押した再生は動かす）
@@ -744,9 +744,20 @@ function reel(script, segs, ticker, dir, label) {
     r.mine = new Set();
     const tag = h('span', { class: 'lp-clip-tag', 'aria-hidden': 'true' });
     let i = 0, time = 0;
+    const baseWeapon = r.looks.map((l) => l.weapon);
+    let looked = null;
     const enter = (k) => {
         i = k;
         const sg = segs[i];
+        // 見本帳で選んだ型は、その冒険者の武器と型を差し替えて見せる（前の区間の差し替えはもどす）
+        if (looked !== null) {
+            applyLook(r, looked, -1, undefined, baseWeapon[looked]);
+            looked = null;
+        }
+        if (sg.look) {
+            applyLook(r, sg.look.f, sg.w, sg.look.look, baseWeapon[sg.look.f]);
+            looked = sg.look.f;
+        }
         r.camOverride = sg.cam;
         r.solo = sg.solo ?? null;
         r.frame = 0;
@@ -775,7 +786,8 @@ function reel(script, segs, ticker, dir, label) {
         if (dt <= 0)
             return;
         const sl = segs[i].slow, ph = time - segs[i].w;
-        time = waveTime(r, time, sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt, 3.4);
+        const d = sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt;
+        time = segs[i].steady ? time + d / 3.4 : waveTime(r, time, d, 3.4);
         if (time >= segs[i].w + segs[i].to)
             enter((i + 1) % segs.length);
         r.draw(time);
@@ -860,15 +872,17 @@ export async function renderAbout(root, opts = {}) {
         const e = (ev.find(mineGuarded) ?? ev.find(guarded) ?? ev.find(calm));
         fx.push({ title: tl('幻術と結界'), body: tl('ボスは偉い人の声をまねて、もっともらしい偽の命令を混ぜてくる。あやしい声が、光の壁にはじかれて砕け散る。'), w: illW, mine: [e.f] });
     }
-    // 見切りと反撃: ボスの攻撃に、正しく動けた冒険者が見切ってかわす（ガード・跳ぶ・伏せる…）ところを、1人ずつ寄って見せる。
+    // 見切り: ボスの攻撃に、正しく動けた冒険者が見切ってかわす（ガード・跳ぶ・伏せる…）ところを、1人ずつ寄って見せる。
     // 反撃は隣の「武器ごとの技」の窓で見せるので、ここでは反撃に移る直前で切る。同じ型が並ばないように選ぶ（dodgepicks.ts。回避モーションの見本帳で選べる）。
     // 札はボスの攻撃（場面の見出し）と武器の名前だけ。かわし方の名前は答えになるので出さない
     const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
     const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
-    const dodge = dodgeOrder(dodgeCands(full)).map((c) => ({
-        w: c.w, from: c.from, to: c.to, slow: c.slow, tag: `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f,
+    const dodgeList = DODGE_PICKS.length ? pickedCands(full, WEAPON_KINDS) : dodgeOrder(dodgeCands(full));
+    const dodge = dodgeList.map((c) => ({
+        w: c.w, from: c.from, to: c.to, slow: c.slow, steady: c.steady, tag: c.look && !c.look.pattern ? full.cases[full.waves[c.w].caseIndex]?.title ?? '' : `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f, // 伏せる・結界は武器によらないので、武器の名前は出さない
+        ...(c.look ? { look: { f: c.f, look: c.look } } : {}),
     }));
-    const dodgeTitle = tl('見切りと反撃');
+    const dodgeTitle = tl('見切り');
     // 武器ごとの技: 武器のちがう冒険者を1人ずつ舞台に立たせて寄り、かわしてから反撃するまでを順に見せる（札は武器の名前）
     const wpSegs = [];
     const seen = new Set();
@@ -890,7 +904,7 @@ export async function renderAbout(root, opts = {}) {
         wpSegs.push({ w: pick.i, from: Math.max(0.34, at.t - 0.18), to: at.t + 0.1, tag: WEAPON_LABELS[k], cam: { mode: 'follow', f }, solo: f });
     }
     if (dodge.length)
-        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。見切ったら、すかさず反撃に転じる。'), segs: dodge });
+        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。武器によって、身のこなしもちがう。'), segs: dodge });
     if (wpSegs.length)
         fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: wpSegs });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
