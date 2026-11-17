@@ -950,6 +950,10 @@ export async function renderAbout(root, opts = {}) {
         const firstAtk = Math.min(dt, ...evs.filter((e) => e.type === 'attack').map((e) => e.t));
         fx.push({ title: tl('討伐の瞬間'), body: tl('とどめの連撃で、ボスが地響きとともに崩れ落ちる。最後まで戦い抜いた冒険者たちに、勝利のファンファーレ。'), w: downW, mine: [], from: Math.max(0, firstAtk - 0.45), to: dt + 0.75 });
     }
+    // 窓の並び（演出のこだわりの順）: 武器ごとの技 → 見切り → 必殺技 → 連携詠唱（なければ討伐の瞬間）→ 詠唱合戦 → 幻術と結界
+    const FX_ORDER = [tl('武器ごとの技'), tl('見切り'), tl('必殺技'), tl('連携詠唱'), tl('討伐の瞬間'), tl('詠唱合戦'), tl('幻術と結界')];
+    const rankOf = (t) => { const k = FX_ORDER.indexOf(t); return k < 0 ? FX_ORDER.length : k; };
+    fx.sort((a, b) => rankOf(a.title) - rankOf(b.title));
     const clips = clipDirector(ticker);
     const effects = h('section', { class: 'lp-sec', id: 'lp-fx' }, h('h2', {}, tl('演出のこだわり')), h('p', { class: 'lp-intro' }, tl('見本の討伐から、見どころの場面だけを切り出しました。画面のまん中に来た窓が、くり返し動きます。窓をクリック（タップ）すると、一時停止・再生。')), h('div', { class: 'lp-fx-grid' }, ...fx.map((x) => h('figure', { class: 'lp-fx win' }, x.segs ? reel(full, x.segs, ticker, clips, x.title) : clip(x.sc ?? full, x.w, x.mine, ticker, clips, x.title, x.from, x.to), h('figcaption', {}, h('b', {}, x.title), h('span', {}, x.body))))));
     // --- キャラ図鑑 ---
