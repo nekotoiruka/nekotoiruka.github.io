@@ -13,7 +13,7 @@ import { bossMotion, makeAt } from './bossmotion.js';
 import { ultMoveDef } from './ultmoves.js';
 import { drawChainFinale } from './chainfx.js';
 import { drawSword } from './pixart.js';
-import { dustCloud, flash, giantSprite, glowArc, glowLine, impactBurst, rocks, skyDisc, starSpark, SWORD_PAL, summonCircle, swordAt, text, ULT_T } from './ultkit.js';
+import { dustCloud, flash, giantSprite, glowArc, glowLine, impactBurst, rocks, skyDisc, slashArc, starSpark, SWORD_PAL, summonCircle, swordAt, text, ULT_T, wedge } from './ultkit.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
 export const isUltScene = (s) => !!s && ULT_SCENES.includes(s);
 export const SCENE_LABEL = {
@@ -2022,8 +2022,8 @@ export function sceneTop(a) {
     }
 }
 // ---- 封印（seal）: ボスの足元に封印陣が開き、光の鎖が絡みつく。軋んだところへ武器の型で打ちこんで封じ砕く ----
-//   blade : 八振りの剣が降って、ボスを囲んで突き立つ
-//   heavy : 巨大な武器が楔のように頭上から打ちこまれる
+//   blade : 八本の光の刃が降って、ボスを囲んで突き立つ
+//   heavy : 巨大な光の刃（三日月）が楔のように頭上から打ちこまれる
 //   pierce: 光の槍が空から五本、斜めに貫いて縫いとめる
 //   shot  : 封陣の縁から無数の矢が一点へ集まる
 //   magic : 封陣が球体に閉じて縮み、中で光が炸裂する
@@ -2079,19 +2079,40 @@ function sealUlt(a, hero) {
         ctx.save();
         ctx.globalAlpha = live;
         if (style === 'blade') {
-            const pal = SWORD_PAL[wp] ?? SWORD_PAL.sword;
+            // 八本の光の刃（武器の絵ではなく、光だけでできた細い刃）が降って、ボスを囲んで突き立つ。降りるあいだは光の尾、刺さると足もとに光の波紋
+            const glowC = wp === 'katana' ? '#ff9ab0' : colA;
             for (let i = 0; i < 8; i++) {
                 const t0 = T.drive + i * 0.004, k = ease(win(p, t0, t0 + 0.022));
                 if (p < t0)
                     continue;
-                const ph = (i / 8) * TAU + 0.4, x = bc.x + Math.cos(ph) * 56, y = bc.y + 20 + Math.sin(ph) * 15;
-                drawSword(ctx, wp === 'katana' ? 'katana' : 'sword', x, lerp(-50, y, k), 40, { glow: wp === 'katana' ? '#ff9ab0' : colA, glowK: k < 1 ? 1 : 0.4, gem: pal.gem }); // ドット絵の剣（刀は刀の形）。#105
+                const ph = (i / 8) * TAU + 0.4, x = bc.x + Math.cos(ph) * 56, y = bc.y + 20 + Math.sin(ph) * 15, tip = lerp(-50, y, k);
+                if (k < 1)
+                    glowLine(ctx, x, tip - 110, x, tip - 40, 1.2, glowC, 0.7);
+                wedge(ctx, x, tip - 46, x, tip + 2, k < 1 ? 11 : 9, [glowC, '#ffffff'], k < 1 ? 1 : 0.75 + 0.25 * Math.sin(a.frame / 3 + i));
+                const rk = win(p, t0 + 0.022, t0 + 0.05);
+                if (rk > 0 && rk < 1) {
+                    ctx.save();
+                    ctx.globalAlpha = live * (1 - rk);
+                    ctx.strokeStyle = glowC;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.ellipse(x, y + 2, 3 + rk * 12, 1 + rk * 4, 0, 0, TAU);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
         }
         else if (style === 'heavy') {
-            const k = dk * dk, tip = lerp(-80, bc.y - 6, k);
-            if (p < T.hit + 0.04)
-                giantSprite(ctx, wp, bc.x, tip, 5, false, 1, 0);
+            // 巨大な光の刃（大鎌の刃の形をした光の三日月）が、頭上から楔のように打ちこまれる。武器の絵は出さない
+            const k = dk * dk, tip = lerp(-80, bc.y - 6, k), r = 48, a0 = -Math.PI * 0.25, a1 = Math.PI * 0.62;
+            const cx = bc.x - Math.cos(a1) * r, cy = tip - Math.sin(a1) * r;
+            if (p < T.hit + 0.04) {
+                if (k < 1)
+                    for (let j = 1; j <= 2; j++)
+                        slashArc(ctx, cx, cy - j * 26, r, a0, a1, 16, [colA, colB], 0.35 / j); // 落ちてくる残光
+                slashArc(ctx, cx, cy, r, a0, a1, 22, [colA, colB], 1);
+                starSpark(ctx, bc.x, tip, 10 + 8 * k, k, '#ffffff');
+            }
             if (dk > 0.4 && dk < 1)
                 for (let i = 0; i < 6; i++)
                     glowLine(ctx, bc.x - 14 + i * 5, tip - 110, bc.x - 14 + i * 5, tip - 40, 1, '#ffffff', 0.6);

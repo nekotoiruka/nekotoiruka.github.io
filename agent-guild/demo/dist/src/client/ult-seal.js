@@ -1,6 +1,6 @@
 import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
-import { ULT_T, R, TAU, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, impactBurst, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { ULT_T, R, TAU, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, impactBurst, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, aimAct, weaponTip, } from './ultkit.js';
 import { aura, blit, talismanSprite } from './pixart.js';
 const T = ULT_T.seal;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
@@ -23,7 +23,9 @@ function sealPose(p, home, body, frame, w, lunge = 0) {
         const lift = win(p, T.chain, T.chain + 0.04) * (1 - win(p, T.hit + 0.02, T.hit + 0.06));
         const driving = p >= T.drive && !MAGIC.has(w);
         const lx = driving ? -lunge * ease(win(p, T.drive, T.hit)) * (1 - win(p, T.hit + 0.02, T.hit + 0.06)) : 0;
-        return at(home, { x: fr.x + lx, y: fr.y - 6 * ease(lift) + Math.sin(frame / 6) * lift }, { action: driving ? 'attack' : 'cast', t: driving ? 0.2 + 0.7 * win(p, T.drive, T.hit) : 0.5 });
+        // 射手は、撃つあいだ武器の先を封印のほうへ水平に構える（矢・光線はその先から出る）
+        const act = driving ? (SHOT.has(w) ? aimAct(w) : { action: 'attack', t: 0.2 + 0.7 * win(p, T.drive, T.hit) }) : { action: 'cast', t: 0.5 };
+        return at(home, { x: fr.x + lx, y: fr.y - 6 * ease(lift) + Math.sin(frame / 6) * lift }, act);
     }
     const k = win(p, T.hit + 0.06, T.home);
     return at(home, { x: lerp(fr.x, home.x, ease(k)), y: lerp(fr.y, home.y, ease(k)) - Math.sin(k * Math.PI) * 14 }, { action: 'dash', flip: false });
@@ -39,7 +41,7 @@ function sealCam(p, home, body, zoom = 1.4) {
 // 打ちこみ（主役から封印へ）: 武器しだいの一撃の線
 function driveFx(a, w, cols, to) {
     const { ctx, phase: p } = a;
-    const fr = front(a.body), hand = { x: fr.x - 10, y: fr.y - 18 };
+    const fr = front(a.body), hand = weaponTip(a, { x: fr.x - 10, y: fr.y - 22 }); // 矢・光線・魔法は、主役の武器の先から
     const k = win(p, T.drive, T.hit), fade = 1 - win(p, T.hit + 0.01, T.hit + 0.06);
     if (k <= 0 || fade <= 0)
         return;
@@ -50,8 +52,8 @@ function driveFx(a, w, cols, to) {
     }
     else if (MAGIC.has(w)) {
         const e = { x: lerp(hand.x, to.x, ease(k)), y: lerp(hand.y, to.y, ease(k)) };
-        glowLine(ctx, hand.x, hand.y - 4, e.x, e.y, 3, cols[1], fade);
-        glowDisc(ctx, hand.x, hand.y - 4, 14 * fade, cols[0], fade, 1);
+        glowLine(ctx, hand.x, hand.y, e.x, e.y, 3, cols[1], fade);
+        glowDisc(ctx, hand.x, hand.y, 14 * fade, cols[0], fade, 1);
     }
     else
         slashLine(ctx, to.x + 50, to.y - 60, lerp(to.x + 50, to.x - 40, ease(k)), lerp(to.y - 60, to.y + 50, ease(k)), 16, cols, fade);
@@ -182,7 +184,7 @@ const talisman = {
     top(a, hero, w) {
         const { ctx, phase: p } = a;
         const cols = ['#ffd166', '#fff6c8'];
-        const fr = front(a.body), from = { x: fr.x - 8, y: fr.y - 20 }, out = 1 - win(p, T.hit, T.hit + 0.01);
+        const fr = front(a.body), from = weaponTip(a, { x: fr.x - 8, y: fr.y - 20 }), out = 1 - win(p, T.hit, T.hit + 0.01); // 札は扇の先から舞い上がる
         // 扇から舞い上がる札（扇は風で運ぶ）
         for (let i = 0; i < TAL_N; i++) {
             const t0 = talT(i), k = win(p, t0, t0 + 0.04), to = talSpot(a.body, i);

@@ -1,6 +1,6 @@
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, win } from './ultkit.js';
+import { ULT_T, R, TAU, bolt, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, win, aimAct, weaponTip } from './ultkit.js';
 const T = ULT_T.awaken;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
 const NO_GEAR = { back: [], fams: [], charms: [] };
@@ -200,7 +200,7 @@ const halo = {
         if (p < BEAM0)
             return { ...base, oy: -lift, action: 'dash', t: 0.5 };
         if (p < BEAM1)
-            return { ...base, oy: -lift, ox: 2 + Math.sin(frame * 1.7) * 0.6, action: 'cast', t: 0.9 }; // 宙で、両手から撃つ（反動で震える）
+            return { ...base, oy: -lift, ox: 2 + Math.sin(frame * 1.7) * 0.6, ...aimAct(w) }; // 宙で、武器の先をボスへ向けて撃つ（反動で震える）
         if (p < BEAM1 + 0.04)
             return { ...base, oy: -lift, action: 'dash', t: 0.5 };
         const k = win(p, BEAM1 + 0.04, BEAM1 + 0.07);
@@ -231,9 +231,9 @@ const halo = {
         // 跳んだときの砂ぼこりと、着地の砂ぼこり
         dustCloud(a, hero.x, hero.y + 2, win(p, T.hold + 0.012, T.hold + 0.06), 'halojump', 0.8);
         dustCloud(a, hero.x, hero.y + 2, win(p, BEAM1 + 0.04, BEAM1 + 0.1), 'haloland', 0.8);
-        // 両手から極太の光線
+        // 武器の先（銃口・弓・ギターのヘッド・盾・傘の先）から極太の光線
         const bk = win(p, BEAM0, T.land), bf = 1 - win(p, T.hit + 0.02, BEAM1);
-        const hand = { x: hero.x - 10, y: hy - 14 }, tg = tgOf(a.body);
+        const hand = weaponTip(a, { x: hero.x - 10, y: hy - 14 }), tg = tgOf(a.body);
         if (p > BEAM0 - 0.02 && p < BEAM0)
             glowDisc(ctx, hand.x, hand.y, 8 + 14 * win(p, BEAM0 - 0.02, BEAM0), cols[0], 1, 1); // 溜め
         if (bk > 0 && bf > 0) {

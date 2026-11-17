@@ -79,7 +79,7 @@ const GRIP = {
     sword: [3, 13], katana: [3, 15], scythe: [2, 15], fan: [5, 8], blaster: [4, 6], pan: [3, 11], umbrella: [5, 10], guitar: [3, 12],
 };
 // 振らずに構えるもの（盾・本・銃・弓・ギター）
-const HELD = ['shield', 'book', 'blaster', 'bow', 'guitar'];
+export const HELD = ['shield', 'book', 'blaster', 'bow', 'guitar'];
 // 飛び道具・魔法が出る所（格子の列・行）。弓は矢をつがえる握りの前、光線銃は銃口、杖は宝珠、魔導書は開いたページの前、扇は先。
 // 近接の武器は刃先（使うのは主に飛び道具）
 const MUZZLE = {

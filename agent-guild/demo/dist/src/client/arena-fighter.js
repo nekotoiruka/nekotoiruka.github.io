@@ -323,8 +323,10 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
 export function drawFighter(ctx, v, w, phase, outro, st, at, isTarget, atk, pose) {
     for (const f of pose.fx)
         f();
-    if (pose.hidden)
+    if (pose.hidden) {
+        this.muzzles.delete(v.f);
         return;
+    } // 描かない人の武器の先は残さない（前のコマの位置を使わない）
     const { body, x, y, flash, flip, rot, alpha, ghosts, away, uHero, pat } = pose;
     let { action, act01 } = pose;
     const chain = this.chainOf(w);
@@ -359,7 +361,7 @@ export function drawFighter(ctx, v, w, phase, outro, st, at, isTarget, atk, pose
         this.uiTop.push(() => this.labelAt(tl('！'), p.x, p.y, '#ff5a6e', 10));
     }
     for (const gh of ghosts)
-        drawHero(ctx, this.looks[v.f], NO_GEAR, v.x + gh.x, v.y + 1 + gh.y, { frame: this.frame, flip, alpha: gh.a, action: gh.act ?? 'dash', ring: false });
+        drawHero(ctx, this.looks[v.f], NO_GEAR, v.x + gh.x, v.y + 1 + gh.y, { frame: this.frame, flip, alpha: gh.a, action: gh.act ?? 'dash', t: gh.t, ring: false });
     const skillGlow = uHero ? bump(phase, 0.28, 0.66) : st?.used.skills.length && at && this.skillWave(w) ? bump(phase, at.t - 0.12, at.t) : 0;
     let look = this.looks[v.f];
     // 役に立たない道具の一発ギャグ（自分の冒険者だけ・討伐の中で一度だけ）

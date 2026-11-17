@@ -513,34 +513,8 @@ export function drawHole(ctx, x, y, rx, col, alpha = 1, frame = 0, seed = 0) {
     ctx.restore();
 }
 // =====================================================================
-// 苦無（影縫い）・札（封印「札」）・三日月の刃（光の騎士）
+// 札（封印「札」）・三日月の刃（光の騎士）
 // =====================================================================
-// 影縫いの苦無: 影の技なので、紫の刃（光る縁）と黒い柄。ほかの光る演出と同じ明るさの段にそろえる
-const KUNAI = { o: '#12061e', d: '#4a2a7a', m: '#8a5ad0', l: '#d0b0ff', h: '#ffffff' };
-const WRAP = { o: '#12061e', d: '#1e1030', m: '#3a2456', l: '#6a4a96', h: '#a88ad8' };
-/** 部品の形と段を、回して拡大する（回したあとの格子でドットを置くので、描くときに回して崩れることがない） */
-function xform(parts, ang, sc, ox, oy, px, py) {
-    const c = Math.cos(-ang), sn = Math.sin(-ang);
-    const back = (x, y) => { const dx = x + 0.5 - px, dy = y + 0.5 - py; return [(dx * c - dy * sn) / sc + ox - 0.5, (dx * sn + dy * c) / sc + oy - 0.5]; };
-    return parts.map((P) => ({
-        ...P,
-        s: (x, y) => { const [u, v] = back(x, y); return P.s(Math.round(u), Math.round(v)); },
-        tone: P.tone ? (x, y) => { const [u, v] = back(x, y); return P.tone(Math.round(u), Math.round(v)); } : undefined,
-        tex: P.tex ? (x, y) => { const [u, v] = back(x, y); return P.tex(Math.round(u), Math.round(v)); } : undefined,
-    }));
-}
-/** 苦無（切っ先が下）。ang だけ回し（プラスで切っ先が左下へ向く）、sc 倍にした形で作る。(ax, ay) が切っ先 */
-export function kunaiSprite(ang = 0, sc = 1) {
-    const cx = 5.5, tipY = 29.6;
-    const base = [
-        { s: minus(ell(cx, 4, 3.6, 3.6), ell(cx, 4, 1.6, 1.6)), pal: KUNAI }, // 輪
-        { s: rrect(cx - 1.6, 7, cx + 1.6, 15), pal: WRAP, tex: (_x, y) => (y % 2 ? -1 : 0) }, // 柄の巻き
-        { s: poly([[cx, 14], [cx + 4.4, 20], [cx + 0.6, tipY], [cx - 0.6, tipY], [cx - 4.4, 20]]), pal: KUNAI, tone: (x, y) => (x + 0.5 < cx - 0.4 ? (y < 21 ? 4 : 3) : x + 0.5 > cx + 0.6 ? 1 : 2) }, // 刃（左の面が光る）
-    ];
-    const L = Math.ceil(32 * sc), S = L * 2 + 4, piv = S / 2; // 切っ先を中心に回すので、切っ先を真ん中に置いた正方形
-    const spr = sprite(`kunai:${ang.toFixed(2)}:${sc}`, S, S, xform(base, ang, sc, cx, tipY, piv, piv));
-    return { spr, w: S, h: S, ax: Math.floor(piv), ay: Math.floor(piv) };
-}
 const PAPER = { o: '#3a2412', d: '#cbb486', m: '#efe2be', l: '#fffaf0', h: '#ffffff' };
 const VERMILION = { o: '#4a0a08', d: '#9a1a14', m: '#d8302a', l: '#ff6a4a', h: '#ffc0a0' };
 const INK = { o: '#0a0606', d: '#1a1010', m: '#2a1a1a', l: '#4a3030', h: '#6a4a4a' };
