@@ -739,13 +739,17 @@ function clip(script, w, mine, ticker, dir, label, from = 0.08, to = 0.92) {
     }, () => dir.isActive(st));
     return wrap;
 }
+// いくつかの場面（または同じ場面の別の冒険者）を、順番につないでくり返し見せる窓。
+// 場面ごとにカメラを決め打ちし（寄らずに全体／決めた冒険者に寄る）、左上に短い札を出す
+/** 1人ずつ見せる窓（見切り・武器ごとの技）の速さ。討伐画面の速さのままだと早送りに見えるので、ゆっくりめに */
+const SHOW_PACE = 0.7;
 function reel(script, segs, ticker, dir, label) {
     const canvas = h('canvas', { class: 'arena-canvas pixel', role: 'img', 'aria-label': label });
     const r = new ArenaRenderer(canvas, script);
     r.muted = true;
     r.mine = new Set();
     const tag = h('span', { class: 'lp-clip-tag', 'aria-hidden': 'true' });
-    let i = 0, time = 0;
+    let i = 0, time = 0, held = 0;
     const baseWeapon = r.looks.map((l) => l.weapon);
     let looked = null;
     let undo = null, undress = null;
@@ -798,11 +802,20 @@ function reel(script, segs, ticker, dir, label) {
     ticker.add(canvas, (_t, dt) => {
         if (dt <= 0)
             return;
-        const sl = segs[i].slow, ph = time - segs[i].w;
-        const d = sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt;
-        time = segs[i].steady ? time + d / 3.4 : waveTime(r, time, d, 3.4);
-        if (time >= segs[i].w + segs[i].to)
-            enter((i + 1) % segs.length);
+        const sg = segs[i], sl = sg.slow, ph = time - sg.w;
+        // 区間の終わりで少し止めて（hold 秒）、決まった形やダメージの数字を見せてから次へ
+        if (time >= sg.w + sg.to) {
+            held += dt;
+            if (held >= (sg.hold ?? 0)) {
+                held = 0;
+                enter((i + 1) % segs.length);
+            }
+            r.draw(time);
+            return;
+        }
+        // pace: 区間ぜんたいの速さ。slow: 山場（かわす瞬間・当たる瞬間）だけ、さらにゆっくり
+        const d = (sl && ph >= sl[0] && ph < sl[1] ? dt * sl[2] : dt) * (sg.pace ?? 1);
+        time = Math.min(sg.w + sg.to, sg.steady ? time + d / 3.4 : waveTime(r, time, d, 3.4));
         r.draw(time);
     }, () => dir.isActive(st));
     return wrap;
@@ -887,7 +900,7 @@ export async function renderAbout(root, opts = {}) {
     // 札はボスの攻撃（場面の見出し）と武器の名前だけ。かわし方の名前は答えになるので出さない
     const dodgeList = DODGE_PICKS.length ? pickedCands(full, WEAPON_KINDS) : dodgeOrder(dodgeCands(full));
     const dodge = dodgeList.map((c) => ({
-        w: c.w, from: c.from, to: c.to, slow: c.slow, steady: c.steady, tag: c.look && !c.look.pattern ? full.cases[full.waves[c.w].caseIndex]?.title ?? '' : `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f, // 伏せる・結界は武器によらないので、武器の名前は出さない
+        w: c.w, from: c.from, to: c.to, slow: c.slow, steady: c.steady, pace: SHOW_PACE, hold: 0.35, tag: c.look && !c.look.pattern ? full.cases[full.waves[c.w].caseIndex]?.title ?? '' : `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f, // 伏せる・結界は武器によらないので、武器の名前は出さない
         ...(c.look ? { look: { f: c.f, look: c.look } } : {}),
     }));
     const dodgeTitle = tl('見切り');
@@ -897,7 +910,7 @@ export async function renderAbout(root, opts = {}) {
     const wpSegs = weaponOrder(weaponCands(full, probe, WEAPON_KINDS)).map((c) => {
         const back = applyWeapon(probe, c), win = weaponWindow(probe, c);
         back();
-        return { w: c.w, ...win, tag: WEAPON_LABELS[c.weapon], cam: weaponShot(probe, c.f), solo: c.f, setup: (r) => applyWeapon(r, c) };
+        return { w: c.w, ...win, steady: true, pace: SHOW_PACE, hold: 0.45, tag: WEAPON_LABELS[c.weapon], cam: weaponShot(probe, c.f), solo: c.f, setup: (r) => applyWeapon(r, c) };
     });
     if (dodge.length)
         fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。盾で受け止める、跳んでかわす、伏せてやりすごす、振り向いて迎え撃つ——同じ攻撃でも、手に持つ武器で身のこなしがちがう。'), segs: dressed(dodge, 0) });
