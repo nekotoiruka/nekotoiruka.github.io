@@ -67,7 +67,7 @@ export function applyLook(r, f, w, look, baseWeapon) {
 export function windowAt(r, w, f) {
     const plan = r.dodgePlanOf(w, f);
     const peak = plan ? plan.peak : 0.42;
-    return { from: peak - DODGE_LEAD, to: peak + DODGE_TAIL, slow: [peak - 0.05, peak + 0.03, 0.6] };
+    return { from: peak - DODGE_LEAD, to: peak + DODGE_TAIL, slow: [peak - 0.05, peak + 0.035, 0.3] };
 }
 /** 見本帳で選んだ型（「場面:武器:型」）を、区間つきの候補にする */
 export function pickedCands(script, weapons, picks = DODGE_PICKS) {
@@ -116,7 +116,7 @@ export function dodgeCands(script) {
             const plan = r.dodgePlanOf(w, e.f);
             const peak = plan ? plan.peak : at.t - 0.04;
             const from = peak - DODGE_LEAD, to = peak + DODGE_TAIL;
-            const slow = [peak - 0.05, peak + 0.03, 0.6];
+            const slow = [peak - 0.05, peak + 0.035, 0.3];
             out.push({ w, f: e.f, scene, weapon: r.looks[e.f].weapon, pattern: id, name: p ? p.pattern.name : `${resp === 'crawl' ? '伏せる' : resp === 'barrier' ? '結界' : '基本の動き'}（全員同じ）`, from, to, slow, steady: true });
         }
     });

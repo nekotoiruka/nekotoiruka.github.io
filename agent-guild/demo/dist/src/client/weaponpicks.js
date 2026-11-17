@@ -55,7 +55,7 @@ export function weaponWindow(r, c) {
     const at = r.wave(c.w).events.find((e) => e.type === 'attack' && e.f === c.f);
     const t = at?.t ?? 0.7;
     const lead = ((HIT_AT[c.pattern.id] ?? 0.42) - 0.02) / 3;
-    return { from: t - lead - 0.04, to: Math.min(0.99, t + 0.09) };
+    return { from: t - lead - 0.04, to: Math.min(0.99, t + 0.09), slow: [t - 0.03, t + 0.04, 0.3] }; // 当たる瞬間のまわりだけゆっくり
 }
 /** カメラ: 冒険者とボスの両方が入る所に止める（反撃の動きで画面が動かない。近接の踏みこみも、飛び道具の行き先も入る） */
 export function weaponShot(r, f) {
