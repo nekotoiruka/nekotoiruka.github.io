@@ -207,7 +207,7 @@ export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items, w
         const pass = blocked && w >= 0 && PASS_EVADES.includes(this.evadeOf(w, v.f));
         const stopX = v.x - (blocked && !pass ? 12 : 0), over = pass && this.evadeOf(w, v.f) === 'crawl';
         // 竜以外のボスは、ボスごとの飛び道具（蝙蝠・糸・矢・墨・岩・氷など）。竜は今までどおり
-        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, pass, ...(over ? { ty: v.y - 30 } : {}), mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
+        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, pass, swarm: w >= 0 && this.sceneOf(w) === 'breath', ...(over ? { ty: v.y - 30 } : {}), mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
             continue;
         if (atk === 'claw') { // 竜の爪: ひとり分の、三本の爪痕
             const k = clamp01((phase - 0.4) / 0.06), fade = 1 - clamp01((phase - 0.48) / 0.1);

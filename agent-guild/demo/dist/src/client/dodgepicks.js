@@ -139,4 +139,28 @@ export function dodgeOrder(cands, n = DODGE_AUTO_N) {
     }
     return out;
 }
+/** 紹介ページの窓で、区間ごとに冒険者の見た目を変える順（見本の討伐にいる冒険者の見た目を借りる）。
+ *  立ち位置の冒険者から始め、残りは 5 人おきに並べる（体の種類・色がとなり同士で重なりにくい） */
+export function dressOrder(script, f) {
+    const on = script.fighters.map((_, i) => i).filter((i) => !script.fighters[i].off && i !== f);
+    const out = [f];
+    for (let k = 0, i = 0; out.length <= on.length; k++, i = (i + 5) % on.length) {
+        while (out.includes(on[i]))
+            i = (i + 1) % on.length;
+        out.push(on[i]);
+    }
+    return out;
+}
+/** 冒険者 f の見た目（体・色・髪・柄・背負い物・お供・技の色・肖像）を、冒険者 src から借りる。武器はそのあと差し替える。もとにもどす関数を返す */
+export function dressAs(r, f, src) {
+    const keep = { look: r.looks[f], gear: r.gears[f], style: r.styles[f], color: r.colors[f], portrait: r.portraits[f], evade: r.evades[f] };
+    r.looks[f] = { ...r.looks[src] };
+    r.gears[f] = r.gears[src];
+    r.styles[f] = r.styles[src];
+    r.colors[f] = r.colors[src];
+    r.portraits[f] = r.portraits[src];
+    r.evades[f] = r.evades[src];
+    r.figs = null;
+    return () => { r.looks[f] = keep.look; r.gears[f] = keep.gear; r.styles[f] = keep.style; r.colors[f] = keep.color; r.portraits[f] = keep.portrait; r.evades[f] = keep.evade; r.figs = null; };
+}
 //# sourceMappingURL=dodgepicks.js.map

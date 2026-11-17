@@ -17,7 +17,8 @@ import { aura, barrierFx, decoyGag, drawFighter, dust, fighterPose, gagOf, guard
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
 import { updateCamera } from './arena-camera.js';
 import { bandWave, bandWindow, cues, dodgePlanOf, evadeOf, finisher, hitStop, lagOf, playCues, slowFactor } from './arena-timing.js';
-import { bossWeakness, counterFor, isBaseScene, respondScene } from './bossmoves.js';
+import { bossWeakness, counterFor, isBackScene, isBaseScene, respondScene } from './bossmoves.js';
+import { bossFxFor } from './bossfx.js';
 import { bossLine, chainBeats } from './captions.js';
 import { introBoss, introFighter, introHud, introLen, introPlan } from './arena-intro.js';
 const BOSS_RED = '#ff6b7a';
@@ -372,6 +373,11 @@ export class ArenaRenderer {
     motionProto = true;
     /** 見本帳用: 場面・冒険者ごとに型を差し替える（undefined なら、ふだんの選び方） */
     protoPick = null;
+    /** 見本帳・紹介ページ用: 反撃（通常攻撃）の型を差し替える（undefined なら、ふだんの選び方） */
+    attackPick = null;
+    /** 紹介ページの、1人の技だけを見せる窓: ボスの攻撃の演出（予兆・攻撃・基本の場面の演出）と、字幕の帯（赤・青）・下の進み具合を描かない。
+     *  大技の場面の演出（主役の必殺技）は描く */
+    showcase = false;
     protoOf(w, f) {
         if (!this.motionProto)
             return null;
@@ -421,6 +427,9 @@ export class ArenaRenderer {
     attackProtoOf(w, f) {
         if (!this.motionProto)
             return null;
+        const picked = this.attackPick?.(w, f);
+        if (picked !== undefined)
+            return picked;
         return attackPattern(this.looks[f].weapon, w + f);
     }
     /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。竜は場面の属性、ほかのボスは決まった弱点（bossmoves.ts）。弱点の属性がないボスは undefined（ふだんの色） */
@@ -541,11 +550,13 @@ export class ArenaRenderer {
             partyX: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)),
             // 1人だけ見せる窓でも、蝙蝠の群れの通り道は討伐隊ぜんたいの段で決める（arena-timing.ts の dodgePlanOf と同じ並び）
             ...(this.solo !== null ? { solo: this.solo, lanes: [...new Set(s.fighters.map((fi, i) => (!fi.off && (w === 0 || s.waves[w - 1]?.aliveAfter[i] !== false) ? Math.round(fi.slot.y) : null)).filter((y) => y !== null))] } : {}),
+            ...(this.showcase ? { showcase: true } : {}),
             bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;
         const quietUlt = this.ultQuiet(w);
-        if (sa)
+        const sceneFx = !this.showcase || isUltScene(scene); // 大技の場面の演出は主役の必殺技なので、showcase でも描く
+        if (sa && sceneFx)
             this.fxLayer(ctx, (c) => (quietUlt ? this.faded(c, 0.45, (c2) => { setUltQuiet(true); try {
                 sceneBack({ ...sa, ctx: c2 });
             }
@@ -581,7 +592,9 @@ export class ArenaRenderer {
             }
             ctx.restore();
         }
-        if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
+        // 背後から来る攻撃（bossmoves.ts の BACK_SCENE）: 前から来る共通の攻撃（床を払う帯・飛び道具）は描かない。背後の相手は場面の演出（bossfx.ts の backRaid）が描く
+        const backAtk = isBackScene(s.theme?.kind, this.respScene(w));
+        if (!this.showcase && !chain && !dazed && !backAtk && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
             this.fxLayer(ctx, (c) => this.attackFxBack(c, atk, phase, vis, targeted, scene));
         // --- 注目シーンの暗転（注目キャラとボスのあいだだけ明るく） ---
         if (spot && !ult) {
@@ -632,10 +645,14 @@ export class ArenaRenderer {
         if (!chain && outro === 0)
             this.keyItem(ctx, w, vis, strikeOf, phase, ult?.f);
         this.fxLayer(ctx, (c) => {
-            if (!chain && !dazed && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
+            if (!this.showcase && !chain && !dazed && !backAtk && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
                 this.attackFxFront(c, atk, phase, vis, targeted, evaded, items, w);
-            if (sa)
+            if (sa && sceneFx)
                 sceneFront({ ...sa, ctx: c });
+            // 霧・記憶・仲間の声の場面で、来る攻撃が背後から来る攻撃のとき: 背後の相手を描く（基本の場面では sceneFront が描く）
+            const rs = this.respScene(w);
+            if (!this.showcase && sa && backAtk && rs && !isBaseScene(scene))
+                bossFxFor(s.theme?.kind, rs)?.front?.({ ...sa, ctx: c, scene: rs });
         });
         if (scene === 'breath') {
             const g = bump(phase, 0.36, 0.62);
@@ -733,7 +750,7 @@ export class ArenaRenderer {
         // --- 手前の柱（カメラより速く動く。奥行き） ---
         this.foreground(ctx);
         // 画面下の進み具合（あなたの戦果が、正解するたびに積み上がる）。技名や「大技を潰した！」などの文字より奥に描く
-        if (!this.intro) {
+        if (!this.intro && !this.showcase) {
             ctx.save();
             ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
             this.progressBar(w, phase, strikeOf);
@@ -759,7 +776,7 @@ export class ArenaRenderer {
         const gagNow = [...this.mine].some((f) => this.gagOf(f)?.w === w) && phase > GAG[0] - 0.02 && phase < GAG[1] + 0.02;
         // 連携詠唱の見出しは、並び終えるまでの短いあいだだけ
         // 赤い帯: ボスが何をしたかを一文で（captions.ts）。連携詠唱は前置きの3拍（構え → 倒しきるには → いくぞ）
-        if (sa && cm && !gagNow) {
+        if (sa && cm && !gagNow && !this.showcase) {
             const cap = s.theme?.captions;
             if (chain) {
                 const beats = chainBeats(cap, cm.id, s.boss.name), L = 0.05, i = Math.min(2, Math.floor(phase / L));
@@ -774,7 +791,7 @@ export class ArenaRenderer {
             this.introHud(ctx);
             return;
         }
-        if (!gagNow)
+        if (!gagNow && !this.showcase)
             this.mineBand(ctx, w, phase, strikeOf, this.caseSceneOf(w)); // 文は課題の場面で引く（区間は演出の場面で決まる）
         // 巻物のカットイン（「スキル発動」）は出さない（2026-10-25）。見せ場は必殺技そのものにまとめる。巻物は頭上で広がる演出（scrollFx）だけ
         if (outro === 0)

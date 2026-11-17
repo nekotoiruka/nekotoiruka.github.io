@@ -1,0 +1,182 @@
+function el(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs))
+        e.setAttribute(k, v);
+    for (const k of kids)
+        if (k !== null)
+            e.append(k);
+    return e;
+}
+export function pickLab(o) {
+    const { r, cv, cands } = o;
+    r.muted = true;
+    let undo = null;
+    const aim = (c) => { undo?.(); undo = o.aim(c); };
+    const windowOf = (c) => { aim(c); return o.windowOf(c); };
+    let order = [];
+    try {
+        order = JSON.parse(localStorage.getItem(o.store) ?? '[]');
+    }
+    catch {
+        order = [];
+    }
+    order = order.filter((k) => cands.some((c) => c.key === k));
+    const save = () => { try {
+        localStorage.setItem(o.store, JSON.stringify(order));
+    }
+    catch { /* 残せなくても使える */ } };
+    const app = document.getElementById('app');
+    app.append(el('header', {}, el('h1', {}, o.heading), el('p', { class: 'lead' }, o.lead)));
+    const title = el('h2', {});
+    const sub = el('p', { class: 'fit' });
+    const pause = el('button', { class: 'btn' }, '一時停止');
+    const speed = el('div', { class: 'seg' });
+    const reelBtn = el('button', { class: 'btn' }, '選んだ順につなぐ');
+    const st = { list: [], i: 0, t: 0, paused: false, speed: 1, one: false, win: { from: 0, to: 0 } };
+    for (const sp of [1, 0.5, 0.25]) {
+        const b = el('button', { class: sp === 1 ? 'on' : '' }, sp === 1 ? 'ふつう' : sp === 0.5 ? '1/2' : '1/4');
+        b.onclick = () => { st.speed = sp; speed.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
+        speed.append(b);
+    }
+    pause.onclick = () => { st.paused = !st.paused; pause.textContent = st.paused ? '再生' : '一時停止'; };
+    const enter = (k) => {
+        st.i = k;
+        const c = st.list[k];
+        if (!c) {
+            title.textContent = 'まだ選んでいません';
+            sub.textContent = '';
+            return;
+        }
+        st.win = windowOf(c);
+        st.t = o.w(c) + st.win.from;
+        r.frame = 0;
+        title.textContent = `${st.one ? '1つだけ' : `つないで再生（${k + 1} / ${st.list.length}）`}: ${c.title}`;
+        sub.textContent = c.sub;
+        cards.forEach((x) => x.el.classList.toggle('now', x.c === c));
+    };
+    const playReel = () => { st.one = false; st.list = order.map((k) => cands.find((c) => c.key === k)).filter((c) => !!c); enter(0); };
+    const playOne = (c) => { st.one = true; st.list = [c]; enter(0); };
+    reelBtn.onclick = playReel;
+    const shut = el('button', { class: 'btn side-close' }, '閉じる');
+    const side = el('aside', { class: 'side' }, el('section', { class: 'card stage' }, el('div', { class: 'body' }, title, sub, el('div', { class: 'row' }, reelBtn, pause, speed)), cv, shut));
+    const list = el('div', { class: 'list' });
+    app.append(el('div', { class: 'layout' }, list, side));
+    const narrow = () => matchMedia('(max-width: 900px)').matches;
+    const openSide = () => { if (narrow()) {
+        side.classList.add('open');
+        document.body.classList.add('side-open');
+    } };
+    const closeSide = () => { side.classList.remove('open'); document.body.classList.remove('side-open'); };
+    shut.onclick = closeSide;
+    side.addEventListener('click', (e) => { if (e.target === side)
+        closeSide(); });
+    addEventListener('keydown', (e) => { if (e.key === 'Escape')
+        closeSide(); });
+    // ---- 候補のカード（まとまりごとに分ける） ----
+    const summary = el('textarea', { rows: '6', readonly: '', 'aria-label': '選んだもの' });
+    const cards = [];
+    const paint = () => {
+        for (const x of cards) {
+            const k = order.indexOf(x.c.key);
+            x.num.textContent = k >= 0 ? String(k + 1) : '';
+            x.el.classList.toggle('picked', k >= 0);
+        }
+        summary.value = `${o.summaryHead}\n${order.map((key, k) => { const c = cands.find((x) => x.key === key); return c ? `${k + 1}. ${c.line}（${key}）` : ''; }).join('\n') || '（まだ選んでいません）'}`;
+    };
+    const groups = [...new Set(cands.map((c) => c.group))];
+    for (const g of groups) {
+        const mine = cands.filter((c) => c.group === g);
+        const grid = el('div', { class: 'grid' });
+        list.append(el('h2', { class: 'sec' }, `${g}（${mine.length}通り）`), grid);
+        for (const c of mine) {
+            const cvs = el('canvas', { width: '768', height: '432', role: 'img', 'aria-label': `${c.title}の4コマ` });
+            const num = el('span', { class: 'num' });
+            const toggle = el('button', { class: 'btn mark' }, '選ぶ ／ 外す');
+            toggle.onclick = (e) => { e.stopPropagation(); const k = order.indexOf(c.key); if (k >= 0)
+                order.splice(k, 1);
+            else
+                order.push(c.key); save(); paint(); if (!st.one)
+                playReel(); };
+            const card = el('article', { class: 'card pick', tabindex: '0', 'data-key': c.key }, el('div', { class: 'thumb' }, cvs, num), el('div', { class: 'body' }, el('h3', {}, c.title), el('p', { class: 'fit' }, c.sub), toggle));
+            card.onclick = () => { playOne(c); openSide(); };
+            card.onkeydown = (e) => { if (e.key === 'Enter')
+                card.click(); };
+            cards.push({ el: card, c, num, cvs });
+            grid.append(card);
+        }
+    }
+    const copy = el('button', { class: 'btn primary' }, '選んだものをコピー');
+    copy.onclick = async () => { try {
+        await navigator.clipboard.writeText(summary.value);
+        copy.textContent = 'コピーしました';
+    }
+    catch {
+        summary.select();
+        copy.textContent = '選んだので、手でコピーしてください';
+    } setTimeout(() => { copy.textContent = '選んだものをコピー'; }, 1800); };
+    const none = el('button', { class: 'btn' }, '全部外す');
+    none.onclick = () => { order = []; save(); paint(); playReel(); };
+    list.append(el('section', { class: 'card wide' }, el('div', { class: 'body' }, el('h2', {}, '選んだもの'), summary, el('div', { class: 'row' }, copy, none), el('p', { class: 'lead' }, o.advice))));
+    paint();
+    // ---- 4コマ（少しずつ描いて写しとる。いちどに描くと、開いた直後に固まるため） ----
+    let q = 0;
+    const thumbStep = () => {
+        const end = performance.now() + 14;
+        while (q < cards.length && performance.now() < end) {
+            const x = cards[q++];
+            const wn = windowOf(x.c);
+            const ctx = x.cvs.getContext('2d');
+            ctx.imageSmoothingEnabled = false;
+            o.frames(x.c, wn).forEach((ph, j) => { r.frame = 0; r.draw(o.w(x.c) + ph); ctx.drawImage(cv, (j % 2) * 384, Math.floor(j / 2) * 216, 384, 216); });
+            ctx.fillStyle = '#F4F1E8';
+            ctx.fillRect(383, 0, 2, 432);
+            ctx.fillRect(0, 215, 768, 2);
+        }
+        if (q < cards.length)
+            setTimeout(thumbStep, 0);
+        else {
+            const c = st.list[st.i];
+            if (c) {
+                aim(c);
+                r.frame = 0;
+            }
+        } // 写し終えたら、再生中のものに戻す
+    };
+    // ---- 再生（討伐画面と同じ速さ。当たった瞬間の止め・減速も同じ） ----
+    let last = performance.now();
+    function frame(now) {
+        const dt = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        const c = st.list[st.i];
+        if (c && q >= cards.length) {
+            if (!st.paused) {
+                st.t += ((dt * st.speed) / 3.4) * r.slowFactor(st.t);
+                if (st.t >= o.w(c) + st.win.to)
+                    enter((st.i + 1) % st.list.length);
+            }
+            r.draw(st.t);
+        }
+        requestAnimationFrame(frame);
+    }
+    playReel();
+    setTimeout(thumbStep, 50);
+    requestAnimationFrame(frame);
+    const g = window;
+    g.ready = () => q >= cards.length;
+    g.cands = cands.map((c) => c.key);
+    // 確かめ用: 候補を1つ、場面の進み具合 ph で描いた絵（PNG の data URL）
+    g.drawAt = (key, ph) => {
+        const c = cands.find((x) => x.key === key);
+        aim(c);
+        r.frame = 0;
+        r.draw(o.w(c) + ph);
+        const out = cv.toDataURL();
+        const cur = st.list[st.i];
+        if (cur)
+            aim(cur);
+        return out;
+    };
+    g.windowOf = (key) => { const c = cands.find((x) => x.key === key); const wn = windowOf(c); const cur = st.list[st.i]; if (cur)
+        aim(cur); return wn; };
+}
+//# sourceMappingURL=picklab.js.map
