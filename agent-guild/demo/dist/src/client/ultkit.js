@@ -1,7 +1,7 @@
 // 大技などの演出で使う描画部品（光る線・弧・火花・岩片・砂煙・魔法陣・巨大な武器など）。scenes.ts と ult/ の演出から使う
 import { deferText } from './fxlook.js';
 import { Rng } from '../shared/rng.js';
-import { weaponSprite } from './hero.js';
+import { HELD, muzzleOf, weaponSprite } from './hero.js';
 import { PIXEL_FONT } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
 export const TAU = Math.PI * 2;
@@ -321,6 +321,19 @@ export const SWORD_PAL = {
     katana: { edge: '#4a2a3a', blade: '#f4f4ff', fuller: '#ff5a6e', gem: '#e43b44' },
     dagger: { edge: '#3a2a5a', blade: '#e0d4ff', fuller: '#a55bd8', gem: '#7bed9f' },
 };
+// 主役が持っている武器の先（このコマで描いた姿と同じ位置。hero.ts の muzzleOf）。突き・光線・矢・魔法は、ここから出す。
+// 主役を描いていないとき（見本帳の外など）は fallback
+export function weaponTip(a, fallback) { return a.ult?.tip?.() ?? fallback; }
+// 主役がある姿勢（大技の型の pose が返すもの）をとったときの武器の先。arena-fighter.ts が主役を描くのと同じ置き方で計算する。
+// いまのコマではなく、決まった時刻の武器の先がほしいとき（打ち返した玉が飛びはじめる所 など）に使う
+export function tipOfPose(a, hero, pose, fallback) {
+    const kind = a.ult?.look?.weapon ?? a.ult?.weapon;
+    if (!pose || !kind)
+        return fallback;
+    return muzzleOf({ weapon: kind }, hero.x + pose.ox, hero.y + pose.oy + 1, { frame: a.frame + hero.f * 7, flip: pose.flip, action: pose.action, t: pose.t, rot: pose.rot });
+}
+// 武器の先をボスのほうへ水平に向ける構え（撃つ・突く・放つとき）。構えるもの（盾・本・銃・弓・ギター）は前へ構え、振るものは腕を伸ばして横に寝かせる
+export const aimAct = (w) => (HELD.includes(w) ? { action: 'guard', t: 1 } : { action: 'attack', t: 0.5 });
 // 画面全体を暗くする（大技の静寂・時間停止）
 export function dim(a, k, col = '#04030a') {
     if (k <= 0 || QUIET)
@@ -572,6 +585,61 @@ export function slashLine(ctx, x0, y0, x1, y1, wMax, cols, alpha) {
         ctx.lineTo(x0 + dx * 0.4 + nx * w, y0 + dy * 0.4 + ny * w);
         ctx.lineTo(x1, y1);
         ctx.lineTo(x0 + dx * 0.4 - nx * w, y0 + dy * 0.4 - ny * w);
+        ctx.closePath();
+        ctx.fill();
+    }
+    ctx.restore();
+}
+// 光の刃・影の楔（武器のドット絵の代わりに、光と影だけで形を見せる）。(x0,y0) の後ろ端から (x1,y1) の切っ先へ向かう、細長いひし形の光。
+// dark を渡すと、中が影の色で、ふちだけが光る（影の楔）
+export function wedge(ctx, x0, y0, x1, y1, w, cols, alpha, dark) {
+    if (alpha <= 0)
+        return;
+    slashLine(ctx, x0, y0, x1, y1, w, cols, alpha);
+    if (!dark)
+        return;
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, ww = w * 0.3;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, alpha) * 0.95;
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.moveTo(x0 + dx * 0.12, y0 + dy * 0.12);
+    ctx.lineTo(x0 + dx * 0.4 + nx * ww, y0 + dy * 0.4 + ny * ww);
+    ctx.lineTo(x0 + dx * 0.88, y0 + dy * 0.88);
+    ctx.lineTo(x0 + dx * 0.4 - nx * ww, y0 + dy * 0.4 - ny * ww);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+// 武器の先の軌跡（斬撃の帯）。pose(t) が返す主役の姿勢をたどって、時刻 t0〜t1 の武器の先を結ぶ（slashArc と同じ、両端が細い帯）。
+// 決まった弧ではなく、描いた武器の先そのものの通り道なので、斬撃の光が武器から離れない
+export function tipTrail(a, hero, pose, t0, t1, wMax, cols, alpha, n = 24) {
+    if (alpha <= 0 || t1 <= t0)
+        return;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+        const ps = pose(lerp(t0, t1, i / n));
+        if (ps)
+            pts.push(tipOfPose(a, hero, ps, { x: hero.x, y: hero.y }));
+    }
+    if (pts.length < 2)
+        return;
+    const { ctx } = a, m = pts.length - 1;
+    const nrm = (i) => { const A = pts[Math.max(0, i - 1)], B = pts[Math.min(m, i + 1)], dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy) || 1; return { x: -dy / L, y: dx / L }; };
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const [k, c, al] of [[1.6, cols[0], 0.3], [1, cols[0], 0.9], [0.5, cols[1], 1], [0.15, '#ffffff', 1]]) {
+        ctx.globalAlpha = Math.min(1, alpha) * al;
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        for (let i = 0; i <= m; i++) {
+            const w = (wMax * k * Math.sin(Math.PI * Math.pow(i / m, 0.7))) / 2, q = nrm(i);
+            ctx.lineTo(pts[i].x + q.x * w, pts[i].y + q.y * w);
+        }
+        for (let i = m; i >= 0; i--) {
+            const w = (wMax * k * Math.sin(Math.PI * Math.pow(i / m, 0.7))) / 2, q = nrm(i);
+            ctx.lineTo(pts[i].x - q.x * w, pts[i].y - q.y * w);
+        }
         ctx.closePath();
         ctx.fill();
     }

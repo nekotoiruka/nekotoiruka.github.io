@@ -1,6 +1,6 @@
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bolt, bump, clamp01, crescent, dim, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
+import { ULT_T, R, TAU, bolt, bump, clamp01, crescent, dim, ease, flash, glowArc, glowDisc, glowLine, groundRings, heroSilhouette, impactBurst, lerp, petals, slashLine, sparkBurst, speedLines, starSpark, text, win, aimAct, tipOfPose, weaponTip, } from './ultkit.js';
 import { ORB_BOSS, aura, blit, drawOrb, mirrorSprite, pixelBeam, ramp } from './pixart.js';
 const T = ULT_T.parry;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
@@ -105,7 +105,7 @@ function orbTail(ctx, x, y, size, col, k) {
     }
     ctx.restore();
 }
-const incoming = (p, body) => { const u = ease(win(p, ARRIVE0, T.clash)), s = source(body), cp = contact(body); return { x: lerp(s.x, cp.x, u), y: lerp(s.y, cp.y, u) - Math.sin(u * Math.PI) * 10 }; };
+const incoming = (p, body, cp = contact(body)) => { const u = ease(win(p, ARRIVE0, T.clash)), s = source(body); return { x: lerp(s.x, cp.x, u), y: lerp(s.y, cp.y, u) - Math.sin(u * Math.PI) * 10 }; };
 // =====================================================================
 // 打ち返し（return）
 // =====================================================================
@@ -133,10 +133,13 @@ const ret = {
     beats: (w) => [{ t: T.step, stop: 0, shake: 0, sfx: 'whoosh' }, { t: T.clash, stop: 0.004, shake: 4, sfx: 'guard' }, { t: T.freeze, stop: 0, shake: 1, sfx: 'charge' }, { t: T.strike, stop: 0.006, shake: 5, sfx: w === 'pan' ? 'guard' : 'hit' }, { t: T.strike + 0.004, stop: 0, shake: 0, sfx: 'shoot' }, { t: T.hit, stop: 0.007, shake: 7, sfx: 'impactHeavy' }],
     top(a, hero, w) {
         const { ctx, phase: p } = a;
-        const cols = retCol(w), cp = contact(a.body), tg = target(a.body);
+        const tg = target(a.body), cols = retCol(w);
+        // 玉を受けて打ち返すのは、武器の先（剣・槍の先、ハンマー・フライパンの面）。打った瞬間の武器の先から、返った玉が飛ぶ
+        const hit0 = tipOfPose(a, hero, ret.pose(T.strike, hero, a.foot, a.body, a.frame, w), contact(a.body));
+        const cp = p < T.strike ? weaponTip(a, contact(a.body)) : hit0;
         readyFx(a, hero);
         if (p > ARRIVE0 && p < T.clash) {
-            const q = incoming(p, a.body);
+            const q = incoming(p, a.body, cp);
             redOrb(ctx, q.x, q.y, 7, a.frame);
         }
         // 押し合い: 武器の上で玉が回りながら、味方の色に染まっていく
@@ -411,7 +414,7 @@ const catchMove = {
 const ABS_COL = { blaster: ['#63d471', '#c8ffc8'], book: ['#c77dff', '#7fe0ff'] };
 const absCol = (w) => ABS_COL[w] ?? ['#ffe27a', '#ffffff'];
 const absorb = {
-    pose(p, home, _f, body, frame) {
+    pose(p, home, _f, body, frame, w) {
         const ap = approach(p, home, body);
         if (p < T.guard || !ap)
             return ap;
@@ -419,14 +422,14 @@ const absorb = {
         if (p < T.strike)
             return at(home, { x: fr.x + Math.sin(frame * 2.1) * 0.6 * win(p, T.clash, T.strike), y: fr.y }, { action: 'cast', t: 0.5 }); // 武器をかざして吸いこむ（震える）
         if (p < T.hit + 0.06)
-            return at(home, { x: fr.x + 6 * bump(p, T.strike, T.hit), y: fr.y }, { action: 'attack', t: 0.6 }); // 撃った反動
+            return at(home, { x: fr.x + 6 * bump(p, T.strike, T.hit), y: fr.y }, { ...aimAct(w) }); // 武器の先をボスへ向けて撃つ（反動）
         return goHome(p, home, fr);
     },
     cam: (p, home, _f, body) => cam(p, home, body, 1.6),
     beats: () => [{ t: T.step, stop: 0, shake: 0, sfx: 'whoosh' }, { t: ARRIVE0 + 0.01, stop: 0, shake: 1, sfx: 'thunder' }, { t: T.clash, stop: 0.003, shake: 3, sfx: 'charge' }, { t: T.strike, stop: 0.003, shake: 4, sfx: 'thunder' }, { t: T.hit, stop: 0.007, shake: 8, sfx: 'impactMagic' }],
     top(a, hero, w) {
         const { ctx, phase: p } = a;
-        const cols = absCol(w), cp = contact(a.body), s = source(a.body), tg = target(a.body);
+        const cols = absCol(w), cp = weaponTip(a, contact(a.body)), s = source(a.body), tg = target(a.body); // 雷を吸いこむのも撃ち返すのも、武器の先（銃口・本の頁）
         readyFx(a, hero);
         // ボスの雷: 武器の先へ届き、吸いこまれていく（だんだん細く）
         const ek = win(p, ARRIVE0, T.clash), ef = 1 - win(p, T.freeze - 0.02, T.freeze + 0.01);

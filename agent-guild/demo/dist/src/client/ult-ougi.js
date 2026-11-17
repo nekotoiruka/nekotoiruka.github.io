@@ -1,8 +1,8 @@
 import { tl } from '../shared/i18n.js';
 import { Rng } from '../shared/rng.js';
 import { drawHero } from './hero.js';
-import { ULT_T, R, TAU, bandArc, bolt, bump, clamp01, crater, dim, dustCloud, ease, flash, glowDisc, glowLine, groundRings, heroSilhouette, lerp, petals, rocks, slashArc, slashLine, sparkBurst, speedLines, starSpark, text, win, } from './ultkit.js';
-import { aura, blit, drawHole, kunaiSprite, moonSprite } from './pixart.js';
+import { ULT_T, R, TAU, bandArc, bolt, bump, clamp01, crater, dim, dustCloud, ease, flash, glowDisc, glowLine, groundRings, heroSilhouette, lerp, petals, rocks, slashLine, sparkBurst, speedLines, starSpark, text, tipTrail, wedge, win, weaponTip, } from './ultkit.js';
+import { blit, drawHole, moonSprite } from './pixart.js';
 const T = ULT_T.ougi;
 const land = (foot) => ({ x: foot.x + 34, y: foot.y + 6 });
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
@@ -245,7 +245,8 @@ const moon = {
             const k = win(p, T.fall, T.impact), c = moonCenter(foot, body), r = Math.hypot(ap.x - c.x, ap.y - c.y) + 30;
             const a0 = Math.atan2(ap.y - c.y, ap.x - c.x), a1 = Math.atan2(L.y - c.y, L.x - c.x) + 0.15;
             const q = (u) => { const an = lerp(a0, a1, easeIn(u)), rr = lerp(r, Math.hypot(L.x - c.x, L.y - c.y), u); return { x: c.x + Math.cos(an) * rr, y: c.y + Math.sin(an) * rr }; };
-            return at(home, q(k), { action: swingAct(w), t: 0.2 + 0.7 * k, rot: 0.6 * k, ghosts: trail(home, q, k, 5, 0.08, 0.5) });
+            // 武器は前へ伸ばしたまま（剣は横に寝かせる）、体ごと回して振り下ろす。武器の先が月の縁をなぞり、斬撃の光はその通り道（top の tipTrail）
+            return at(home, q(k), { action: swingAct(w), t: 0.5, rot: lerp(-0.8, 0.9, ease(k)), ghosts: trail(home, q, k, 5, 0.08, 0.5) });
         }
         if (p < T.land)
             return at(home, L, { action: swingAct(w), t: 0.95 });
@@ -331,11 +332,9 @@ const moon = {
         if (p > T.hush && p < T.impact)
             glowDisc(ctx, c.x, c.y, 50, cols[0], 0.35 * bump(p, T.hush, T.impact), 0.3);
         // 振り下ろし: 月の縁にそって、太い弧の軌跡
-        const ap = moonApex(a.foot, a.body), r = Math.hypot(ap.x - c.x, ap.y - c.y) + 30;
-        const a0 = Math.atan2(ap.y - c.y, ap.x - c.x), a1 = Math.atan2(L.y - c.y, L.x - c.x) + 0.15;
         const sk = win(p, T.fall, T.impact), fade = 1 - win(p, T.impact + 0.02, T.impact + 0.12);
         if (sk > 0 && fade > 0)
-            slashArc(ctx, c.x, c.y, r - 6, a0, lerp(a0, a1, easeIn(sk)), 22, cols, fade);
+            tipTrail(a, hero, (t) => moon.pose(t, hero, a.foot, a.body, a.frame, w), T.fall, Math.min(p, T.impact - 0.0001), 22, cols, fade); // 武器の先の通り道
         // 月の切り口: 斜めの白い一閃
         const ck = win(p, T.impact - 0.005, T.impact + 0.03), cf = 1 - win(p, T.impact + 0.04, T.impact + 0.14);
         if (ck > 0 && cf > 0) {
@@ -638,7 +637,7 @@ const boltMove = {
             if (a.frame % 23 < 2)
                 glowDisc(ctx, ap.x + ((a.frame * 37) % 160) - 80, 8, 30, cols[0], sky * 0.5, 0.4);
         }
-        const tip = { x: ap.x - 6, y: ap.y - 28 }; // かざした武器の先
+        const tip = weaponTip(a, { x: ap.x - 6, y: ap.y - 28 }); // かざした武器の先（主役が持つ武器の先そのもの）
         // 落雷: 天から武器の先へ
         const sk = bump(p, STRIKE - 0.004, STRIKE + 0.03);
         if (sk > 0) {
@@ -757,21 +756,22 @@ const shadow = {
             ctx.ellipse(a.foot.x + 8, a.foot.y + 4, 54, 12, 0, 0, TAU);
             ctx.fill();
             ctx.restore();
-            // 7本の苦無（ドット絵）が右上から左下へ斜めに降り、影に突き立つ。苦無は飛ぶ向き（左下）に切っ先を向ける。
-            // 刺さった所に小さな波紋、最後に紫の糸で輪をつなぐ
-            const ang = 0.42, kn = kunaiSprite(ang, 1.25), glow = aura('kunai', kn.spr, 1, SH[0]), pins = [];
+            // 7本の影の楔（中が影で、ふちが紫に光るひし形。武器の絵は出さない）が右上から左下へ斜めに降り、影に突き立つ。
+            // 降りるあいだは紫の光の尾を引く。刺さった所に小さな波紋、最後に紫の糸で輪をつなぐ
+            const ang = 0.42, dx = -Math.sin(ang), dy = Math.cos(ang), LEN = 26, pins = [];
             for (let i = 0; i < 7; i++) {
                 const x = a.foot.x - 34 + i * 12 + (i % 2) * 3, y = a.foot.y + 2 + ((i * 3) % 5) - 2, k2 = clamp01(nk * 1.8 - i * 0.11), u = k2 * k2;
                 if (k2 <= 0)
                     continue;
                 const fx = x + Math.sin(ang) * 80 * (1 - u), fy = y - Math.cos(ang) * 80 * (1 - u), sink = k2 >= 1 ? 4 : 0;
+                const tx = fx + dx * sink, ty = fy + dy * sink; // 刺さると切っ先が影に沈む
                 if (k2 < 1)
-                    for (let j = 1; j <= 3; j++)
-                        blit(ctx, glow, fx + Math.sin(ang) * j * 8, fy - Math.cos(ang) * j * 8, kn.ax + 1, kn.ay + 1, { alpha: nf * (0.6 - j * 0.15), add: true }); // 残像（紫の光）
-                blit(ctx, glow, fx - Math.sin(ang) * sink, fy + Math.cos(ang) * sink, kn.ax + 1, kn.ay + 1, { alpha: nf * 0.7, add: true });
-                blit(ctx, kn.spr, fx - Math.sin(ang) * sink, fy + Math.cos(ang) * sink, kn.ax, kn.ay, { alpha: nf }); // 刺さると切っ先が影に沈む
+                    glowLine(ctx, tx - dx * (LEN + 34), ty - dy * (LEN + 34), tx - dx * LEN * 0.6, ty - dy * LEN * 0.6, 1.4, SH[0], nf * 0.7); // 光の尾
+                wedge(ctx, tx - dx * LEN, ty - dy * LEN, tx, ty, 11, SH, nf, '#14081e');
+                if (k2 >= 1)
+                    glowDisc(ctx, tx, ty, 6, SH[0], nf * 0.6, 0.6); // 刺さった所が灯る
                 if (k2 >= 1) {
-                    pins.push({ x: fx + Math.sin(ang) * 30, y: fy - Math.cos(ang) * 30 + 4 });
+                    pins.push({ x: fx + Math.sin(ang) * 22, y: fy - Math.cos(ang) * 22 + 4 });
                     const rk = clamp01((nk * 1.8 - i * 0.11 - 1) * 4);
                     if (rk < 1) {
                         ctx.save();

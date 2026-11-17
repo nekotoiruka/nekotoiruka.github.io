@@ -1,5 +1,5 @@
 import { Rng } from '../shared/rng.js';
-import { ULT_T, R, TAU, bandArc, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet } from './ultkit.js';
+import { ULT_T, R, TAU, bandArc, bump, clamp01, dim, dustCloud, ease, flash, glowArc, glowDisc, glowLine, groundRings, lerp, petals, rocks, skyDisc, slashLine, sparkBurst, speedLines, starSpark, text, win, ultQuiet, aimAct, weaponTip } from './ultkit.js';
 import { pixelSlash, ramp } from './pixart.js';
 const T = ULT_T.rush;
 const base = { ox: 0, oy: 0, action: 'idle', t: 0, rot: 0, alpha: 1, flip: true, ghosts: [] };
@@ -203,22 +203,28 @@ const NEEDLES = 40;
 const needleT = (i) => passAt(0) + (T.n * T.pass) * Math.pow(i / NEEDLES, 0.8);
 const pierce = {
     pose(p, home, _foot, body, frame, w) {
-        const s = pierceSpot(body, w);
+        const s = pierceSpot(body, w), aim = aimAct(w);
         if (p < T.first)
             return ready(p, home, s, w);
         if (p >= T.home)
             return null;
-        if (p < T.finish) { // 小刻みに前後しながら突き続ける（残像の腕）
-            const j = (frame % 4) / 4;
-            return at(home, { x: s.x - (SHOT.has(w) ? 0 : 3 * Math.sin(frame * 1.9)), y: s.y }, { action: 'attack', t: SHOT.has(w) ? 0.5 + 0.3 * j : 0.3 + 0.5 * j, ghosts: SHOT.has(w) ? [] : [{ x: s.x - home.x - 4, y: s.y - home.y, a: 0.3, act: 'attack' }, { x: s.x - home.x + 3, y: s.y - home.y, a: 0.2, act: 'attack' }] });
+        if (p < T.finish) { // 武器の先をボスへ向けたまま、小刻みに突き続ける（射手は撃つたびに反動。突き手は前後の残像）
+            if (SHOT.has(w))
+                return at(home, { x: s.x + (frame % 3 === 0 ? 1.5 : 0), y: s.y }, { ...aim });
+            const jab = 4 * Math.abs(Math.sin(frame * 1.9));
+            return at(home, { x: s.x + 2 - jab, y: s.y }, { ...aim, ghosts: [{ x: s.x - home.x - 6, y: s.y - home.y, a: 0.3, act: aim.action, t: aim.t }, { x: s.x - home.x + 3, y: s.y - home.y, a: 0.2, act: aim.action, t: aim.t }] });
         }
-        if (p < T.burst) {
+        const pull = (k) => 10 * ease(Math.min(1, k * 2)) - (k > 0.7 ? 34 * ease((k - 0.7) / 0.3) : 0);
+        if (p < T.burst) { // 引いて、溜めて、突く（射手は引きしぼって撃つ）
             const k = win(p, T.finish, T.burst);
-            return at(home, { x: s.x + 10 * ease(Math.min(1, k * 2)) - (k > 0.7 ? 24 * ease((k - 0.7) / 0.3) : 0), y: s.y }, { action: 'attack', t: k < 0.7 ? 0.1 : 0.95 });
-        } // 引いて、溜めて、突く
+            if (SHOT.has(w))
+                return at(home, { x: s.x + 6 * ease(Math.min(1, k * 2)) - (k > 0.85 ? 4 : 0), y: s.y }, { ...aim });
+            return at(home, { x: s.x + pull(k), y: s.y }, { ...aim }); // 穂先はボスへ向けたまま引く（溜めの光は穂先に集まる）
+        }
+        const end = { x: s.x + (SHOT.has(w) ? 4 : pull(1)), y: s.y };
         if (p < T.burst + 0.03)
-            return at(home, { x: s.x - 24, y: s.y }, { action: 'attack', t: 0.95 });
-        return goHome(p, home, { x: s.x - 24, y: s.y });
+            return at(home, end, { ...aim });
+        return goHome(p, home, end);
     },
     cam(p, home, _foot, body, _W, _H, w) {
         const g = win(p, T.ready - 0.04, T.ready) * (1 - win(p, T.burst + 0.04, T.home));
@@ -237,7 +243,9 @@ const pierce = {
     },
     top(a, hero, w) {
         const { ctx, phase: p } = a;
-        const cols = pierceCol(w), s = pierceSpot(a.body, w), hand = { x: s.x - (SHOT.has(w) ? 12 : 10), y: s.y - 14 }, tgt = { x: a.body.x + 6, y: a.body.y + 2 };
+        const cols = pierceCol(w), s = pierceSpot(a.body, w), tgt = { x: a.body.x + 6, y: a.body.y + 2 };
+        // 突き・光の針・矢は、主役の持つ武器の先（槍の穂先・フライパンの面・弓の弦・銃口）から出す
+        const hand = weaponTip(a, { x: s.x - (SHOT.has(w) ? 12 : 10), y: s.y - 14 });
         readyFx(a, hero, cols[1]);
         const rng = new Rng(`${a.seed}:pierce`);
         let n = 0, last = T.first;
