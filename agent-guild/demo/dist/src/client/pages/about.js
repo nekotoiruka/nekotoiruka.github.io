@@ -918,7 +918,7 @@ export async function renderAbout(root, opts = {}) {
         fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: dressed(wpSegs, 8) });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
     // 「討伐の瞬間」の窓と入れ替える（窓は6つのまま）
-    // 窓には、7人が交代で唱えて大魔法が決まるところ（あなたが最後の第7節）を見せる。
+    // 窓には、7人が交代で唱えて、あなたが最後の第7節で詰まり、大魔法が不発に終わるところを見せる（成功の演出は見せない）。
     // 詠唱書を持って唱えられた冒険者（足りなければ成績の良い順）7人の討伐隊で、連携詠唱の場面を組み直す
     const chainW = sceneWave('chain');
     if (chainW >= 0) {
@@ -927,9 +927,11 @@ export async function renderAbout(root, opts = {}) {
         const rank = new Map(first.standings.map((x) => [first.fighters[x.f].id, x.rank]));
         const pick = data.entrants.slice().sort((a, b) => Number(b.id === bestId) - Number(a.id === bestId) || Number(knows(b)) - Number(knows(a)) || (rank.get(a.id) ?? 99) - (rank.get(b.id) ?? 99)).slice(0, 7);
         const len = cc.chant?.length ?? 7;
-        const party = data.entrants.filter((e) => pick.includes(e)).map((e) => ({
-            ...e, result: { ...e.result, cases: e.result.cases.map((c) => (c.caseId === cc.id ? { ...c, score: 1, runs: c.runs.map(() => 1), mpOut: false, chainUpto: len } : c)) },
-        }));
+        // あなた（見本の1位）だけ、最後の第7節で詰まる（大魔法は不発）。「うまくいけば、もっとすごい演出が見られるのかも」と思わせる
+        const party = data.entrants.filter((e) => pick.includes(e)).map((e) => {
+            const ok = e.id !== bestId;
+            return { ...e, result: { ...e.result, cases: e.result.cases.map((c) => (c.caseId === cc.id ? { ...c, score: ok ? 1 : 0, runs: c.runs.map(() => (ok ? 1 : 0)), mpOut: false, chainUpto: ok ? len : len - 1 } : c)) } };
+        });
         const alt = party.length >= 2 ? scriptFor({ ...data, entrants: party }, bestId ? [bestId] : []) : null;
         const sc = alt ?? full;
         const w = sc.waves.findIndex((wv) => sc.cases[wv.caseIndex]?.scene === 'chain');
