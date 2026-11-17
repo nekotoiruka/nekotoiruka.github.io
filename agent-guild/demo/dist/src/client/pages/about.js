@@ -7,7 +7,7 @@ import { bossCanvas, BOSS_IDLE, BW, BH } from '../boss.js';
 import { BRAND } from '../brand.js';
 import { burst, BODY_STYLE, fxColors } from '../fx.js';
 import { elderBeard, GM_GEAR, GM_LOOK } from '../guildmaster.js';
-import { drawFamiliarAt, drawHero, lookOf, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
+import { drawFamiliarAt, drawHero, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
 import { setSfx } from '../sfx.js';
 import { kitIcon } from '../kiticons.js';
 import { avatarCanvas, fmtMs, h } from '../ui.js';
@@ -15,7 +15,9 @@ import { poseFor } from '../chibi.js';
 import { WEAPON_KINDS, WEAPON_LABELS } from '../../shared/catalog.js';
 import { BODY_LABELS, CAT_PATTERN_LABELS, FAMILIAR_KINDS } from '../../shared/build.js';
 import { localeOf, tl } from '../../shared/i18n.js';
-import { applyLook, dodgeCands, dodgeOrder, pickedCands, DODGE_PICKS } from '../dodgepicks.js';
+import { applyLook, dressAs, dressOrder, dodgeCands, dodgeOrder, pickedCands, DODGE_PICKS } from '../dodgepicks.js';
+import { applyUlt, ultCands, ultOrder } from '../ultpicks.js';
+import { applyWeapon, weaponCands, weaponOrder, weaponShot, weaponWindow } from '../weaponpicks.js';
 // ---------------------------------------------------------------------------
 // アニメの進行役: 画面に見えている canvas だけを描き直す。ページを離れたら止まる。
 // 動きを減らす設定の人には、最初の1コマだけを見せる（自分で押した再生は動かす）
@@ -746,22 +748,33 @@ function reel(script, segs, ticker, dir, label) {
     let i = 0, time = 0;
     const baseWeapon = r.looks.map((l) => l.weapon);
     let looked = null;
+    let undo = null, undress = null;
     const enter = (k) => {
         i = k;
         const sg = segs[i];
         // 見本帳で選んだ型は、その冒険者の武器と型を差し替えて見せる（前の区間の差し替えはもどす）
+        undo?.();
+        undo = null;
         if (looked !== null) {
             applyLook(r, looked, -1, undefined, baseWeapon[looked]);
             looked = null;
         }
+        undress?.();
+        undress = null;
+        if (sg.dress)
+            undress = dressAs(r, sg.dress.f, sg.dress.src); // 見た目を先に借り、武器と型はそのあと差し替える
         if (sg.look) {
             applyLook(r, sg.look.f, sg.w, sg.look.look, baseWeapon[sg.look.f]);
             looked = sg.look.f;
         }
+        if (sg.setup)
+            undo = sg.setup(r);
         r.camOverride = sg.cam;
         r.solo = sg.solo ?? null;
         r.frame = 0;
         time = sg.w + sg.from;
+        if (sg.mine)
+            r.mine = new Set(sg.mine); // 必殺技の主役（自分の冒険者として、大技を見せる人）
         tag.textContent = sg.tag;
     };
     enter(0);
@@ -844,20 +857,17 @@ export async function renderAbout(root, opts = {}) {
     // --- 演出のこだわり ---
     const sceneWave = (sc) => full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.scene === sc);
     const fx = [];
+    // 窓ごと・区間ごとに、冒険者の見た目を変える（同じ立ち位置で、別の人が次々に技を見せる）。窓ごとに借りはじめる人をずらす
+    const dressed = (segs, from) => segs.map((sg, k) => { const f = sg.solo ?? 0, order = dressOrder(full, f); return { ...sg, dress: { f, src: order[(from + k) % order.length] } }; });
     const spellW = sceneWave('spell');
     if (spellW >= 0)
         fx.push({ title: tl('詠唱合戦'), body: tl('ボスが呪文を唱えはじめると、打ち消しの呪文を知る者が詠唱で応じる。光線で魔法弾をつかまえて打ち消し、そのままボスへ跳ね返す。'), w: spellW, mine: [best] });
-    // 必殺技: 巻物の大技（奥義・乱舞・召喚）で、あなたが主役になれる場面を優先
-    const ultScenes = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
-    const heroOk = (wv, f) => wv.events.some((e) => e.type === 'strike' && e.f === f && e.success && e.used.skills.length > 0);
-    const ultW = (pred) => full.waves.findIndex((wv) => ultScenes.includes(full.cases[wv.caseIndex]?.scene ?? '') && !!full.cases[wv.caseIndex]?.keySkill && pred(wv));
-    let ougiW = ultW((wv) => heroOk(wv, best));
-    if (ougiW < 0)
-        ougiW = ultW(() => true);
-    if (ougiW < 0)
-        ougiW = sceneWave('ougi');
-    if (ougiW >= 0)
-        fx.push({ title: tl('必殺技'), body: tl('ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。'), w: ougiW, mine: [best] });
+    // 必殺技: 「見切り」の窓と同じ立ち位置（後列の下から2番目）の冒険者を主役にして、場面（奥義・乱舞・召喚…）と武器のちがう大技を1人ずつ順に見せる。
+    // 1人だけ舞台に立たせ、カメラは大技の寄り方のまま。ボスの攻撃の演出と字幕の帯は出さない（ultpicks.ts。必殺技の見本帳で選べる）。札は武器の名前
+    const ultSegs = ultOrder(ultCands(full, WEAPON_KINDS)).map((c) => ({ w: c.w, from: c.from, to: c.to, tag: WEAPON_LABELS[c.weapon], cam: null, solo: c.f, setup: (r) => applyUlt(r, c) }));
+    const ultBody = tl('ここぞという場面では、必殺技が炸裂する。奥義・乱舞・召喚・返し技・封印・覚醒と、出るたびに技が入れかわる。');
+    if (ultSegs.length)
+        fx.push({ w: -1, mine: [], title: tl('必殺技'), body: ultBody, segs: dressed(ultSegs, 4) });
     const guarded = (e) => e.type === 'strike' && !e.charmed && e.used.tools.includes('guardrail');
     const calm = (e) => e.type === 'strike' && !e.charmed;
     const isIll = (wv) => full.cases[wv.caseIndex]?.scene === 'illusion';
@@ -875,38 +885,24 @@ export async function renderAbout(root, opts = {}) {
     // 見切り: ボスの攻撃に、正しく動けた冒険者が見切ってかわす（ガード・跳ぶ・伏せる…）ところを、1人ずつ寄って見せる。
     // 反撃は隣の「武器ごとの技」の窓で見せるので、ここでは反撃に移る直前で切る。同じ型が並ばないように選ぶ（dodgepicks.ts。回避モーションの見本帳で選べる）。
     // 札はボスの攻撃（場面の見出し）と武器の名前だけ。かわし方の名前は答えになるので出さない
-    const plain = (wv) => ['breath', 'claw', 'tail', 'dive'].includes(full.cases[wv.caseIndex]?.scene ?? '');
-    const weaponOf = full.fighters.map((f) => lookOf(f.loadout).weapon);
     const dodgeList = DODGE_PICKS.length ? pickedCands(full, WEAPON_KINDS) : dodgeOrder(dodgeCands(full));
     const dodge = dodgeList.map((c) => ({
         w: c.w, from: c.from, to: c.to, slow: c.slow, steady: c.steady, tag: c.look && !c.look.pattern ? full.cases[full.waves[c.w].caseIndex]?.title ?? '' : `${full.cases[full.waves[c.w].caseIndex]?.title ?? ''} ／ ${WEAPON_LABELS[c.weapon]}`, cam: { mode: 'follow', f: c.f }, solo: c.f, // 伏せる・結界は武器によらないので、武器の名前は出さない
         ...(c.look ? { look: { f: c.f, look: c.look } } : {}),
     }));
     const dodgeTitle = tl('見切り');
-    // 武器ごとの技: 武器のちがう冒険者を1人ずつ舞台に立たせて寄り、かわしてから反撃するまでを順に見せる（札は武器の名前）
-    const wpSegs = [];
-    const seen = new Set();
-    // 見せたい順（近接・飛び道具・魔法がまじるように）。見本にない武器は飛ばす
-    const WP_ORDER = ['sword', 'bow', 'wand', 'spear', 'scythe', 'blaster', 'fan', 'axe', 'katana', 'book', 'hammer', 'dagger', 'pan', 'umbrella', 'guitar', 'shield'];
-    for (const k of WP_ORDER) {
-        if (wpSegs.length >= 6 || seen.has(k))
-            continue;
-        const f = weaponOf.findIndex((x, i) => x === k && !full.fighters[i].off);
-        if (f < 0)
-            continue;
-        // その冒険者が正しく動けた、ふつうの攻撃の場面（できるだけ前の場面とちがう場面）
-        const cand = full.waves.map((wv, i) => ({ wv, i })).filter(({ wv }) => plain(wv) && wv.events.some((e) => e.type === 'strike' && e.f === f && e.success) && wv.events.some((e) => e.type === 'attack' && e.f === f));
-        if (!cand.length)
-            continue;
-        const pick = cand[wpSegs.length % cand.length];
-        const at = pick.wv.events.find((e) => e.type === 'attack' && e.f === f);
-        seen.add(k);
-        wpSegs.push({ w: pick.i, from: Math.max(0.34, at.t - 0.18), to: at.t + 0.1, tag: WEAPON_LABELS[k], cam: { mode: 'follow', f }, solo: f });
-    }
+    // 武器ごとの技: 「見切り」の窓と同じ立ち位置の冒険者の武器と反撃の型を差し替えて、反撃を始める直前から、当たってダメージが出るまでを1人ずつ順に見せる。
+    // 回避とボスの攻撃の演出は見せない。カメラは冒険者とボスが入る所に止める（weaponpicks.ts。武器ごとの技の見本帳で選べる）。札は武器の名前
+    const probe = new ArenaRenderer(document.createElement('canvas'), full); // 反撃の時刻を、討伐画面と同じ計算で求める
+    const wpSegs = weaponOrder(weaponCands(full, probe, WEAPON_KINDS)).map((c) => {
+        const back = applyWeapon(probe, c), win = weaponWindow(probe, c);
+        back();
+        return { w: c.w, ...win, tag: WEAPON_LABELS[c.weapon], cam: weaponShot(probe, c.f), solo: c.f, setup: (r) => applyWeapon(r, c) };
+    });
     if (dodge.length)
-        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。武器によって、身のこなしもちがう。'), segs: dodge });
+        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。盾で受け止める、跳んでかわす、伏せてやりすごす、振り向いて迎え撃つ——同じ攻撃でも、手に持つ武器で身のこなしがちがう。'), segs: dressed(dodge, 0) });
     if (wpSegs.length)
-        fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: wpSegs });
+        fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: dressed(wpSegs, 8) });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
     // 「討伐の瞬間」の窓と入れ替える（窓は6つのまま）
     // 窓には、7人が交代で唱えて大魔法が決まるところ（あなたが最後の第7節）を見せる。

@@ -1957,7 +1957,7 @@ export function sceneTop(a) {
     const hero = heroOf(a);
     // 溜めのゲージ（ボスの頭上）
     const gk = win(p, 0.26, 0.3) * (1 - win(p, RELEASE, RELEASE + 0.03));
-    if (gk > 0) {
+    if (gk > 0 && !a.showcase) {
         const x = a.body.x + 8, y = a.body.y - 64, w = 56, fill = win(p, 0.04, RELEASE);
         ctx.save();
         ctx.globalAlpha = gk;

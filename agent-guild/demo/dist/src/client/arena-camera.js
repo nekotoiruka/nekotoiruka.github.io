@@ -124,6 +124,8 @@ export function updateCamera(c) {
     if (atk !== 'treasure' && this.sceneOf(w) !== 'opening' && phase >= IMPACT && phase < IMPACT + 0.05)
         shake = atk === 'nova' || atk === 'meteor' ? 3 : 2; // 隙あり（よろめいている）ときは、ボスの攻撃の揺れはない
     for (const e of wv.events) {
+        if (this.solo !== null && 'f' in e && e.f !== this.solo)
+            continue; // ひとりだけ立たせるときは、ほかの人の会心・KO では揺らさない
         const age = phase - e.t;
         if (age >= 0 && age < 0.05 && ((e.type === 'attack' && e.crit) || e.type === 'death' || e.type === 'bossDown'))
             shake = Math.max(shake, e.type === 'bossDown' ? 4 : 2);

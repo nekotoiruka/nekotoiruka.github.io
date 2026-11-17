@@ -1,9 +1,9 @@
-import { arrow, band, bat, billowStream, FROST5, bump, clamp01, crack, dustRing, ease, fangShape, glowAt, goblinSil, hash, iceSpear, lerp, mistBlob, puffs, R, rock, screenFlash, shard, skyDark, slashMark, sparkle, sweepArc, TAU, tentacle, tinted, webNet, win } from './fxkit.js';
+import { arrow, band, bat, billowStream, FROST5, bump, clamp01, crack, dustRing, ease, fangShape, glowAt, hash, iceSpear, lerp, mistBlob, puffs, R, rock, screenFlash, shard, skyDark, slashMark, sparkle, sweepArc, TAU, tentacle, tinted, webNet, win } from './fxkit.js';
 import { BW0, BH0, STYLE, spriteToWorld } from './bossstyle.js';
 import { drawBoulder, drawRockFist, ROCK } from './pixart.js';
 import { BOSS_IDLE, bossCanvas } from './boss.js';
-import { bossMotion, makeAt, SPIDER_SWEEP } from './bossmotion.js';
-import { focusOf, GUARD, MEET } from './reach.js';
+import { bossMotion, makeAt } from './bossmotion.js';
+import { focusOf, GUARD } from './reach.js';
 const heroes = (a) => a.fighters.filter((v) => v.alive);
 /** 技が届く先（当たった人の体）。かわした人への攻撃は、元いた場所（立ち位置）へ届く（体は回避の型で抜けている。#120） */
 const landing = (v, dy = -10) => ({ x: v.x, y: v.y + dy });
@@ -11,6 +11,11 @@ const landing = (v, dy = -10) => ({ x: v.x, y: v.y + dy });
 export const aimOf = (a) => focusOf(a.fighters, a.solo) ?? { x: a.W * 0.68, y: 156 };
 /** 急降下（竜・伯爵・大蜘蛛）で降ってくる所（足もと）。狙う人の上に落ちる（落ちる場所から飛びのいて抜ける） */
 export const diveSpot = (a, _kind) => ({ x: aimOf(a).x + DIVE_AIM_DX, y: aimOf(a).y });
+/** 背後から来る攻撃（全部のボス。bossmoves.ts の BACK_SCENE。このファイルの backRaid と伯爵の tail）の時刻と所。
+ *  appear: 背後に小さな相手があらわれはじめる / t0: 背中へ届く（＋冒険者ごとのずらし backDelay）/ t1: 通りすぎる。
+ *  meet: 振り向いて迎え撃つ所（左右を反転した MEET。型の当てる先）/ guard: 振り向いて受ける所（左右を反転した GUARD）。arrival.ts も同じ値を使う */
+export const BACK = { appear: 0.28, t0: 0.415, t1: 0.47, meet: { dx: 26, dy: -18 }, guard: { dx: -GUARD.dx, dy: GUARD.dy } };
+export const backDelay = (f) => hash(f, 3) * 0.03;
 /** 急降下は、狙う人の少し手前（ボスの側）に落ちる（体の幅に入るので当たる。抜ける向きは、ボスから離れる右） */
 export const DIVE_AIM_DX = -20;
 /** 狙う人（1人に寄る窓の人・自分の冒険者）。討伐隊のまん中を狙うときは、いない */
@@ -324,14 +329,14 @@ const vampire = {
                 mistBlob(ctx, lerp(a.foot.x + 30, a.W - 20, win(p, 0.14, 0.38)), 170, 26, 12, '#4a2a62', 0.55 * flow);
             }
             // 霧から蝙蝠が2匹ずつ、冒険者ひとりずつの背後（右）に湧き（0.28〜）、羽ばたいて間合いをはかり、背中へ襲いかかる。
-            // 届く時刻は arrival.ts（0.415 + d）。正しく動けた人は振り向いて迎え撃ち（motionlab.ts の型。当てる先は背後 26 の所）、
+            // 届く時刻は arrival.ts（BACK.t0 + d）。正しく動けた人は振り向いて迎え撃ち（motionlab.ts の型。当てる先は背後 26 の所）、
             // 蝙蝠はその瞬間に打たれて、紫の煙と羽のかけらになって落ちる。動けなかった人は、背中に噛みつかれて赤い傷が走る
             for (const v of heroes(a)) {
-                const d = hash(v.f, 3) * 0.03; // 少しずつずらす
-                const t0 = 0.415 + d, come = ease(win(p, 0.28 + d, 0.36 + d)), go = win(p, t0 + 0.06, t0 + 0.14);
+                const d = backDelay(v.f); // 少しずつずらす
+                const t0 = BACK.t0 + d, come = ease(win(p, BACK.appear + d, BACK.appear + 0.08 + d)), go = win(p, t0 + 0.06, t0 + 0.14);
                 if (come <= 0 || go >= 1)
                     continue;
-                const hitC = { x: v.x + 26, y: v.y - 18 }; // 迎え撃つ所（型の当てる先）
+                const hitC = { x: v.x + BACK.meet.dx, y: v.y + BACK.meet.dy }; // 迎え撃つ所（型の当てる先）
                 // 暗い背景（柱の陰）でも見えるよう、紫の縁どりと、うすい光をつけて描く
                 const drawBat = (x, y, j, al) => {
                     const fl = ((a.frame >> 1) + j) % 2;
@@ -504,127 +509,8 @@ const spider = {
             }
         },
     },
-    // 脚の薙ぎはらい: 高くかかげた前脚2本（絵の脚）が、そのまま大鎌のように伸びて、床すれすれを前へ振り抜く。
-    //   脚は動く体の付け根（motionAt）から描くので、踏みこんでもずれない。振るあいだは、絵の側の前脚を描かない（bossmotion.ts の hide）
-    tail: {
-        front(a) {
-            const { ctx, phase: p } = a;
-            if (p < SPIDER_SWEEP.from || p >= SPIDER_SWEEP.to)
-                return;
-            const at = motionAt(a, 'spider');
-            const hairs = [];
-            // 奥の脚（2本目）を先に、手前の脚（1本目）をあとに
-            for (const { leg, s, back, w } of spiderLegsAt({ ...a, aim: aimOf(a) }).reverse()) {
-                const P = SPIDER_LEGS[leg];
-                const big = lerp(1, 1.5, s) * (1 - 0.35 * back);
-                const rr = [2.8, 2.2, 1.6, 0.5].map((r) => r * big * (leg ? 0.85 : 1));
-                const pal = leg ? SPIDER_LEG_FAR : SPIDER_LEG_NEAR;
-                // 振り抜いた跡（足先の通り道）
-                if (s > 0.05 && s < 1 && back <= 0) {
-                    const b0 = w[0], t0 = at(P.raise[3][0], P.raise[3][1]), tip = w[3];
-                    const r0 = Math.hypot(tip.x - b0.x, (tip.y - b0.y)), a1 = Math.atan2(tip.y - b0.y, tip.x - b0.x), a0 = Math.atan2(t0.y - b0.y, t0.x - b0.x);
-                    ctx.save();
-                    ctx.globalAlpha = 0.85 * (1 - win(s, 0.85, 1));
-                    sweepArc(ctx, b0.x, b0.y, r0 - 6, a0, a1, 1, 20 * (leg ? 0.7 : 1), 1, SPIDER_TRAIL, 0.9);
-                    ctx.restore();
-                }
-                const pts3 = [];
-                for (let i = 0; i < 3; i++)
-                    for (let j = 0; j < 4; j++) {
-                        const u = j / 4;
-                        pts3.push([lerp(w[i].x, w[i + 1].x, u), lerp(w[i].y, w[i + 1].y, u), lerp(rr[i], rr[i + 1], u)]);
-                    }
-                pts3.push([w[3].x, w[3].y, rr[3]]);
-                band(ctx, pts3, pal);
-                // 関節の明るい帯と、背の毛
-                ctx.fillStyle = pal.hi;
-                for (let i = 1; i <= 2; i++) {
-                    const q = w[i];
-                    ctx.fillRect(R(q.x - 1), R(q.y - rr[i] - 1), 3, 2);
-                }
-                for (let i = 0; i < 2; i++)
-                    for (let u = 0.25; u < 0.9; u += 0.25)
-                        hairs.push([lerp(w[i].x, w[i + 1].x, u), lerp(w[i].y, w[i + 1].y, u) - rr[i] - 1.5]);
-                // 足先のかぎ爪
-                const ta = Math.atan2(w[3].y - w[2].y, w[3].x - w[2].x);
-                ctx.strokeStyle = '#1a1014';
-                ctx.lineWidth = 3;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(R(w[3].x), R(w[3].y));
-                ctx.lineTo(R(w[3].x + Math.cos(ta + 0.5) * 6), R(w[3].y + Math.sin(ta + 0.5) * 6));
-                ctx.stroke();
-                ctx.strokeStyle = '#d8c8b0';
-                ctx.lineWidth = 1.2;
-                ctx.beginPath();
-                ctx.moveTo(R(w[3].x), R(w[3].y));
-                ctx.lineTo(R(w[3].x + Math.cos(ta + 0.5) * 5), R(w[3].y + Math.sin(ta + 0.5) * 5));
-                ctx.stroke();
-                // 足先が床をこする所の砂ぼこり
-                if (s > 0.5 && back < 1)
-                    puffs(ctx, w[3].x, Math.min(206, w[3].y + 2), { n: 6, t: p * 5 + leg, dx: -26, dy: -10, spread: 10, r0: 1.5, r1: 5, color: '#9a8aa8', alpha: 0.7 * (1 - back), seed: 53 + leg });
-            }
-            ctx.fillStyle = '#2a1a1c';
-            for (const [x, y] of hairs)
-                ctx.fillRect(R(x), R(y), 1, 2);
-            // 振り抜いた瞬間（攻撃の山場 0.42〜0.45）: 床を走る衝撃と、白い閃き
-            const hit = bump(p, 0.41, 0.47);
-            if (hit > 0) {
-                for (const v of heroes(a)) {
-                    if (v.ok)
-                        continue;
-                    const l = landing(v, -10);
-                    sparkle(ctx, l.x, l.y, 3 + 4 * hit, '#ffffff', hit);
-                }
-                screenFlash(ctx, a.W, a.H, bump(p, 0.41, 0.45), '#e8e0ff', 0.18);
-            }
-        },
-    },
+    // 背後の子蜘蛛は backRaid（このファイルの終わり）
 };
-// 大蜘蛛の前脚2本（絵 spider.ts の NEAR の 3本目・2本目）: [付け根, ひざ, 中関節, 足先]。かかげた形は spider.ts の RAISE と同じ
-const SPIDER_LEGS = [
-    { raise: [[70, 58], [80, 16], [93, 20], [92, 38]], strike: [[70, 58], [104, 30], [158, 46], [214, 80]], rest: [[70, 58], [88, 31], [94, 56], [93, 80]] },
-    { raise: [[66, 60], [70, 12], [83, 8], [91, 20]], strike: [[66, 60], [96, 34], [146, 56], [196, 86]], rest: [[66, 60], [76, 33], [83, 60], [78, 80]] },
-];
-const SPIDER_LEG_NEAR = { line: '#1a1014', dark: '#3e2826', body: '#5a3a36', hi: '#86625a' };
-const SPIDER_LEG_FAR = { line: '#140c10', dark: '#2a1a1a', body: '#3e2826', hi: '#5a3a36' };
-const SPIDER_TRAIL = { line: '#2a1e3a', dark: '#6a5a8a', body: '#b4a6d8', hi: '#f4f0ff' };
-/** 大蜘蛛の前脚2本の、その時刻の形（画面の座標の [付け根, ひざ, 中関節, 足先]）。描く（tail の front）と、届く時刻を調べる（arrival.ts）の両方で使う。
- *  leg 0 が手前の脚、1 が奥の脚 */
-export function spiderLegsAt(a) {
-    const p = a.phase, at = motionAt(a, 'spider'), lean = SPIDER_SWEEP.lean(p);
-    // 振り抜いた脚の先が、狙う人（aimOf）の迎え撃つ所（MEET）の少し先の床に届くよう、振り抜いた形を付け根のまわりに回して伸ばす（振るほど強く）
-    const fit = (leg, w, si) => {
-        if (!a.aim)
-            return w;
-        const strike = spiderLegsAt({ ...a, aim: undefined, phase: 0.47 })[leg].w, b = strike[0], tip = strike[3];
-        const T = { x: a.aim.x + SPIDER_REACH.dx - leg * 10, y: a.aim.y + SPIDER_REACH.dy - leg * 4 };
-        const rot = Math.atan2(T.y - b.y, T.x - b.x) - Math.atan2(tip.y - b.y, tip.x - b.x), sc = Math.hypot(T.x - b.x, T.y - b.y) / Math.max(1, Math.hypot(tip.x - b.x, tip.y - b.y));
-        const r = rot * si, k = 1 + (sc - 1) * si, c = Math.cos(r), sn = Math.sin(r), o = w[0];
-        return w.map((q, i) => (i === 0 ? q : { x: o.x + ((q.x - o.x) * c - (q.y - o.y) * sn) * k, y: o.y + ((q.x - o.x) * sn + (q.y - o.y) * c) * k }));
-    };
-    return [0, 1].map((leg) => {
-        const s = ease(win(p, 0.35 + leg * 0.02, 0.43 + leg * 0.02)), back = ease(win(p, 0.5, 0.58));
-        const P = SPIDER_LEGS[leg];
-        const ang = (q, i) => Math.atan2(q[i + 1][1] - q[i][1], q[i + 1][0] - q[i][0]);
-        const len = (q, i) => Math.hypot(q[i + 1][0] - q[i][0], q[i + 1][1] - q[i][1]);
-        // 節ごとの角度と長さを、かかげた形 → 振り抜いた形 → もとの形 と移す（先は少し遅れてしなる）
-        const pts = [[P.raise[0][0] + lean * 0.45, P.raise[0][1]]];
-        for (let i = 0; i < 3; i++) {
-            const si = clamp01(s * 1.15 - i * 0.06);
-            let an = lerp(ang(P.raise, i), ang(P.strike, i), si), ln = lerp(len(P.raise, i), len(P.strike, i), si);
-            an = lerp(an, ang(P.rest, i), back);
-            ln = lerp(ln, len(P.rest, i), back);
-            const [x, y] = pts[i];
-            pts.push([x + Math.cos(an) * ln, y + Math.sin(an) * ln]);
-        }
-        return { leg, s, back, w: fit(leg, pts.map(([x, y]) => at(x, y)), s * (1 - back)) };
-    });
-}
-/** 大蜘蛛の脚の先が届く所（狙う人の立ち位置からのずれ）。手前の脚。奥の脚は少し手前・上 */
-export const SPIDER_REACH = { dx: -14, dy: -2 };
-/** ゴブリンの突撃: 段ごとの先頭のゴブリンは lead − back − stag(段の番号) を走る。槍の先は体の reach 前（goblinSil の charge・大きさ 1.15） */
-export const GOBLIN_CHARGE = { t0: 0.31, back: 20, reach: 21, stag: (j) => (j % 2) * 10 };
 /** 突撃が走る段（冒険者の段。1人に寄る窓でも、討伐隊ぜんたいの段） */
 export const goblinLanes = (a) => {
     const ls = a.lanes ?? [...new Set(heroes(a).map((v) => Math.round(v.y)))];
@@ -775,29 +661,7 @@ const goblin = {
             }
         },
     },
-    // 突進: 頭目とゴブリンの群れが、槍をかまえて床を駆けぬける（砂ぼこり）
-    tail: {
-        front(a) {
-            const { ctx, phase: p } = a;
-            const run = win(p, GOBLIN_CHARGE.t0, GOBLIN_CHARGE.t0 + 0.22), fade = 1 - win(p, 0.53, 0.61);
-            if (run > 0 && fade > 0) {
-                const lead = lerp(a.foot.x + 10, a.W + 80, ease(run));
-                const lanes = goblinLanes(a);
-                ctx.save();
-                ctx.globalAlpha = fade;
-                for (let i = 0; i < 9; i++) {
-                    const j = i % lanes.length, x = lead - GOBLIN_CHARGE.back - GOBLIN_CHARGE.stag(j) - Math.floor(i / lanes.length) * 26, y = lanes[j] + 1; // 冒険者の段ごとに、先頭のゴブリンが走る（槍の先が受け止める所 GUARD に届く）
-                    if (x < a.foot.x - 10)
-                        continue;
-                    goblinSil(ctx, x, y, 1.15, a.frame / 2 + i, undefined, undefined, true); // 槍を前（右）へ構えて駆ける
-                    puffs(ctx, x - 6, y - 1, { n: 4, t: p * 5 + i, dx: -16, dy: -5, spread: 6, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.6, seed: 61 + i });
-                }
-                ctx.restore();
-                puffs(ctx, lead - 30, 190, { n: 10, t: p * 4, dx: -60, dy: -8, spread: 20, r0: 3, r1: 9, color: '#b8a37a', alpha: 0.6 * fade, seed: 59 });
-                screenFlash(ctx, a.W, a.H, bump(p, 0.41, 0.45), '#ffffff', 0.18);
-            }
-        },
-    },
+    // 背後から忍び寄る斥候は backRaid（このファイルの終わり）
 };
 /** とがった木の杭（根もと (x,y) から上へ h。縁・影・地・照り・とがった先の白木） */
 function stake(ctx, x, y, h, w, tilt) {
@@ -944,55 +808,7 @@ const kraken = {
             screenFlash(ctx, a.W, a.H, bump(p, 0.38, 0.43), '#bfe8ff', 0.25);
         },
     },
-    // 巻き取り: 触手が床を這って冒険者に巻きつき、引きよせる。
-    //   這う触手は奥の層（back。冒険者より奥）に描き、冒険者の動きを隠さない。手前（front）には、足首に巻きつく細い輪だけを描く
-    tail: {
-        back(a) {
-            const { ctx, phase: p } = a;
-            const base = { x: a.foot.x + 54, y: a.foot.y - 8 };
-            const reach = ease(win(p, 0.16, 0.4)), coil = ease(win(p, 0.38, 0.5)), fade = 1 - win(p, 0.52, 0.62);
-            if (reach <= 0 || fade <= 0)
-                return;
-            ctx.save();
-            ctx.globalAlpha = fade;
-            for (const v of heroes(a)) {
-                const l = v.ok ? { x: v.x + MEET.dx + 4, y: v.y + MEET.dy + 6 } : landing(v, 2), pts = []; // 迎え撃つ人には、斬られる所（MEET）まで這い上がる
-                for (let i = 0; i <= 14; i++) {
-                    const u = i / 14 * reach;
-                    pts.push([lerp(base.x, l.x, u), lerp(base.y, l.y, u) + Math.sin(u * 9 + v.f + p * 12) * 4 * (1 - coil * 0.6)]);
-                }
-                tentacleDraw(ctx, pts, 6, 3);
-            }
-            ctx.restore();
-            puffs(ctx, base.x + 60, a.foot.y - 2, { n: 8, t: p * 2, dx: 100, dy: -4, spread: 10, r0: 2, r1: 4, color: '#d8f2ff', alpha: 0.5 * fade * coil, seed: 75 });
-        },
-        front(a) {
-            const { ctx, phase: p } = a;
-            const coil = ease(win(p, 0.38, 0.5)), fade = 1 - win(p, 0.52, 0.62);
-            if (coil > 0 && fade > 0)
-                for (const v of heroes(a)) {
-                    if (v.ok)
-                        continue;
-                    const l = landing(v, 2);
-                    ctx.save();
-                    ctx.globalAlpha = fade;
-                    ctx.lineWidth = 2;
-                    for (let j = 0; j < 2; j++) { // 足首に巻きつく（前の半分だけ。体は隠さない）
-                        const yy = l.y - 1 - j * 4 * coil;
-                        ctx.strokeStyle = '#3e1230';
-                        ctx.beginPath();
-                        ctx.ellipse(R(l.x), R(yy + 1), 7, 2.5, 0.15, 0.1, Math.PI - 0.1);
-                        ctx.stroke();
-                        ctx.strokeStyle = '#a8487e';
-                        ctx.beginPath();
-                        ctx.ellipse(R(l.x), R(yy), 7, 2.5, 0.15, 0.1, Math.PI - 0.1);
-                        ctx.stroke();
-                    }
-                    ctx.restore();
-                }
-            screenFlash(ctx, a.W, a.H, bump(p, 0.4, 0.44), '#bfe8ff', 0.15);
-        },
-    },
+    // 背後の海から伸びる細い触手は backRaid（このファイルの終わり）
 };
 /** クラーケンの触手の薙ぎの、触手の形（中心線の点と太さ）。s: 振り抜きの進み・b: もどりの進み。描く（krakenSweep）と、届く時刻を調べる（arrival.ts）の両方で使う */
 export function krakenArmShape(a, s, b, end) {
@@ -1100,36 +916,7 @@ const KRAKEN_ARM = { line: '#2a0a20', dark: '#5e1a48', body: '#8a2a6a', hi: '#c8
 function tentacleDraw(ctx, pts, w0, w1) { tentacle(ctx, pts, w0, w1, '#8a2a6a', '#3e1230', '#f4c8dc'); }
 // ================= 守護巨人ゴルドム =================
 const golem = {
-    // 石礫の嵐: まわりの小石が浮かびあがり、岩が列ごとに飛んでいく
-    breath: {
-        front(a) {
-            const { ctx, phase: p } = a;
-            const hnd = spriteToWorld(a.foot, [70, 36]);
-            const gather = win(p, 0.06, 0.38);
-            if (gather > 0 && p < 0.44) { // 地面の小石が浮かぶ
-                for (let i = 0; i < 12; i++) {
-                    const x = a.foot.x + 10 + hash(i) * 90, base = a.foot.y - 2;
-                    rock(ctx, x, base - gather * (10 + hash(i, 2) * 40) - Math.sin(p * 20 + i) * 2, 1.5 + hash(i, 3) * 2.5, p * 6 + i, i, '#7a6a52', '#a8987a', '#3a2a1a');
-                }
-                puffs(ctx, a.foot.x + 50, a.foot.y - 2, { n: 8, t: p * 2, dx: 0, dy: -12, spread: 80, r0: 2, r1: 5, color: '#a8987a', alpha: 0.55 * gather, seed: 81 });
-            }
-            const rel = win(p, 0.36, 0.56), fade = 1 - win(p, 0.56, 0.62);
-            if (rel > 0 && fade > 0) { // 岩が山なりに飛ぶ
-                const hs = heroes(a), n = Math.max(6, hs.length * 2);
-                for (let i = 0; i < n; i++) {
-                    const t = clamp01((rel - hash(i, 1) * 0.25) / 0.45);
-                    if (t <= 0 || t >= 1)
-                        continue;
-                    const v = hs.length ? hs[i % hs.length] : null, tx = (v ? (v.ok ? v.x + GUARD.dx - 4 : v.x) : a.W - 50) + (hash(i, 2) - 0.5) * 12, ty = (v ? v.y : 170) - 6; // 受け止めた人の前で砕ける
-                    const x = lerp(hnd.x, tx, t), y = lerp(hnd.y, ty, t) - Math.sin(t * Math.PI) * 60;
-                    ctx.globalAlpha = fade;
-                    rock(ctx, x, y, 4 + 4 * hash(i, 4), a.frame / 3 + i, i, '#8a7a62', '#b8a888', '#3a2a1a');
-                    ctx.globalAlpha = 1;
-                }
-                screenFlash(ctx, a.W, a.H, bump(p, 0.44, 0.48), '#d8ccb0', 0.18);
-            }
-        },
-    },
+    // 背後の床から伸びる石の手は backRaid（このファイルの終わり）
     // 拳の叩きつけ: 空中に岩の拳（#105 の召喚「岩の拳」と同じ部品 pixart.ts の drawRockFist）があらわれ、冒険者ひとりずつの真上から叩きつける。
     //   0.28〜 床に影 → 0.34〜0.43 だんだん速く落ちる（刻印の亀裂が光る）→ 0.43 着弾（土ぼこり・ひび・岩のかけら）→ 0.5〜0.6 浮き上がって消える
     claw: {
@@ -1385,25 +1172,18 @@ const giant = {
             puffs(ctx, a.foot.x + 10, a.foot.y - 2, { n: 8, t: p * 2, dx: 20, dy: -8, spread: 30, r0: 2, r1: 6, color: '#e6f6ff', alpha: 0.6 * bump(p, 0.38, 0.6), seed: 91 });
         },
     },
-    // 棍棒の薙ぎ払い: 氷の棍棒が、討伐隊ぜんたいを包む大きな弧をえがいて床を払う（冷気の帯・氷のかけら・霜の煙）。山場は 0.42〜0.44
-    tail: {
-        front(a) {
-            const { ctx, phase: p } = a;
-            giantSweep(a, spriteToWorld(a.foot, [60, 42]), SWEEP_AT.giant, GIANT_ARC, (x, y, i) => shard(ctx, x, y, 5 + hash(i, 3) * 6, 3, hash(i, 4) * TAU + p * 10, '#e6f6ff', '#ffffff', '#4a8ac0'), '#e6f6ff', '#e6f6ff');
-        },
-    },
+    // 背後の吹きだまりから跳び出す雪狼は backRaid（このファイルの終わり）
 };
 const GOLEM_ARC = { line: '#2a1e12', dark: '#5a4a34', body: '#a8987a', hi: '#e8dcc0' };
-const GIANT_ARC = { line: '#1e3a5a', dark: '#4a8ac0', body: '#a8dcff', hi: '#ffffff' };
-/** 薙ぎ払いの弧が、狙う人（aimOf）の所で通る点（立ち位置からのずれ）。石の巨人は伏せた人の頭の上、氷の巨人は迎え撃つ所（MEET） */
-export const SWEEP_AT = { golem: { dx: 0, dy: -36 }, giant: MEET };
+/** 薙ぎ払いの弧が、狙う人（aimOf）の所で通る点（立ち位置からのずれ）。石の巨人の石の腕は、伏せた人の頭の上 */
+export const SWEEP_AT = { golem: { dx: 0, dy: -36 } };
 /** 巨人の薙ぎ払いの弧の形。弧は床の高さで、奥から手前へ水平に回す（上から叩きつけて見えないように、つぶした楕円の上を通す）。
  *  楕円の大きさは、狙う人の所（aim ＋ at）を弧が通るように決める。弧の先の角度は lerp(a0, a1, ease(win(p, 0.35, 0.46)))。届く時刻を調べる（arrival.ts）でも使う */
 export function giantSweepGeo(a, pivot, aim, at) {
     const sq = 0.3, cy = a.foot.y - 6, tx = aim.x + at.dx, ty = aim.y + at.dy;
     return { r: Math.max(40, Math.hypot(tx - pivot.x, (ty - cy) / sq)), sq, a0: -2.2, a1: 0.65, cy };
 }
-/** 巨人の薙ぎ払い（石の巨人・氷の巨人）: 肩 pivot を中心に、奥（左上）から手前の右まで、討伐隊ぜんたいを包む大きな弧を振り抜く。
+/** 石の巨人の腕の薙ぎ払い: 肩 pivot を中心に、奥（左上）から手前の右まで、討伐隊ぜんたいを包む大きな弧を振り抜く。
  *  弧は 3本（太い帯・細い帯・先の閃き）。弧の先から、かけら（bit）と煙が飛び散る */
 function giantSweep(a, pivot, at, P, bit, dust, flashCol) {
     const { ctx, phase: p } = a;
@@ -1441,7 +1221,612 @@ function giantSweep(a, pivot, at, P, bit, dust, flashCol) {
     }
     screenFlash(ctx, a.W, a.H, bump(p, 0.41, 0.46), flashCol, 0.28);
 }
-export const BOSS_FX = { vampire, spider, goblin, kraken, golem, giant };
+function backRaid(a, R0, guard = false) {
+    const { ctx, phase: p } = a, B = guard ? BACK.guard : BACK.meet;
+    for (const v of heroes(a)) {
+        const d = backDelay(v.f), t0 = BACK.t0 + d;
+        const come = ease(win(p, BACK.appear + d, BACK.appear + 0.08 + d));
+        if (come <= 0 || p > t0 + 0.2)
+            continue;
+        for (let j = 0; j < R0.n; j++) {
+            const sd = v.f * 2 + j, oy = R0.n > 1 ? (j ? 6 : -6) : 0;
+            const home = R0.home(v, j), tgt = { x: v.x + B.dx + (R0.n > 1 ? (j ? 3 : -1) : 0), y: v.y + B.dy + oy * 0.6 };
+            const sw0 = win(p, t0 - 0.06 - 0.008 * j, t0), sw = sw0 * sw0;
+            const st = { v, j, p, t0, come, sw, home, tgt, pos: home, ok: v.ok, hit: 0 };
+            // 待つあいだは、ふわふわと間合いをはかる
+            const wob = 1 - sw;
+            st.pos = { x: lerp(home.x, tgt.x, sw) + Math.sin(p * 40 + sd) * 1.5 * wob, y: lerp(home.y, tgt.y, sw) + Math.sin(p * 55 + sd * 2) * 1.5 * wob };
+            if (come < 1) {
+                const e = R0.enter ? R0.enter(st) : { x: home.x + 12, y: home.y };
+                st.pos = { x: lerp(e.x, st.pos.x, come), y: lerp(e.y, st.pos.y, come) };
+            }
+            if (p >= t0) {
+                st.pos = tgt;
+                if (v.ok)
+                    st.hit = win(p, t0, t0 + 0.12);
+                else {
+                    st.hit = win(p, t0, t0 + 0.16);
+                    st.pos = { x: lerp(tgt.x, v.x + 3, win(p, t0, t0 + 0.03)), y: lerp(tgt.y, v.y - 16 + oy * 0.5, win(p, t0, t0 + 0.03)) };
+                } // 背中まで届く
+                if (st.hit >= 1)
+                    continue;
+            }
+            R0.draw(ctx, st, a);
+        }
+    }
+    screenFlash(ctx, a.W, a.H, bump(p, 0.41, 0.46), R0.flash ?? '#ffffff', 0.18);
+}
+/** 縁どり: shape(col) を、まわり4方向へ1ドットずらして縁の色 col で描いてから、本来の色（col が null）で描く */
+function rimmed(ctx, rim, shape) {
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        ctx.save();
+        ctx.translate(ox, oy);
+        shape(rim);
+        ctx.restore();
+    }
+    shape(null);
+}
+const poly = (ctx, pts, col) => { ctx.fillStyle = col; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); };
+/** 背中の傷（動けなかった人）: 斜めの2本の傷 */
+function backWound(ctx, v, k, P) {
+    const cut = win(k, 0.1, 0.35), fade = 1 - win(k, 0.55, 1);
+    if (cut <= 0 || fade <= 0)
+        return;
+    const l = landing(v, 0);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    slashMark(ctx, l.x + 10, l.y - 26, l.x - 2, l.y - 8, 4, 3, ease(cut), P);
+    slashMark(ctx, l.x + 12, l.y - 18, l.x, l.y - 2, 4, 3, ease(win(cut, 0.3, 1)), P);
+    ctx.restore();
+}
+// ---- 竜: 背後の空から、子竜（ワイバーン）が舞い降りて、背中へ爪をかける ----
+const WYV = { line: '#1e1548', body: '#5f3ea8', hi: '#8d68d4', wing: '#3a2a80', mem: '#7a5ac0', belly: '#bf9a52', eye: '#ffd166', rim: '#e8d0ff' };
+const WYV_CUT = { line: '#1a0208', dark: '#5a2a8a', body: '#b070ff', hi: '#f0e0ff' };
+/** 子竜（頭の先 (x,y)・左向き）。flap: 羽ばたき / rot: 傾き */
+function wyvern(ctx, x, y, flap, rot, al) {
+    ctx.save();
+    ctx.translate(R(x), R(y));
+    ctx.rotate(rot);
+    ctx.scale(1.25, 1.25);
+    ctx.globalAlpha *= al;
+    glowAt(ctx, 9, 0, 14, '#c8a8ff', '#7a5ac0', 0.35);
+    rimmed(ctx, WYV.rim, (s) => {
+        const c = (k) => s ?? k, up = flap > 0.5;
+        const wing = (ox, oy) => (up ? [[7, -1], [4, -9], [14, -13], [12, -7], [16, -5], [13, -1]] : [[7, 1], [4, 8], [14, 11], [12, 6], [16, 4], [13, 1]]).map(([x, y]) => [x + ox, y + oy]);
+        poly(ctx, wing(3, up ? -1 : 1), c(WYV.wing)); // 奥の翼（翼の先とふちのぎざぎざ）
+        ctx.strokeStyle = c(WYV.body);
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(13, 1);
+        ctx.quadraticCurveTo(18, 3, 22, 1 + Math.sin(flap * 6) * 1.5);
+        ctx.stroke(); // 尾
+        poly(ctx, [[22, -1], [25, 1], [22, 3]], c(WYV.hi));
+        ctx.fillStyle = c(WYV.body);
+        ctx.beginPath();
+        ctx.ellipse(9, 1, 5, 3, 0, 0, TAU);
+        ctx.fill(); // 胴
+        ctx.fillRect(3, -2, 4, 3);
+        ctx.fillRect(-1, -3, 5, 3); // 首と頭
+        ctx.fillStyle = c(WYV.belly);
+        ctx.fillRect(6, 2, 6, 1);
+        ctx.fillRect(-2, -1, 3, 1); // 腹とあご
+        ctx.fillStyle = c(WYV.hi);
+        ctx.fillRect(3, -5, 1, 2);
+        ctx.fillRect(7, -1, 5, 1); // 角と背
+        poly(ctx, wing(0, 0), c(WYV.mem)); // 手前の翼
+        ctx.fillStyle = c(WYV.line);
+        ctx.fillRect(8, 3, 1, 2);
+        ctx.fillRect(11, 3, 1, 2); // 爪
+        if (!s) {
+            ctx.fillStyle = WYV.eye;
+            ctx.fillRect(0, -2, 1, 1);
+            ctx.strokeStyle = WYV.hi;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(7, up ? -1 : 1);
+            ctx.lineTo(4, up ? -9 : 8);
+            ctx.lineTo(14, up ? -13 : 11);
+            ctx.moveTo(4, up ? -9 : 8);
+            ctx.lineTo(12, up ? -7 : 6);
+            ctx.stroke();
+        } // 翼の骨
+    });
+    ctx.restore();
+}
+const dragonBack = {
+    n: 1, flash: '#c8a8ff',
+    home: (v) => ({ x: v.x + 44, y: v.y - 36 }),
+    enter: (st) => ({ x: st.v.x + 84, y: st.v.y - 72 }), // 背後の空から舞い降りる
+    draw(ctx, st, a) {
+        const { pos, p, hit } = st, flap = ((a.frame >> 1) + st.v.f) % 2;
+        if (hit <= 0) {
+            wyvern(ctx, pos.x, pos.y, flap, -0.25 * st.sw, st.come);
+            return;
+        }
+        if (st.ok) { // 打たれて、きりもみで後ろへ吹きとび、紫の煙と鱗になって消える
+            sparkle(ctx, pos.x, pos.y, 4 + 6 * (1 - hit), '#ffffff', 1 - hit);
+            wyvern(ctx, pos.x + 30 * hit, pos.y - 18 * hit + 30 * hit * hit, flap, hit * 6, 1 - win(hit, 0.3, 0.8));
+            puffs(ctx, pos.x + 6, pos.y, { n: 7, t: hit, dx: 14, dy: -8, spread: 10, r0: 2, r1: 6, color: '#7a5ac0', alpha: 0.8 * (1 - hit), seed: 201 + st.v.f });
+            ctx.fillStyle = WYV.hi;
+            ctx.globalAlpha = 1 - hit;
+            for (let i = 0; i < 6; i++) {
+                const an = hash(i, st.v.f) * TAU;
+                ctx.fillRect(R(pos.x + Math.cos(an) * 10 * hit), R(pos.y + Math.sin(an) * 6 * hit + 16 * hit * hit), 2, 1);
+            }
+            ctx.globalAlpha = 1;
+        }
+        else { // 背中を爪でかいて、上へ飛び去る
+            wyvern(ctx, lerp(pos.x, st.v.x + 70, win(hit, 0.3, 1)), lerp(pos.y, st.v.y - 90, win(hit, 0.3, 1)), flap, -0.5, 1 - win(hit, 0.6, 1));
+            backWound(ctx, st.v, hit, WYV_CUT);
+        }
+    },
+};
+// ---- 大蜘蛛: 天井から糸で、子蜘蛛が背後に降りてきて、糸ごと振り子のように背中へ飛びつく ----
+const SPL = { body: '#3e2826', hi: '#86625a', leg: '#2a1a1c', eye: '#ff4040', fang: '#f0e8d0', rim: '#ece4ff' };
+/** 子蜘蛛（牙の先 (x,y)・左向き） */
+function spiderling(ctx, x, y, step, al) {
+    ctx.save();
+    ctx.translate(R(x), R(y));
+    ctx.globalAlpha *= al;
+    glowAt(ctx, 6, -1, 10, '#e8e0ff', '#9a8ab8', 0.3);
+    rimmed(ctx, SPL.rim, (s) => {
+        const c = (k) => s ?? k;
+        ctx.strokeStyle = c(SPL.leg);
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 4; i++)
+            for (const sg of [-1, 1]) { // 脚 4対（ひざを立てて）
+                const bx = 3 + i * 1.6, kx = 1 + i * 3, fx = -1 + i * 3.6 + Math.sin(step + i + sg) * 0.8;
+                ctx.beginPath();
+                ctx.moveTo(bx, 0);
+                ctx.lineTo(kx, sg * 4.5 - 1);
+                ctx.lineTo(fx, sg * 6.5);
+                ctx.stroke();
+            }
+        ctx.fillStyle = c(SPL.body);
+        ctx.beginPath();
+        ctx.ellipse(8, -1, 4.5, 3.6, 0, 0, TAU);
+        ctx.fill(); // 腹
+        ctx.beginPath();
+        ctx.arc(3, 0, 2.4, 0, TAU);
+        ctx.fill(); // 頭
+        if (!s) {
+            ctx.fillStyle = SPL.hi;
+            ctx.fillRect(7, -3, 3, 1);
+            ctx.fillRect(8, -1, 1, 2);
+            ctx.fillStyle = SPL.eye;
+            ctx.fillRect(2, -1, 1, 1);
+            ctx.fillRect(4, -1, 1, 1);
+            ctx.fillStyle = SPL.fang;
+            ctx.fillRect(0, 0, 1, 2);
+            ctx.fillRect(1, 1, 1, 1);
+        }
+    });
+    ctx.restore();
+}
+const SPIDER_BITE = { line: '#0a2a14', dark: '#2a7a4a', body: '#7bed9f', hi: '#e0ffe8' };
+const spiderBack = {
+    n: 2, flash: '#e0ffe8',
+    home: (v, j) => ({ x: v.x + 44 + 8 * j, y: v.y - 30 + 10 * j }),
+    enter: (st) => ({ x: st.home.x, y: Math.min(st.home.y - 70, 30) }), // 真上の天井から降りてくる
+    draw(ctx, st, a) {
+        const { pos, hit, v, j } = st, anchor = { x: st.home.x - 6, y: Math.max(0, st.home.y - 120) }; // 糸のつけ根（降りてきた真上）
+        const thread = (to, al) => { ctx.save(); ctx.globalAlpha *= al; ctx.strokeStyle = '#f4f6ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(R(anchor.x), anchor.y); ctx.lineTo(R(to.x + 8), R(to.y - 4)); ctx.stroke(); ctx.restore(); };
+        if (hit <= 0) {
+            thread(pos, 0.75 * st.come);
+            spiderling(ctx, pos.x, pos.y, a.frame / 2 + j, st.come);
+            return;
+        }
+        if (st.ok) { // 糸ごと斬られて、緑の体液としぶきになって散る。切れた糸は上へ巻きもどる
+            thread({ x: lerp(pos.x, anchor.x, ease(hit)), y: lerp(pos.y, anchor.y, ease(hit)) }, 0.75 * (1 - hit));
+            sparkle(ctx, pos.x + 4, pos.y, 3 + 5 * (1 - hit), '#ffffff', 1 - hit);
+            spiderling(ctx, pos.x + 8 * hit, pos.y + 26 * hit * hit, a.frame / 2 + j, 1 - win(hit, 0.15, 0.55));
+            puffs(ctx, pos.x + 4, pos.y, { n: 6, t: hit, dx: 6, dy: -6, spread: 10, r0: 1.5, r1: 4, color: '#7bed9f', alpha: 0.8 * (1 - hit), seed: 211 + v.f * 2 + j });
+            ctx.strokeStyle = SPL.leg;
+            ctx.lineWidth = 1;
+            ctx.globalAlpha = 1 - hit;
+            for (let i = 0; i < 4; i++) {
+                const an = hash(i, v.f * 2 + j) * TAU, x0 = pos.x + 4 + Math.cos(an) * 10 * hit, y0 = pos.y + Math.sin(an) * 5 * hit + 20 * hit * hit;
+                ctx.beginPath();
+                ctx.moveTo(R(x0), R(y0));
+                ctx.lineTo(R(x0 + 3), R(y0 + 2));
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+        }
+        else { // 背中に噛みついて、糸をたぐって天井へもどる
+            const up = win(hit, 0.35, 1), q = { x: lerp(pos.x, anchor.x, up), y: lerp(pos.y, anchor.y + 10, up) };
+            thread(q, 0.75 * (1 - up));
+            spiderling(ctx, q.x, q.y, a.frame / 2 + j, 1 - win(hit, 0.6, 1));
+            if (j === 0) {
+                const l = landing(v, -14);
+                sparkle(ctx, l.x + 2, l.y, 3 + 4 * bump(hit, 0, 0.5), '#7bed9f', bump(hit, 0, 0.6));
+                puffs(ctx, l.x + 2, l.y, { n: 5, t: hit, dx: 0, dy: -10, spread: 6, r0: 1, r1: 3, color: '#7bed9f', alpha: 0.7 * (1 - hit), seed: 219 + v.f });
+                backWound(ctx, v, hit, SPIDER_BITE);
+            }
+        }
+    },
+};
+// ---- ゴブリン: 斥候が背後から床を這うように忍び寄り、短剣をかまえて背中へ跳びかかる ----
+const SCOUT = { body: '#2e4a24', skin: '#6aa04a', hood: '#3a2a1a', blade: '#e4e8f0', eye: '#f2e24a', rim: '#f4e6b8' };
+const SCOUT_CUT = { line: '#1a0208', dark: '#7a0a1e', body: '#e8284a', hi: '#ffe0e8' };
+/** 斥候（短剣の先 (x,y)・左向き）。leap: 0 かがむ → 1 跳ぶ */
+function scout(ctx, x, y, leap, step, rot, al) {
+    ctx.save();
+    ctx.translate(R(x), R(y));
+    ctx.rotate(rot);
+    ctx.globalAlpha *= al;
+    rimmed(ctx, SCOUT.rim, (s) => {
+        const c = (k) => s ?? k, f = Math.sin(step * 3) > 0 ? 1 : 0;
+        ctx.fillStyle = c(SCOUT.blade);
+        ctx.fillRect(0, -1, 5, 1);
+        ctx.fillRect(5, -2, 1, 3); // 短剣
+        ctx.fillStyle = c(SCOUT.skin);
+        ctx.fillRect(6, -1, 3, 2); // 腕
+        ctx.fillStyle = c(SCOUT.body);
+        ctx.fillRect(8, -3, 6, 6); // 胴
+        ctx.fillStyle = c(SCOUT.skin);
+        ctx.fillRect(9, -8, 5, 5);
+        ctx.fillRect(14, -8, 3, 2);
+        ctx.fillRect(7, -7, 2, 1); // 頭と耳
+        ctx.fillStyle = c(SCOUT.hood);
+        ctx.fillRect(9, -10, 6, 3);
+        ctx.fillRect(13, -7, 3, 6); // 頭巾とマント
+        if (leap > 0.5) {
+            ctx.fillStyle = c(SCOUT.body);
+            ctx.fillRect(13, 2, 4, 2);
+            ctx.fillRect(14, 4, 4, 1);
+        } // 跳ぶ: 脚を後ろへのばす
+        else {
+            ctx.fillStyle = c(SCOUT.body);
+            ctx.fillRect(9, 3, 2, 4 + f);
+            ctx.fillRect(12, 3, 2, 5 - f);
+        } // かがむ・忍び足
+        if (!s) {
+            ctx.fillStyle = SCOUT.eye;
+            ctx.fillRect(10, -6, 1, 1);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(1, -1, 2, 1);
+        }
+    });
+    ctx.restore();
+}
+const goblinBack = {
+    n: 1, flash: '#fff2b0',
+    home: (v) => ({ x: v.x + 42, y: v.y - 7 }), // かがんで、短剣を低くかまえる
+    enter: (st) => ({ x: st.v.x + 110, y: st.v.y - 7 }), // 背後から床を這うように忍び寄る
+    draw(ctx, st, a) {
+        const { pos, hit, v } = st, step = a.frame / 3 + v.f;
+        const leap = st.sw > 0.05 ? 1 : 0, hop = -8 * Math.sin(st.sw * Math.PI); // 跳びかかる（山なり）
+        if (hit <= 0) {
+            if (st.come < 1)
+                puffs(ctx, pos.x + 12, v.y, { n: 3, t: st.p * 6, dx: 10, dy: -3, spread: 4, r0: 1, r1: 3, color: '#c8b48a', alpha: 0.5 * st.come, seed: 221 + v.f }); // 忍び足の砂
+            scout(ctx, pos.x, pos.y + hop, leap, st.come < 1 ? step : 0, -0.15 * st.sw, st.come);
+            return;
+        }
+        if (st.ok) { // 刃をはじかれ、短剣が宙を舞い、斥候は後ろへ転げて煙になって消える
+            sparkle(ctx, pos.x, pos.y, 4 + 6 * (1 - hit), '#ffffff', 1 - hit);
+            const k = ease(hit);
+            ctx.save();
+            ctx.globalAlpha = 1 - hit;
+            ctx.translate(R(pos.x + 6 - 10 * k), R(pos.y - 24 * k + 30 * k * k));
+            ctx.rotate(hit * 12);
+            ctx.fillStyle = SCOUT.blade;
+            ctx.fillRect(-3, 0, 6, 1);
+            ctx.restore();
+            scout(ctx, pos.x + 26 * k, pos.y + 4 + 6 * k, 1, 0, 1.6 * k, 1 - win(hit, 0.35, 0.7));
+            puffs(ctx, pos.x + 22 * k + 10, pos.y + 2, { n: 8, t: hit, dx: 8, dy: -10, spread: 12, r0: 2, r1: 7, color: '#c8b48a', alpha: 0.85 * win(hit, 0.25, 0.5) * (1 - hit), seed: 227 + v.f });
+        }
+        else { // 背中を斬りつけ、右へ駆け去る
+            scout(ctx, lerp(pos.x, v.x + 120, win(hit, 0.3, 1)), lerp(pos.y, v.y - 7, win(hit, 0.3, 0.5)), 0, step, 0, 1 - win(hit, 0.7, 1));
+            backWound(ctx, v, hit, SCOUT_CUT);
+        }
+    },
+};
+// ---- クラーケン: 背後の海（足もとの水）から、細い触手が伸びあがり、背中へ打ちかかる ----
+const KR = { body: '#8a2a6a', dark: '#3e1230', sucker: '#f4c8dc', rim: '#ffd8ee' };
+/** 細い触手（付け根 b から先 tip へ。len: 伸びた割合）の中心線 */
+function thinArm(b, tip, len, wave) {
+    const c = { x: b.x + 6, y: (b.y + tip.y) / 2 - 4 }, pts = [];
+    for (let i = 0; i <= 12; i++) {
+        const u = (i / 12) * len, w = Math.sin(u * 7 + wave) * 2.5 * u;
+        const x = (1 - u) * (1 - u) * b.x + 2 * u * (1 - u) * c.x + u * u * tip.x, y = (1 - u) * (1 - u) * b.y + 2 * u * (1 - u) * c.y + u * u * tip.y;
+        pts.push([x + w, y]);
+    }
+    return pts;
+}
+function armDraw(ctx, pts, w0, w1) {
+    if (pts.length < 2)
+        return;
+    ctx.save();
+    ctx.globalAlpha *= 0.85;
+    tentacle(ctx, pts, w0 + 2.5, w1 + 2, KR.rim, KR.rim, KR.rim);
+    ctx.restore(); // 縁どり
+    tentacle(ctx, pts, w0, w1, KR.body, KR.dark, KR.sucker);
+}
+const krakenBack = {
+    n: 1, flash: '#bfe8ff',
+    home: (v) => ({ x: v.x + 36, y: v.y - 34 }),
+    enter: (st) => ({ x: st.v.x + 44, y: st.v.y }),
+    draw(ctx, st, a) {
+        const { pos, hit, v, p } = st, base = { x: v.x + 46, y: v.y + 3 };
+        const splash = (k) => {
+            ctx.save();
+            ctx.strokeStyle = '#bfe8ff';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 2; i++) {
+                const u = (p * 4 + i / 2) % 1;
+                ctx.globalAlpha = k * (1 - u);
+                ctx.beginPath();
+                ctx.ellipse(base.x, base.y, 5 + u * 12, 2 + u * 3, 0, 0, TAU);
+                ctx.stroke();
+            }
+            ctx.restore();
+            ctx.fillStyle = '#1a3a5a';
+            ctx.globalAlpha = 0.6 * k;
+            ctx.beginPath();
+            ctx.ellipse(base.x, base.y, 7, 2.5, 0, 0, TAU);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        };
+        if (hit <= 0) {
+            splash(st.come);
+            armDraw(ctx, thinArm(base, pos, st.come, p * 14), 5, 1.5);
+            if (st.come < 1)
+                puffs(ctx, base.x, base.y - 2, { n: 5, t: p * 4, dx: 0, dy: -12, spread: 8, r0: 1, r1: 3, color: '#d8f2ff', alpha: 0.7 * st.come, seed: 231 + v.f });
+            return;
+        }
+        if (st.ok) { // 先を斬りとばされ、切れ端は落ちて消え、残りは水へ引っこむ
+            const back = ease(win(hit, 0.1, 0.7));
+            splash(1 - back);
+            armDraw(ctx, thinArm(base, pos, 0.7 * (1 - back), p * 14), 5, 2.5);
+            const k = hit, piece = { x: pos.x + 8 + 6 * k, y: pos.y - 4 + 28 * k * k };
+            ctx.save();
+            ctx.globalAlpha = 1 - win(k, 0.4, 1);
+            armDraw(ctx, [[piece.x + 8, piece.y - 2], [piece.x + 4, piece.y - 1 + Math.sin(k * 20) * 2], [piece.x, piece.y]], 2.5, 1.2);
+            ctx.restore();
+            sparkle(ctx, pos.x + 6, pos.y, 3 + 5 * (1 - hit), '#ffffff', 1 - hit);
+            puffs(ctx, pos.x + 8, pos.y, { n: 7, t: hit, dx: 6, dy: -8, spread: 10, r0: 1.5, r1: 4, color: '#120a22', alpha: 0.7 * (1 - hit), seed: 237 + v.f }); // 墨のしぶき
+        }
+        else { // 背中を打って、水へ引っこむ
+            const back = ease(win(hit, 0.3, 1));
+            splash(1 - back);
+            armDraw(ctx, thinArm(base, { x: lerp(pos.x, base.x, back), y: lerp(pos.y, base.y, back) }, 1 - back, p * 14), 5, 1.5);
+            const l = landing(v, -14), k = bump(hit, 0, 0.45);
+            if (k > 0) {
+                ctx.save();
+                ctx.strokeStyle = '#ffb0d0';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = k;
+                ctx.beginPath();
+                ctx.ellipse(l.x + 4, l.y, 4 + 8 * hit, 3 + 5 * hit, 0, 0, TAU);
+                ctx.stroke();
+                ctx.restore();
+                sparkle(ctx, l.x + 4, l.y, 3 + 4 * k, '#ffffff', k);
+            }
+        }
+    },
+};
+// ---- 石の巨人: 背後の床から、小さな石の手が突き出して、背中へ殴りかかる（振り向いて受ける） ----
+const STONE = { body: '#8a7a62', hi: '#c8b898', lo: '#3a2a1a', rune: '#7af0e0', rim: '#f0e6cc' };
+/** 石の腕と拳（拳の面 (x,y)・左向き。付け根 b は床） */
+function stoneHand(ctx, b, f, al, glow) {
+    ctx.save();
+    ctx.globalAlpha *= al;
+    const wr = { x: f.x + 9, y: f.y + 1 }, ang = Math.atan2(wr.y - b.y, wr.x - b.x), nx = -Math.sin(ang), ny = Math.cos(ang);
+    rimmed(ctx, STONE.rim, (s) => {
+        const c = (k) => s ?? k;
+        poly(ctx, [[b.x + nx * 5, b.y + ny * 5], [wr.x + nx * 3.5, wr.y + ny * 3.5], [wr.x - nx * 3.5, wr.y - ny * 3.5], [b.x - nx * 5, b.y - ny * 5]], c(STONE.body)); // 腕
+        ctx.fillStyle = c(STONE.body);
+        ctx.fillRect(R(f.x), R(f.y - 5), 10, 9); // 拳
+        ctx.fillStyle = c(STONE.lo);
+        ctx.fillRect(R(f.x + 3), R(f.y + 3), 4, 2); // 親指
+        if (!s) {
+            ctx.fillStyle = STONE.hi;
+            ctx.fillRect(R(f.x + 1), R(f.y - 5), 8, 1);
+            for (let i = 0; i < 4; i++)
+                ctx.fillRect(R(f.x), R(f.y - 4 + i * 2), 1, 1); // 指の節
+            ctx.fillStyle = STONE.lo;
+            for (let i = 0; i < 3; i++)
+                ctx.fillRect(R(f.x + 1), R(f.y - 3 + i * 2), 4, 1);
+        }
+    });
+    if (glow > 0) {
+        ctx.strokeStyle = STONE.rune;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = al * glow;
+        ctx.beginPath();
+        ctx.moveTo(lerp(b.x, wr.x, 0.2), lerp(b.y, wr.y, 0.2));
+        ctx.lineTo(lerp(b.x, wr.x, 0.5) + nx * 2, lerp(b.y, wr.y, 0.5) + ny * 2);
+        ctx.lineTo(lerp(b.x, wr.x, 0.8), lerp(b.y, wr.y, 0.8));
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+const golemBack = {
+    n: 1, flash: '#d8ccb0',
+    home: (v) => ({ x: v.x + 34, y: v.y - 26 }), // 拳を引いて、振りかぶる
+    enter: (st) => ({ x: st.v.x + 40, y: st.v.y + 2 }), // 床から突き出す
+    draw(ctx, st) {
+        const { pos, hit, v, p } = st, base = { x: v.x + 42, y: v.y + 3 };
+        const floor = (k) => {
+            if (k <= 0)
+                return;
+            ctx.save();
+            ctx.globalAlpha = k;
+            ctx.strokeStyle = '#140c06';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(base.x - 9, base.y);
+            ctx.lineTo(base.x - 3, base.y - 1);
+            ctx.lineTo(base.x + 3, base.y + 1);
+            ctx.lineTo(base.x + 10, base.y);
+            ctx.stroke();
+            ctx.fillStyle = '#2a1e12';
+            ctx.beginPath();
+            ctx.ellipse(base.x, base.y, 7, 2.5, 0, 0, TAU);
+            ctx.fill();
+            ctx.restore();
+        };
+        if (hit <= 0) {
+            floor(1);
+            if (st.come < 1)
+                puffs(ctx, base.x, base.y - 2, { n: 6, t: p * 4, dx: 0, dy: -12, spread: 14, r0: 1.5, r1: 4, color: '#c8b48a', alpha: 0.7 * st.come, seed: 241 + v.f });
+            // 床から伸びあがる（come）: 拳の位置は付け根から少しずつ
+            const f = st.come < 1 ? { x: lerp(base.x - 4, pos.x, st.come), y: lerp(base.y - 4, pos.y, st.come) } : pos;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, 9999, base.y + 1);
+            ctx.clip();
+            stoneHand(ctx, base, f, 1, win(p, 0.3, 0.38));
+            ctx.restore();
+            return;
+        }
+        if (st.ok) { // 受け止められて、拳がくずれて石ころになり、腕は床へ沈む
+            floor(1 - win(hit, 0.5, 1));
+            const sink = ease(win(hit, 0.2, 0.8));
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, 9999, base.y + 1);
+            ctx.clip();
+            stoneHand(ctx, base, { x: lerp(pos.x + 10, base.x - 4, sink), y: lerp(pos.y, base.y + 10, sink) }, 1 - win(hit, 0, 0.2), 0);
+            ctx.restore();
+            for (let i = 0; i < 6; i++) {
+                const an = Math.PI * (0.8 + hash(i, v.f) * 1.4), sp = 6 + hash(i, 5) * 10;
+                rock(ctx, pos.x + 4 + Math.cos(an) * sp * hit, pos.y + Math.sin(an) * sp * hit * 0.6 + 26 * hit * hit, 1.5 + hash(i, 6) * 2, hit * 6 + i, i, STONE.body, STONE.hi, STONE.lo);
+            }
+            puffs(ctx, pos.x + 4, pos.y, { n: 7, t: hit, dx: 4, dy: -8, spread: 12, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.8 * (1 - hit), seed: 247 + v.f });
+            sparkle(ctx, pos.x, pos.y, 3 + 5 * (1 - hit), '#ffffff', 1 - hit);
+        }
+        else { // 背中を殴りつけて、床へ沈む
+            const sink = ease(win(hit, 0.3, 1));
+            floor(1 - win(hit, 0.6, 1));
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, 9999, base.y + 1);
+            ctx.clip();
+            stoneHand(ctx, base, { x: lerp(pos.x, base.x - 4, sink), y: lerp(pos.y, base.y + 10, sink) }, 1, 0);
+            ctx.restore();
+            const l = landing(v, -14), k = bump(hit, 0, 0.5);
+            if (k > 0) {
+                sparkle(ctx, l.x + 3, l.y, 3 + 5 * k, '#ffffff', k);
+                dustRing(ctx, l.x + 3, l.y + 4, hit, 10);
+            }
+        }
+    },
+};
+// ---- 氷の巨人: 背後の雪の吹きだまりから、雪でできた狼（雪狼）が跳び出し、背中へ飛びかかる ----
+const WOLF = { body: '#e6f0f8', shade: '#9ab4cc', line: '#3a5a7a', eye: '#5fd0ff', mouth: '#7a2a3a', rim: '#1e3a5a' };
+/** 雪狼（あごの先 (x,y)・左向き）。leap: 0 身がまえる → 1 跳ぶ */
+function snowWolf(ctx, x, y, leap, rot, al) {
+    ctx.save();
+    ctx.translate(R(x), R(y));
+    ctx.rotate(rot);
+    ctx.globalAlpha *= al;
+    glowAt(ctx, 11, -2, 13, '#ffffff', '#8fd3ff', 0.3);
+    rimmed(ctx, WOLF.rim, (s) => {
+        const c = (k) => s ?? k;
+        ctx.fillStyle = c(WOLF.body);
+        ctx.beginPath();
+        ctx.ellipse(13, -2, 7, 4, -0.1 * leap, 0, TAU);
+        ctx.fill(); // 胴
+        ctx.fillRect(6, -6, 5, 7);
+        ctx.fillRect(1, -6, 6, 5);
+        ctx.fillRect(-1, -4, 3, 2); // 首・頭・鼻づら
+        ctx.fillRect(5, -9, 2, 3);
+        ctx.fillRect(3, -8, 1, 2); // 耳
+        ctx.fillRect(19, -5, 3, 2);
+        ctx.fillRect(21, -7, 3, 2);
+        ctx.fillRect(23, -8, 2, 2); // しっぽ
+        if (leap > 0.5) {
+            ctx.fillRect(2, 0, 5, 2);
+            ctx.fillRect(17, 1, 5, 2);
+        } // 跳ぶ: 前脚は前へ、後ろ脚は後ろへ
+        else {
+            ctx.fillRect(8, 1, 2, 5);
+            ctx.fillRect(11, 1, 2, 5);
+            ctx.fillRect(16, 1, 2, 5);
+            ctx.fillRect(18, 1, 2, 5);
+        } // 身がまえる
+        ctx.fillStyle = c(WOLF.shade);
+        ctx.fillRect(9, 0, 10, 2);
+        ctx.fillRect(21, -5, 2, 1);
+        if (!s) {
+            ctx.fillStyle = WOLF.mouth;
+            ctx.fillRect(-1, -2, 4, 2); // 開いた口
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, -2, 1, 1);
+            ctx.fillRect(2, -1, 1, 1); // 牙
+            ctx.fillStyle = WOLF.eye;
+            ctx.fillRect(3, -5, 2, 1); // 目
+            ctx.fillStyle = WOLF.line;
+            ctx.fillRect(-1, -4, 1, 1); // 鼻
+        }
+    });
+    ctx.restore();
+}
+const giantBack = {
+    n: 1, flash: '#e6f6ff',
+    home: (v) => ({ x: v.x + 36, y: v.y - 8 }), // 吹きだまりの前で身がまえる（あごの先）
+    enter: (st) => ({ x: st.v.x + 42, y: st.v.y + 2 }), // 吹きだまりの中から
+    draw(ctx, st) {
+        const { pos, hit, v, p, sw, come } = st, drift = { x: v.x + 44, y: v.y + 3 };
+        const mound = (k) => {
+            if (k <= 0)
+                return;
+            const burst = win(p, BACK.appear + 0.03, BACK.appear + 0.07);
+            ctx.save();
+            ctx.globalAlpha = k;
+            ctx.fillStyle = WOLF.rim;
+            ctx.beginPath();
+            ctx.ellipse(drift.x, drift.y, 12, 5 + 3 * (1 - burst), 0, Math.PI, TAU);
+            ctx.fill();
+            ctx.fillStyle = '#f4f8fc';
+            ctx.beginPath();
+            ctx.ellipse(drift.x, drift.y, 11, 4 + 3 * (1 - burst), 0, Math.PI, TAU);
+            ctx.fill();
+            ctx.fillStyle = '#c8d8e8';
+            ctx.fillRect(R(drift.x - 9), R(drift.y - 1), 18, 1);
+            ctx.restore();
+        };
+        const appear = win(p, BACK.appear - 0.04, BACK.appear);
+        if (hit <= 0) {
+            mound(appear * (1 - win(p, BACK.appear + 0.12, BACK.appear + 0.2)));
+            if (come < 1)
+                puffs(ctx, drift.x, drift.y - 4, { n: 8, t: p * 4, dx: 0, dy: -14, spread: 14, r0: 1.5, r1: 4, color: '#f4f8fc', alpha: 0.85 * bump(come, 0, 1), seed: 251 + v.f }); // 雪けむり
+            const hop = -10 * Math.sin(sw * Math.PI);
+            snowWolf(ctx, pos.x, pos.y + hop, sw > 0.05 || come < 1 ? 1 : 0, -0.25 * sw, Math.min(1, come * 2));
+            return;
+        }
+        if (st.ok) { // 打たれて、雪の粉と氷のきらめきになって散る
+            sparkle(ctx, pos.x + 4, pos.y, 4 + 6 * (1 - hit), '#ffffff', 1 - hit);
+            snowWolf(ctx, pos.x + 8 * hit, pos.y + 6 * hit, 1, 0.6 * hit, 1 - win(hit, 0.05, 0.35));
+            puffs(ctx, pos.x + 10, pos.y, { n: 12, t: hit, dx: 10, dy: 6, spread: 18, r0: 1.5, r1: 5, color: '#f4f8fc', alpha: 0.9 * (1 - hit), seed: 255 + v.f });
+            ctx.fillStyle = '#bfe8ff';
+            ctx.globalAlpha = 1 - hit;
+            for (let i = 0; i < 7; i++) {
+                const an = hash(i, v.f) * TAU;
+                ctx.fillRect(R(pos.x + 10 + Math.cos(an) * 14 * hit), R(pos.y + Math.sin(an) * 8 * hit + 20 * hit * hit), 1, 1);
+            }
+            ctx.globalAlpha = 1;
+        }
+        else { // 背中に噛みつき、雪になって崩れ落ちる
+            snowWolf(ctx, pos.x, pos.y, 1, -0.3, 1 - win(hit, 0.4, 0.75));
+            puffs(ctx, pos.x + 8, pos.y + 6, { n: 10, t: hit, dx: 4, dy: 10, spread: 14, r0: 1.5, r1: 5, color: '#f4f8fc', alpha: 0.85 * win(hit, 0.3, 0.5) * (1 - hit), seed: 259 + v.f });
+            const l = landing(v, -14), k = bump(hit, 0, 0.5);
+            if (k > 0)
+                sparkle(ctx, l.x + 3, l.y, 3 + 5 * k, '#bfe8ff', k);
+            backWound(ctx, v, hit, { line: '#1e3a5a', dark: '#4a8ac0', body: '#a8dcff', hi: '#ffffff' });
+        }
+    },
+};
+const dragon = { tail: { front: (a) => backRaid(a, dragonBack) } };
+spider.tail = { front: (a) => backRaid(a, spiderBack) };
+goblin.tail = { front: (a) => backRaid(a, goblinBack) };
+kraken.tail = { front: (a) => backRaid(a, krakenBack) };
+golem.breath = { front: (a) => backRaid(a, golemBack, true) }; // 振り向いて受ける（bossmoves.ts の COUNTERS の turn）
+giant.tail = { front: (a) => backRaid(a, giantBack) };
+export const BOSS_FX = { dragon, vampire, spider, goblin, kraken, golem, giant };
 /** 竜以外のボスの、ひとり分の飛び道具。描いたら true（共通の竜の炎・爪・隕石は描かない） */
 export function attackHitFx(kind, atk, o) {
     if (kind === 'dragon')
@@ -1453,8 +1838,10 @@ export function attackHitFx(kind, atk, o) {
         if (k <= 0 || k >= 1)
             return true;
         const fx = (t) => lerp(mouth.x, stopX, t), fy = (t) => lerp(mouth.y, ty, t);
-        if (kind === 'vampire' && o.blocked)
-            return true; // 伏せた人へは飛ばさない（蝙蝠の群れが、伏せた上を通りすぎる。vampire.breath）
+        // 蝙蝠の群れ（vampire.breath）が出るブレスの場面では、伏せた人へは1人分の蝙蝠を飛ばさない（群れが伏せた上を通りすぎる）。
+        // 群れの出ない場面（組み合わせ・仲間の声・記憶など）では、1人分の蝙蝠を飛ばす（伏せた人には頭の上を越えていく: ty）
+        if (kind === 'vampire' && o.blocked && o.pass && o.swarm)
+            return true;
         if (kind === 'vampire') {
             for (let i = 0; i < 5; i++) {
                 const t = clamp01(k * 1.3 - i * 0.07);

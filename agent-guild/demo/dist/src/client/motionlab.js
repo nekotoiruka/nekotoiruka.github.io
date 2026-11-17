@@ -3849,13 +3849,13 @@ export const BOSS_LIST = [
 ];
 // [ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類]
 export const PAIRS = {
-    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '飛びのく', 'dodge'], tail: ['尾のなぎはらい', '跳んでかわす', 'jump'] },
+    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '飛びのく', 'dodge'], tail: ['背後から来る子竜', '振り向いて斬る', 'turnCut'] },
     vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
-    spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['脚の薙ぎ払い', '低く斬りはらう', 'cut'] },
-    goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['槍の突撃', '穂先をはらう', 'parry'] },
-    kraken: { breath: ['墨の噴射', '物陰に伏せる', 'crawl'], claw: ['触手の薙ぎ', '跳んでかわす', 'jump'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['触手の巻き取り', '触手を斬る', 'cut'] },
-    golem: { breath: ['石礫の嵐', '盾で受ける', 'block'], claw: ['岩の拳', '拳から飛びのく', 'dodge'], dive: ['地割れ', '地割れを跳び越える', 'jump'], tail: ['石腕の薙ぎ払い', '伏せてやりすごす', 'crawl'] },
-    giant: { breath: ['凍てつく息', '物陰に伏せる', 'crawl'], claw: ['氷の投げ槍', '左右に駆けてかわす', 'step'], dive: ['氷柱の踏みつけ', '踏みつけから飛びのく', 'dodge'], tail: ['棍棒の薙ぎ払い', '懐へ踏みこんで斬る', 'cut'] },
+    spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['背後に降りる子蜘蛛', '振り向いて斬る', 'turnCut'] },
+    goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['背後から忍び寄る斥候', '振り向いて斬る', 'turnCut'] },
+    kraken: { breath: ['墨の噴射', '物陰に伏せる', 'crawl'], claw: ['触手の薙ぎ', '跳んでかわす', 'jump'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['背後の水から伸びる触手', '振り向いて斬る', 'turnCut'] },
+    golem: { breath: ['背後の床から伸びる石の手', '振り向いて受ける', 'turn'], claw: ['岩の拳', '拳から飛びのく', 'dodge'], dive: ['地割れ', '地割れを跳び越える', 'jump'], tail: ['石腕の薙ぎ払い', '伏せてやりすごす', 'crawl'] },
+    giant: { breath: ['凍てつく息', '物陰に伏せる', 'crawl'], claw: ['氷の投げ槍', '左右に駆けてかわす', 'step'], dive: ['氷柱の踏みつけ', '踏みつけから飛びのく', 'dodge'], tail: ['背後の吹きだまりから跳び出す雪狼', '振り向いて斬る', 'turnCut'] },
 };
 export const SPELL_NAME = { dragon: '呪文', vampire: '呪いの紋', spider: '毒の大技', goblin: '大号令', kraken: '大渦', golem: '刻印の起動', giant: '雪崩' };
 // 対応の種類 → 見本帳のどの項目の案を使うか

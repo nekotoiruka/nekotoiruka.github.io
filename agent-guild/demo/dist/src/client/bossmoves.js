@@ -13,9 +13,9 @@ const WEAKNESS = { vampire: '光', giant: '炎' };
 export const bossWeakness = (kind) => WEAKNESS[kindOf(kind)];
 const NAMES = {
     dragon: {
-        atk: { claw: tl('ひっかき'), breath: tl('火炎ブレス'), tail: tl('尾のなぎはらい'), meteor: tl('隕石落とし'), nova: tl('全体爆発') },
+        atk: { claw: tl('ひっかき'), breath: tl('火炎ブレス'), tail: tl('子竜の奇襲'), meteor: tl('隕石落とし'), nova: tl('全体爆発') },
         scene: { dive: tl('急降下'), spell: tl('呪文'), ougi: tl('竜の悪あがき'), rush: tl('突進'), ally: tl('竜の一撃') },
-        head: {},
+        head: { tail: tl('背後の羽音') },
     },
     vampire: {
         atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧の蝙蝠'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
@@ -23,29 +23,29 @@ const NAMES = {
         head: { breath: tl('蝙蝠の群れ'), claw: tl('伸びる爪'), dive: tl('蝙蝠の急降下'), tail: tl('背後の霧'), rush: tl('血の秘術') },
     },
     spider: {
-        atk: { claw: tl('毒牙'), breath: tl('糸の網'), tail: tl('脚の薙ぎ払い'), meteor: tl('毒の雨'), nova: tl('毒霧') },
+        atk: { claw: tl('毒牙'), breath: tl('糸の網'), tail: tl('子蜘蛛の奇襲'), meteor: tl('毒の雨'), nova: tl('毒霧') },
         scene: { dive: tl('糸を伝う奇襲'), spell: tl('毒の大技'), ougi: tl('大蜘蛛の悪あがき'), rush: tl('飛びかかり'), ally: tl('大蜘蛛の一撃') },
-        head: { breath: tl('糸の予兆'), claw: tl('毒牙'), dive: tl('頭上の気配'), tail: tl('脚の薙ぎ払い'), rush: tl('飛びかかりの予兆') },
+        head: { breath: tl('糸の予兆'), claw: tl('毒牙'), dive: tl('頭上の気配'), tail: tl('背後の糸'), rush: tl('飛びかかりの予兆') },
     },
     goblin: {
-        atk: { claw: tl('落とし穴'), breath: tl('矢の雨'), tail: tl('槍の突撃'), meteor: tl('投石'), nova: tl('大号令') },
+        atk: { claw: tl('落とし穴'), breath: tl('矢の雨'), tail: tl('斥候の奇襲'), meteor: tl('投石'), nova: tl('大号令') },
         scene: { dive: tl('投石'), spell: tl('大号令'), ougi: tl('頭目の悪あがき'), rush: tl('全軍突撃'), ally: tl('頭目の一撃') },
-        head: { breath: tl('号令の予兆'), claw: tl('落とし穴'), dive: tl('投石の予兆'), tail: tl('突撃の予兆'), rush: tl('全軍突撃の予兆') },
+        head: { breath: tl('号令の予兆'), claw: tl('落とし穴'), dive: tl('投石の予兆'), tail: tl('背後の足音'), rush: tl('全軍突撃の予兆') },
     },
     kraken: {
-        atk: { claw: tl('触手の薙ぎ'), breath: tl('墨の噴射'), tail: tl('触手の巻き取り'), meteor: tl('海からの突き上げ'), nova: tl('大渦') },
+        atk: { claw: tl('触手の薙ぎ'), breath: tl('墨の噴射'), tail: tl('背後の触手'), meteor: tl('海からの突き上げ'), nova: tl('大渦') },
         scene: { dive: tl('海からの突き上げ'), spell: tl('大渦'), ougi: tl('海の主の悪あがき'), rush: tl('触手の突き'), ally: tl('海の主の一撃') },
-        head: { breath: tl('墨の予兆'), claw: tl('触手の薙ぎ'), dive: tl('足もとの泡'), tail: tl('触手の渦') },
+        head: { breath: tl('墨の予兆'), claw: tl('触手の薙ぎ'), dive: tl('足もとの泡'), tail: tl('背後の波') },
     },
     golem: {
-        atk: { claw: tl('岩の拳'), breath: tl('石礫の嵐'), tail: tl('石腕の薙ぎ払い'), meteor: tl('落石'), nova: tl('刻印の光線') },
+        atk: { claw: tl('岩の拳'), breath: tl('床から伸びる石の手'), tail: tl('石腕の薙ぎ払い'), meteor: tl('落石'), nova: tl('刻印の光線') },
         scene: { dive: tl('地割れ'), spell: tl('刻印の起動'), ougi: tl('守護巨人の悪あがき'), rush: tl('岩の突進'), ally: tl('守護巨人の一撃') },
-        head: { breath: tl('石礫の予兆'), claw: tl('岩の拳'), dive: tl('地響き'), tail: tl('石腕の薙ぎ払い') },
+        head: { breath: tl('背後の床の揺れ'), claw: tl('岩の拳'), dive: tl('地響き'), tail: tl('石腕の薙ぎ払い') },
     },
     giant: {
-        atk: { claw: tl('氷の投げ槍'), breath: tl('凍てつく息'), tail: tl('棍棒の薙ぎ払い'), meteor: tl('つらら落とし'), nova: tl('雪崩') },
+        atk: { claw: tl('氷の投げ槍'), breath: tl('凍てつく息'), tail: tl('雪狼の奇襲'), meteor: tl('つらら落とし'), nova: tl('雪崩') },
         scene: { dive: tl('氷柱の踏みつけ'), spell: tl('雪崩'), ougi: tl('氷巨人の悪あがき'), rush: tl('氷の突進'), ally: tl('氷巨人の一撃') },
-        head: { breath: tl('凍てつく息の予兆'), claw: tl('氷の投げ槍'), dive: tl('地響き'), tail: tl('棍棒の薙ぎ払い') },
+        head: { breath: tl('凍てつく息の予兆'), claw: tl('氷の投げ槍'), dive: tl('地響き'), tail: tl('背後の冷気') },
     },
 };
 // どのボスでも同じ名前の場面
@@ -66,23 +66,31 @@ export function sceneHead(kind, scene) {
 }
 // 対応技には、画面に出す名前をつけない（シーズンの正解の言葉と重ならないように。名前は、正しく動けた人の答えから出る）
 const C = (evade, fx, sfx, color) => ({ evade, fx, sfx, color });
+// 背後から来る攻撃（2026-11-16）: どのボスにも、冒険者の背後（右）から小さな相手が襲う場面が一つある。正しく動けた人は振り向いて迎え撃つ。
+//   どの場面にするかは、その場面の課題の中身（正しく動けた人の身のこなし）と、背後から来る攻撃の見た目が食い違わないように選ぶ:
+//   斬る・はらう身のこなしの場面は「振り向いて斬る」（turnCut）、受ける身のこなしの場面は「振り向いて受ける」（turn）。
+//   石の巨人は、迎え撃つ場面がないので、受ける場面（ブレス）を、背後の床から伸びる石の手にした
+export const BACK_SCENE = { dragon: 'tail', vampire: 'tail', spider: 'tail', goblin: 'tail', kraken: 'tail', golem: 'breath', giant: 'tail' };
+/** その場面が、背後から来る攻撃の場面か */
+export const isBackScene = (kind, scene) => !!scene && BACK_SCENE[kindOf(kind)] === scene;
 export const COUNTERS = {
-    // 竜: 炎は鏡で受け、爪は影を残してすり抜け、急降下は落ちてくる場所から飛びのき、尾は跳んでかわす。
-    //   急降下は、伯爵・大蜘蛛と同じく狙う人の上へ落ちる体当たりなので、伏せてもつぶされる。落ちる場所から抜ける動きにした（2026-11-16、#120）
-    dragon: { breath: C('block', 'mirror', 'guard', '#bfe8ff'), claw: C('step', 'shadow', 'whoosh', '#e2c2ff'), dive: C('dodge', 'roll', 'whoosh', '#c8d0ff'), tail: C('jump', 'trail', 'jump', '#ffffff') },
+    // 竜: 炎は鏡で受け、爪は影を残してすり抜け、急降下は落ちてくる場所から飛びのき、背後から来る子竜（ワイバーン）は振り向いて斬る。
+    //   急降下は、伯爵・大蜘蛛と同じく狙う人の上へ落ちる体当たりなので、伏せてもつぶされる。落ちる場所から抜ける動きにした（2026-11-16、#120）。
+    //   竜は属性そのものが課題（身のこなしは課題の中身によらない）ので、尾の場面を背後の子竜にした（2026-11-16）
+    dragon: { breath: C('block', 'mirror', 'guard', '#bfe8ff'), claw: C('step', 'shadow', 'whoosh', '#e2c2ff'), dive: C('dodge', 'roll', 'whoosh', '#c8d0ff'), tail: C('turnCut', 'backGuard', 'slash', '#e2c2ff') },
     // 伯爵: 蝙蝠の群れは床に伏せてやり過ごし（床伏せ）、爪は銀の盾で受け（銀盾受け）、急降下は柱の陰へ駆けこみ（柱陰走り）、背後の霧は振り向いて斬る（背面斬り）。
     //   動きはシーズンの正解の中身に合わせる（2026-10-24。以前は聖なる光・はじく・受け止める で、正解の名前と絵が食い違っていた）
     vampire: { breath: C('crawl', 'dust', 'whoosh', '#e0c8f0'), claw: C('block', 'parry', 'guard', '#ffd0da'), dive: C('dodge', 'roll', 'whoosh', '#e0c8f0'), tail: C('turnCut', 'backGuard', 'slash', '#ffd0e0') },
-    // 大蜘蛛: 糸は横へ転がってかわし、牙は盾ではじき、頭上からの落下は飛びのき、脚の薙ぎ払いは低く斬りはらう（2026-10-24、正解の中身に合わせて付け替え）
-    spider: { breath: C('dodge', 'roll', 'whoosh', '#f4f6ff'), claw: C('slash', 'parry', 'guard', '#9af0b0'), dive: C('dodge', 'roll', 'whoosh', '#e2c2ff'), tail: C('slash', 'cut', 'slash', '#d8ffe0') },
-    // 頭目: 矢の雨は盾をかかげて受け、落とし穴は回りこんで避け、投石は飛びのき、群れの突進は穂先をはらう（落とし穴を付け替え）
-    goblin: { breath: C('block', 'shieldWall', 'guard', '#fff0c0'), claw: C('step', 'shadow', 'whoosh', '#ffd166'), dive: C('dodge', 'roll', 'whoosh', '#e8d5a8'), tail: C('slash', 'parry', 'slash', '#ffd166') },
-    // 海の主: 墨は物陰に伏せ、触手の薙ぎは跳んでかわし、足もとからの突き上げは跳んで離れ、巻き取りは触手を斬る（墨と薙ぎを付け替え）
-    kraken: { breath: C('crawl', 'dust', 'whoosh', '#7bed9f'), claw: C('jump', 'leap', 'jump', '#bfe8ff'), dive: C('jump', 'leap', 'jump', '#d8f2ff'), tail: C('slash', 'cut', 'slash', '#ffb0d0') },
-    // 守護巨人: 石礫は盾で受け、拳は飛びのき、地割れは跳び越え、石の腕は伏せてやりすごす（石礫を付け替え）
-    golem: { breath: C('block', 'parry', 'guard', '#d8ccb0'), claw: C('dodge', 'roll', 'whoosh', '#c8b48a'), dive: C('jump', 'leap', 'jump', '#7af0e0'), tail: C('crawl', 'dust', 'whoosh', '#c8b48a') },
-    // 氷巨人: 凍てつく息は物陰に伏せ、氷の槍は左右に駆けてかわし、踏みつけは飛びのき、棍棒は懐へ踏みこんで斬る（息・槍・棍棒を付け替え）
-    giant: { breath: C('crawl', 'dust', 'whoosh', '#ffb070'), claw: C('step', 'shadow', 'whoosh', '#e6f6ff'), dive: C('dodge', 'roll', 'whoosh', '#e6f6ff'), tail: C('slash', 'cut', 'slash', '#bfe8ff') },
+    // 大蜘蛛: 糸は横へ転がってかわし、牙は盾ではじき、頭上からの落下は飛びのき、背後へ糸で降りてくる子蜘蛛は振り向いて斬る（2026-11-16）
+    spider: { breath: C('dodge', 'roll', 'whoosh', '#f4f6ff'), claw: C('slash', 'parry', 'guard', '#9af0b0'), dive: C('dodge', 'roll', 'whoosh', '#e2c2ff'), tail: C('turnCut', 'backGuard', 'slash', '#d8ffe0') },
+    // 頭目: 矢の雨は盾をかかげて受け、落とし穴は回りこんで避け、投石は飛びのき、背後から忍び寄る斥候は振り向いて斬る（2026-11-16）
+    goblin: { breath: C('block', 'shieldWall', 'guard', '#fff0c0'), claw: C('step', 'shadow', 'whoosh', '#ffd166'), dive: C('dodge', 'roll', 'whoosh', '#e8d5a8'), tail: C('turnCut', 'backGuard', 'slash', '#ffd166') },
+    // 海の主: 墨は物陰に伏せ、触手の薙ぎは跳んでかわし、足もとからの突き上げは跳んで離れ、背後の水から伸びる細い触手は振り向いて斬る（2026-11-16）
+    kraken: { breath: C('crawl', 'dust', 'whoosh', '#7bed9f'), claw: C('jump', 'leap', 'jump', '#bfe8ff'), dive: C('jump', 'leap', 'jump', '#d8f2ff'), tail: C('turnCut', 'backGuard', 'slash', '#ffb0d0') },
+    // 守護巨人: 背後の床から伸びる石の手は振り向いて受け（2026-11-16）、拳は飛びのき、地割れは跳び越え、石の腕は伏せてやりすごす
+    golem: { breath: C('turn', 'backGuard', 'guard', '#d8ccb0'), claw: C('dodge', 'roll', 'whoosh', '#c8b48a'), dive: C('jump', 'leap', 'jump', '#7af0e0'), tail: C('crawl', 'dust', 'whoosh', '#c8b48a') },
+    // 氷巨人: 凍てつく息は物陰に伏せ、氷の槍は左右に駆けてかわし、踏みつけは飛びのき、背後の雪の吹きだまりから跳び出す雪狼は振り向いて斬る（2026-11-16）
+    giant: { breath: C('crawl', 'dust', 'whoosh', '#ffb070'), claw: C('step', 'shadow', 'whoosh', '#e6f6ff'), dive: C('dodge', 'roll', 'whoosh', '#e6f6ff'), tail: C('turnCut', 'backGuard', 'slash', '#bfe8ff') },
 };
 /** 正しく動けた人の身のこなしを、どの基本の場面の対応技にするか。
  *  課題の respond（ひっかけの回）→ 基本の4場面ならその場面 → 霧・記憶・仲間の声はボスの攻撃（attack）から。ほかの場面は undefined */
