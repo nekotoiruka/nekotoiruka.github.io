@@ -5,13 +5,13 @@ import { Rng } from '../shared/rng.js';
 import { drawHero, weaponSprite } from './hero.js';
 import { PIXEL_FONT, isRtl, tl } from '../shared/i18n.js';
 import { flashScale } from './motion.js';
-import { aimOf, bossFxFor, diveSpot, fallingBoss, fallingShadow, ripMarks, ripX, RIP, STREAM_AT, streamAim } from './bossfx.js';
+import { sceneFxFor } from './bossfx.js';
 import { counterFx } from './counterfx.js';
-import { billowStream, FIRE5, flameBall, fract, hash, puffs, slashMark, sparkle } from './fxkit.js';
-import { BW0, BH0, STYLE, spriteToWorld } from './bossstyle.js';
-import { bossMotion, makeAt } from './bossmotion.js';
+import { spriteToWorld } from './bossstyle.js';
+import { bossOf } from './bossapi.js';
+import './bosses/index.js';
 import { ultMoveDef } from './ultmoves.js';
-import { drawChainFinale } from './chainfx.js';
+import { chainFinaleDark, drawChainFinale, drawChainFinaleBack } from './chainfx.js';
 import { drawSword } from './pixart.js';
 import { dustCloud, flash, giantSprite, glowArc, glowLine, impactBurst, rocks, skyDisc, slashArc, starSpark, SWORD_PAL, summonCircle, swordAt, text, ULT_T, wedge } from './ultkit.js';
 export const ULT_SCENES = ['ougi', 'rush', 'summon', 'parry', 'seal', 'awaken'];
@@ -52,20 +52,11 @@ const bump = (p, a, b) => (p < a || p > b ? 0 : Math.sin(((p - a) / (b - a)) * M
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * t;
 const R = Math.round;
-// 口の位置。竜は今までどおり。ほかのボスは、絵ごとの口（ゴーレムは目）の位置
-const kindOf = (a) => (a.theme?.kind ?? 'dragon');
-const mouthOf = (a) => (kindOf(a) === 'dragon' || !STYLE[kindOf(a)] ? { x: a.foot.x + 46, y: a.foot.y - 50 } : spriteToWorld(a.foot, STYLE[kindOf(a)].mouth));
-// 呪文・大技のときの、ボスの魔力の色（竜は紅。ほかのボスは、そのボスらしい色）
-const SPELL_COL = {
-    dragon: { main: '#ff4fa0', light: '#ff8ab8', deep: 'rgba(160,0,70,0.6)', pale: '#ffd0e4', warn: '#ff6b8a', ring: '#ff2f6e' },
-    vampire: { main: '#e8204a', light: '#ff7a9a', deep: 'rgba(130,0,40,0.6)', pale: '#ffd0da', warn: '#ff6b8a', ring: '#e8204a' },
-    spider: { main: '#4fd070', light: '#9af0b0', deep: 'rgba(10,100,40,0.6)', pale: '#d8ffe0', warn: '#9af0b0', ring: '#4fd070' },
-    goblin: { main: '#ffb030', light: '#ffd166', deep: 'rgba(150,90,0,0.6)', pale: '#fff0c0', warn: '#ffd166', ring: '#ffb030' },
-    kraken: { main: '#3f9fe8', light: '#8fd0ff', deep: 'rgba(10,60,150,0.6)', pale: '#d8f0ff', warn: '#8fd0ff', ring: '#3f9fe8' },
-    golem: { main: '#30d0c0', light: '#7af0e0', deep: 'rgba(0,100,90,0.6)', pale: '#d0fff8', warn: '#7af0e0', ring: '#30d0c0' },
-    giant: { main: '#8fd3ff', light: '#c8ecff', deep: 'rgba(40,100,170,0.6)', pale: '#f0faff', warn: '#c8ecff', ring: '#8fd3ff' },
-};
-const spellCol = (a) => SPELL_COL[kindOf(a)] ?? SPELL_COL.dragon;
+// 口の位置。ボスの fx.mouth があればそれ、なければ絵ごとの口（ゴーレムは目）の位置
+const kindOf = (a) => bossOf(a.theme?.kind).kind; // 種類なし・知らない種類は、既定のボス
+const mouthOf = (a) => { const b = bossOf(kindOf(a)); return b.fx?.mouth?.(a.foot) ?? spriteToWorld(a.foot, b.style.mouth); };
+// 呪文・大技のときの、ボスの魔力の色（そのボスらしい色）。BossModule の spellColor
+const spellCol = (a) => bossOf(kindOf(a)).spellColor ?? bossOf().spellColor;
 const alive = (a) => a.fighters.filter((v) => v.alive);
 function vignette(a, color, k) {
     if (k <= 0)
@@ -93,18 +84,13 @@ export function sceneBack(a) {
             chainBack(a, a.chain);
         return;
     }
-    const ov = a.scene === 'breath' || a.scene === 'tail' || a.scene === 'dive' || a.scene === 'claw' ? bossFxFor(a.theme?.kind, a.scene) : null;
+    const ov = a.scene === 'breath' || a.scene === 'tail' || a.scene === 'dive' || a.scene === 'claw' ? sceneFxFor(a.theme?.kind, a.scene) : null;
     if (ov?.back) {
         ov.back(a);
         return;
-    } // ボスごとの奥の演出（足もとの色・影など）
+    } // ボスごとの奥の演出（足もとの色・急降下の床の影など。BossModule の fx.scenes）
     switch (a.scene) {
-        // 竜の炎は、四角く染めない（炎のかたまりの奔流だけで見せる）
-        case 'dive':
-            if (kindOf(a) === 'dragon')
-                fallingShadow(a);
-            break; // 床に、降ってくる竜の影（冒険者の足もと＝奥に描く）。投石・突き上げ・地割れ・踏みつけのボスは降ってこない
-        case 'spell': { // 竜の足元の真紅の魔法陣（反撃で砕ける）
+        case 'spell': { // ボスの足元の魔法陣（ボスの魔力の色。反撃で砕ける）
             const k = win(p, 0.04, 0.2), broke = win(p, 0.46, 0.56), cancel = alive(a).some((v) => v.ok);
             if (k > 0 && (!cancel || broke < 1) && p < 0.7) {
                 ctx.save();
@@ -154,7 +140,7 @@ export function sceneBack(a) {
             }
             break;
         }
-        case 'ougi': { // 竜の下に金の光柱
+        case 'ougi': { // ボスの下に金の光柱
             const k = bump(p, 0.24, 0.9);
             if (k > 0) {
                 ctx.save();
@@ -188,35 +174,14 @@ export function sceneBack(a) {
 // ============ 手前（キャラより前） ============
 export function sceneFront(a) {
     switch (a.scene) {
-        // ボス側の演出は、ボスの種類ごと（bossfx.ts）。あるときは、竜前提の演出（炎・竜の尾・竜の影・爪痕）は描かない。冒険者側の対応技も、ボスごと（counterfx.ts）
-        case 'breath': {
-            const o = bossFxFor(a.theme?.kind, 'breath');
-            breathFx(a, !o);
-            o?.front?.(a);
+        // ボス側の演出は、ボスの種類ごと（BossModule の fx.scenes。bossfx.ts の sceneFxFor）。冒険者側の対応技も、ボスごと（counterfx.ts）
+        case 'breath':
+        case 'tail':
+        case 'dive':
+        case 'claw':
+            sceneFxFor(a.theme?.kind, a.scene)?.front?.(a);
             counterFx(a);
             break;
-        }
-        case 'tail': {
-            const o = bossFxFor(a.theme?.kind, 'tail');
-            tailFx(a, !o);
-            o?.front?.(a);
-            counterFx(a);
-            break;
-        }
-        case 'dive': {
-            const o = bossFxFor(a.theme?.kind, 'dive');
-            diveFx(a, !o);
-            o?.front?.(a);
-            counterFx(a);
-            break;
-        }
-        case 'claw': {
-            const o = bossFxFor(a.theme?.kind, 'claw');
-            clawFx(a, !o);
-            o?.front?.(a);
-            counterFx(a);
-            break;
-        }
         case 'opening':
             openingFx(a);
             break;
@@ -264,331 +229,7 @@ export function sceneFront(a) {
     if (hn)
         text(a.ctx, tl(`さっきの幻術の声が、まだ頭に響いている…（{0}人）`, hn), a.W * 0.6, 204, 7, '#d0a0ff', bump(a.phase, 0.04, 0.34), '#2a0a4a');
 }
-// ---- ブレス: 喉に集まる炎 → 画面を焼く炎の奔流 → 鏡で受け流す ----
-function breathFx(a, boss = true) {
-    const { ctx, phase: p } = a;
-    if (!boss)
-        return; // 竜以外は、ボスごとの演出（bossfx.ts）が描く
-    // 口の位置は、息を吸ってのけぞる・吐いて反動する体の動き（bossmotion.ts）に合わせる
-    const at = makeAt(a.foot, bossMotion('dragon', 'breath', 'breath', p), BW0, BH0);
-    const m = at(STYLE.dragon.mouth[0], STYLE.dragon.mouth[1]);
-    // 予兆: 火の粉が、尾を引きながら口に吸い込まれ、口の奥に炎の玉がふくらむ
-    const gather = win(p, 0.06, 0.4);
-    if (gather > 0 && p < 0.42) {
-        ctx.save();
-        for (let i = 0; i < 22; i++) {
-            const ang = hash(i, 1) * TAU, d0 = 30 + hash(i, 2) * 50, t = (gather * (0.6 + hash(i, 3) * 0.8) + hash(i, 4)) % 1, d = d0 * (1 - t);
-            const x = m.x + Math.cos(ang) * d, y = m.y + Math.sin(ang) * d * 0.7, tx = Math.cos(ang) * 4, ty = Math.sin(ang) * 3;
-            ctx.globalAlpha = Math.min(1, t * 1.6);
-            ctx.fillStyle = '#c0281a';
-            ctx.fillRect(R(x + tx), R(y + ty), 1, 1); // 尾
-            ctx.fillStyle = i % 3 ? '#feae34' : '#fff2b0';
-            ctx.fillRect(R(x), R(y), 1, 1); // 火の粉
-        }
-        ctx.restore();
-        flameBall(ctx, m.x + 1, m.y, 1.5 + gather * 5 + (a.frame % 4 < 2 ? 0.6 : 0), Math.min(1, gather * 3));
-    }
-    // 炎の奔流: 口から、炎のかたまりが渦を巻いて流れ出る（縁・赤・橙・黄・白の芯の段）。
-    //   0.38 吐き始め → 0.43 討伐隊に届く（攻撃の山場）→ 0.58 口から離れ、0.66 に先まで燃えつきる（冒険者を焼く炎と同じ時刻に消える）
-    const head = ease(win(p, 0.38, 0.43)), cut = win(p, 0.58, 0.66); // 長めに吐きつづける（0.66 で燃えつきる）
-    if (head > 0 && cut < 1) {
-        const reach = a.W + 30 - m.x;
-        ctx.save();
-        const A = aimOf(a), sa = streamAim(m, a.W, A.x + STREAM_AT.dragon.dx, A.y + STREAM_AT.dragon.dy, STREAM_AT.dragon.drop, STREAM_AT.dragon.spread); // 狙う人の受け止める所を通る
-        billowStream(ctx, m.x, m.y, reach, head, cut, p, FIRE5, { drop: sa.drop, spread: sa.spread });
-        for (let i = 0; i < 26; i++) { // 火の粉: 奔流のふちから舞い上がる
-            const u = fract(hash(i, 8) + p * 2.6);
-            if (u > head || u < cut)
-                continue;
-            const x = m.x + reach * u + (hash(i, 9) - 0.5) * 20, y = m.y + sa.drop * u - 70 * u * hash(i, 10) - fract(p * 6 + hash(i, 11)) * 14;
-            ctx.fillStyle = i % 2 ? '#feae34' : '#fff2b0';
-            ctx.fillRect(R(x), R(y), 1, 1);
-        }
-        // 燃えつきたあとの煙
-        if (cut > 0)
-            puffs(ctx, m.x + reach * cut * 0.6, m.y + sa.drop * 0.7 * cut, { n: 10, t: p * 2, dx: 40, dy: -26, spread: 90, r0: 3, r1: 9, color: '#4a3a3a', alpha: 0.55 * bump(cut, 0, 1), seed: 9 });
-        ctx.restore();
-        flash(a, bump(p, 0.41, 0.46), '#ffb070', 0.35);
-    }
-}
-// ---- 尾: 画面を横切る巨大な弧 → 高く跳んでかわす ----
-function tailFx(a, boss = true) {
-    const { ctx, phase: p } = a;
-    // 予兆: 風切りの線が竜の背後から
-    const pre = win(p, 0.08, 0.36) * (p < 0.4 ? 1 : 0);
-    if (boss && pre > 0) {
-        ctx.save();
-        ctx.strokeStyle = '#e8d5a8';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < 6; i++) {
-            const t = (p * 5 + i / 6) % 1;
-            ctx.globalAlpha = pre * (1 - t) * 0.8;
-            ctx.beginPath();
-            ctx.ellipse(a.foot.x + 10, a.foot.y - 2, 30 + t * 40, (30 + t * 40) * TAIL_DEPTH, 0, -Math.PI * 0.95, -Math.PI * 0.35);
-            ctx.stroke(); // 床の上を回る風（横に薙ぐ予兆）
-        }
-        ctx.restore();
-    }
-    const k = win(p, 0.34, 0.6);
-    if (boss && k > 0 && k < 1) {
-        dragonTail(a);
-        flash(a, bump(p, 0.41, 0.45), '#ffffff', 0.25);
-    }
-}
-// 竜の尾: 背を向けた竜の尾が、床すれすれを、奥（背後）から手前の討伐隊へ、横ざまに薙ぎはらう（叩きつけではなく、水平に振りまわす）。
-// 床の上の向き θ（-π/2 が奥、0 が右）を、付け根から先へ少しずつ遅らせて回す（先ほど遅れてしなる・鞭のように）。
-// 節ごとの鱗（濃い紫の縁・明るい背・金の腹）と背の骨のとげ、先は骨の鋤。残像・風の弧・砂ぼこり
-const TAIL_COL = { line: '#1e1548', dark: '#3a2a80', body: '#5f3ea8', hi: '#8d68d4', belly: '#bf9a52', bellyHi: '#e6c886', bone: '#d6c6a2', boneHi: '#f6eedc', boneLo: '#9e8a6c' };
-const TAIL_N = 16, TAIL_L = 14; // 先が後衛まで届く
-const TAIL_FROM = -1.8, TAIL_TO = 0.55; // 床の上の向き: 奥（やや左）→ 右の手前
-const TAIL_DEPTH = 0.4; // 奥行きのつぶれ
-export function tailPts(a, s, len) {
-    // 付け根: 背を向けた竜の、絵の尾の先（絵の (10,54)。振り向いて左右反転しているので、体の右＝背後の側）。
-    //   体の動き（bossmotion.ts の tail）を含めて計算するので、尾は体の後ろから続いて伸びる（胴の手前から生えて見えないように）
-    const root = makeAt(a.foot, bossMotion('dragon', 'tail', 'tail', a.phase), BW0, BH0)(10, 54);
-    const floor = a.foot.y + 2;
-    // 狙う人（bossfx.ts の aimOf）の足もとの向きまで振り抜く（手前の下の段の人にも、尾が届くように）
-    const to = a.aim ? Math.max(TAIL_TO, Math.atan2((a.aim.y - 2 - floor) / TAIL_DEPTH, a.aim.x - root.x) + 0.12) : TAIL_TO;
-    const far = a.aim ? Math.max(1, Math.hypot(a.aim.x - root.x, (a.aim.y - 2 - floor) / TAIL_DEPTH) / (TAIL_N * TAIL_L * 0.92)) : 1; // 遠い人にも届く長さ
-    const pts = [[root.x, root.y, 10]];
-    let gx = 0, gz = 0;
-    for (let i = 0; i < TAIL_N; i++) {
-        const u = (i + 1) / TAIL_N;
-        const si = ease(clamp01(s * 1.35 - i * 0.022)); // 先ほど遅れる
-        const th = lerp(TAIL_FROM, to, si) + 0.05 * Math.sin(i * 0.8 + s * 7) * (1 - si);
-        gx += Math.cos(th) * TAIL_L * len * far;
-        gz += Math.sin(th) * TAIL_L * len * far;
-        const lift = (floor - root.y) * Math.pow(1 - u, 2); // 付け根は高く、先は床をこする
-        pts.push([root.x + gx, floor + gz * TAIL_DEPTH - lift, Math.max(2.2, 10 - i * 0.52)]);
-    }
-    return pts;
-}
-// 太さの変わる線（節ごとに、オフセット off・太さ k 倍で）
-function tailStroke(ctx, pts, col, k, add, off = 0) {
-    ctx.strokeStyle = col;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (let i = 0; i < pts.length - 1; i++) {
-        const [x0, y0, r0] = pts[i], [x1, y1, r1] = pts[i + 1];
-        const l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = (y1 - y0) / l, ny = -(x1 - x0) / l; // 上向きの法線
-        const r = (r0 + r1) / 2;
-        ctx.lineWidth = Math.max(1, r * 2 * k + add);
-        ctx.beginPath();
-        ctx.moveTo(x0 + nx * off * r0, y0 + ny * off * r0);
-        ctx.lineTo(x1 + nx * off * r1, y1 + ny * off * r1);
-        ctx.stroke();
-    }
-}
-/** 竜の尾の、その時刻の形（振り抜きの進み s・長さ len・節の点）。描く（dragonTail）と、届く時刻を調べる（arrival.ts）の両方で使う */
-export function dragonTailAt(a) {
-    const p = a.phase;
-    const s = win(p, 0.34, 0.47), back = win(p, 0.5, 0.6), len = (0.55 + 0.45 * ease(win(p, 0.34, 0.38))) * (1 - 0.7 * ease(back));
-    return { s, back, len, pts: tailPts(a, s, len) };
-}
-function dragonTail(a0) {
-    const a = { ...a0, aim: aimOf(a0) };
-    const { ctx, phase: p } = a;
-    const { s, back, len } = dragonTailAt(a);
-    const alpha = 1 - win(p, 0.54, 0.6);
-    if (alpha <= 0)
-        return;
-    const pts = tailPts(a, s, len);
-    ctx.save();
-    // 先の通り道（風を切る白い帯）
-    if (s > 0.02 && s < 1) {
-        ctx.lineCap = 'round';
-        let prev = null;
-        for (let j = 10; j >= 0; j--) {
-            const sj = s - j * 0.025;
-            if (sj <= 0)
-                continue;
-            const g = tailPts(a, sj, len), t = g[g.length - 1];
-            if (prev) {
-                ctx.globalAlpha = alpha * 0.5 * (1 - j / 11);
-                ctx.strokeStyle = '#f6eedc';
-                ctx.lineWidth = 1 + 5 * (1 - j / 11);
-                ctx.beginPath();
-                ctx.moveTo(prev[0], prev[1]);
-                ctx.lineTo(t[0], t[1]);
-                ctx.stroke();
-            }
-            prev = t;
-        }
-    }
-    // 残像（少し前の尾）
-    for (const [ds, al] of [[0.14, 0.16], [0.07, 0.28]]) {
-        if (s - ds <= 0 || s >= 1)
-            continue;
-        ctx.globalAlpha = alpha * al;
-        tailStroke(ctx, tailPts(a, s - ds, len), TAIL_COL.hi, 1, 0);
-    }
-    ctx.globalAlpha = alpha;
-    // 背の骨のとげ（尾の上側。先へいくほど小さい）
-    for (let i = 1; i < pts.length - 1; i++) {
-        const [x0, y0, r] = pts[i], [x1, y1] = pts[i + 1];
-        const l = Math.hypot(x1 - x0, y1 - y0) || 1, ux = (x1 - x0) / l, uy = (y1 - y0) / l, nx = uy, ny = -ux;
-        const h = 3 + r * 0.8, bx = x0 + ux * l * 0.4, by = y0 + uy * l * 0.4;
-        ctx.fillStyle = TAIL_COL.line;
-        ctx.beginPath();
-        ctx.moveTo(bx + nx * (r - 2) - ux * 5, by + ny * (r - 2) - uy * 5);
-        ctx.lineTo(bx + nx * (r + h + 1) + ux * 3, by + ny * (r + h + 1) + uy * 3);
-        ctx.lineTo(bx + nx * (r - 2) + ux * 4, by + ny * (r - 2) + uy * 4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = TAIL_COL.bone;
-        ctx.beginPath();
-        ctx.moveTo(bx + nx * (r - 2) - ux * 4, by + ny * (r - 2) - uy * 4);
-        ctx.lineTo(bx + nx * (r + h) + ux * 2.5, by + ny * (r + h) + uy * 2.5);
-        ctx.lineTo(bx + nx * (r - 2) + ux * 3, by + ny * (r - 2) + uy * 3);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = TAIL_COL.boneHi;
-        ctx.beginPath();
-        ctx.moveTo(bx + nx * (r - 1) - ux * 3, by + ny * (r - 1) - uy * 3);
-        ctx.lineTo(bx + nx * (r + h - 1) + ux * 2, by + ny * (r + h - 1) + uy * 2);
-        ctx.lineTo(bx + nx * (r - 1) - ux * 1, by + ny * (r - 1) - uy * 1);
-        ctx.closePath();
-        ctx.fill();
-    }
-    // 体: 縁 → 濃い紫 → 背の紫 → 照り → 金の腹
-    tailStroke(ctx, pts, TAIL_COL.line, 1, 2);
-    tailStroke(ctx, pts, TAIL_COL.dark, 1, 0);
-    tailStroke(ctx, pts, TAIL_COL.body, 0.62, 0, 0.3);
-    tailStroke(ctx, pts, TAIL_COL.hi, 0.18, 0, 0.62);
-    tailStroke(ctx, pts, TAIL_COL.belly, 0.3, 0, -0.55);
-    tailStroke(ctx, pts, TAIL_COL.bellyHi, 0.08, 0, -0.45);
-    // 節の境目（鱗の段）
-    ctx.strokeStyle = TAIL_COL.line;
-    ctx.lineWidth = 1;
-    for (let i = 1; i < pts.length - 1; i++) {
-        const [x0, y0, r] = pts[i], [x1, y1] = pts[i + 1];
-        const l = Math.hypot(x1 - x0, y1 - y0) || 1, ux = (x1 - x0) / l, uy = (y1 - y0) / l, nx = uy, ny = -ux;
-        ctx.beginPath();
-        ctx.moveTo(x0 + nx * r * 0.9, y0 + ny * r * 0.9);
-        ctx.quadraticCurveTo(x0 + ux * r * 0.5, y0 + uy * r * 0.5, x0 - nx * r * 0.2, y0 - ny * r * 0.2);
-        ctx.stroke();
-    }
-    // 先の骨の鋤（とがった葉の形）
-    {
-        const [x0, y0] = pts[pts.length - 2], [x1, y1] = pts[pts.length - 1];
-        const ang = Math.atan2(y1 - y0, x1 - x0);
-        ctx.save();
-        ctx.translate(x1, y1);
-        ctx.rotate(ang);
-        const leaf = (k, dx) => { ctx.beginPath(); ctx.moveTo(-2 + dx, 0); ctx.quadraticCurveTo(4, -9 * k, 16 * k + dx, 0); ctx.quadraticCurveTo(4, 9 * k, -2 + dx, 0); ctx.closePath(); ctx.fill(); };
-        ctx.fillStyle = TAIL_COL.line;
-        leaf(1.1, 0);
-        ctx.fillStyle = TAIL_COL.boneLo;
-        leaf(0.95, 0.5);
-        ctx.fillStyle = TAIL_COL.bone;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.quadraticCurveTo(4, -8, 15, 0);
-        ctx.lineTo(0, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = TAIL_COL.boneHi;
-        ctx.fillRect(3, -3, 7, 1);
-        ctx.restore();
-    }
-    // 床をこする所の砂ぼこりと、先の風切りの白線
-    const tip = pts[pts.length - 1];
-    if (s > 0.3 && back < 1) {
-        for (let i = 6; i < pts.length; i += 3)
-            puffs(ctx, pts[i][0], pts[i][1] + 2, { n: 3, t: p * 4 + i * 0.1, dx: -14, dy: -12, spread: 10, r0: 2, r1: 5, color: '#c8b48a', alpha: 0.7 * alpha, seed: 300 + i });
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        for (let i = 0; i < 5; i++) {
-            ctx.globalAlpha = alpha * (1 - s * 0.6) * (0.9 - i * 0.15);
-            const x = tip[0] - 6 - i * 10, y = tip[1] - 8 - i * 7; // 先の後ろ（来た方向＝奥）へ流れる風
-            ctx.beginPath();
-            ctx.moveTo(R(x), R(y));
-            ctx.lineTo(R(x - 16), R(y - 8));
-            ctx.stroke();
-        }
-    }
-    ctx.restore();
-}
-// ---- 急降下: 空が暗くなる → 竜の影が落ちる → 衝撃波と岩 ----
-function diveFx(a, boss = true) {
-    const { ctx, phase: p } = a;
-    const dark = win(p, 0.14, 0.4) * (1 - win(p, 0.46, 0.6));
-    if (boss && dark > 0) {
-        ctx.save();
-        const g = ctx.createLinearGradient(0, 0, 0, a.H);
-        g.addColorStop(0, 'rgba(5,4,12,0.85)');
-        g.addColorStop(0.7, 'rgba(5,4,12,0.35)');
-        g.addColorStop(1, 'rgba(5,4,12,0.1)');
-        ctx.globalAlpha = dark;
-        ctx.fillStyle = g;
-        ctx.fillRect(-a.W, -a.H, a.W * 3, a.H * 3);
-        ctx.restore();
-        text(ctx, tl('頭上が暗い…！'), a.W * 0.62, 30, 9, '#c8d0ff', dark * bump(p, 0.16, 0.4) * 1.4);
-    }
-    // 竜が、真上から討伐隊へ突っこんでくる（真上に姿をあらわし、ためて、真下へ突っこむ: 0.27〜0.42。bossfx.ts の fallingBoss）
-    if (boss)
-        fallingBoss(a, 'dragon', '#ffb070');
-    // 着弾: 衝撃波・岩・白い閃光
-    const b = win(p, 0.42, 0.56);
-    if (boss && b > 0 && b < 1) {
-        const at = diveSpot(a, 'dragon'), cy = at.y + 4; // 竜が落ちた所（狙う人の少し手前。bossfx.ts の diveSpot）
-        ctx.save();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 4 * (1 - b);
-        ctx.globalAlpha = 1 - b;
-        ctx.beginPath();
-        ctx.ellipse(at.x, cy, 20 + b * 220, 6 + b * 60, 0, 0, TAU);
-        ctx.stroke();
-        ctx.strokeStyle = '#c8b48a';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(at.x, cy, 10 + b * 160, 3 + b * 44, 0, 0, TAU);
-        ctx.stroke();
-        const rng = new Rng(`${a.seed}:rocks`);
-        for (let i = 0; i < 18; i++) {
-            const ang = rng.range(Math.PI * 1.05, Math.PI * 1.95), sp = rng.range(40, 120);
-            const x = at.x + Math.cos(ang) * sp * b, y = cy + Math.sin(ang) * sp * b + 160 * b * b;
-            ctx.fillStyle = i % 2 ? '#6a5a4a' : '#8a7a62';
-            const s = rng.range(2, 5);
-            ctx.fillRect(R(x), R(y), R(s), R(s));
-        }
-        ctx.restore();
-        flash(a, bump(p, 0.42, 0.46), '#ffffff', 0.55);
-    }
-}
-// ---- 爪: 画面を裂く三本の爪痕 → 横へすり抜けて間合いを外す ----
-function clawFx(a, boss = true) {
-    const { ctx, phase: p } = a;
-    const glint = bump(p, 0.12, 0.36);
-    if (boss && glint > 0) { // 爪のきらめき: 前足の三本の爪の先が、順に光る（口や牙ではなく、動く前足に付ける）
-        const at = makeAt(a.foot, bossMotion('dragon', 'claw', 'claw', p), BW0, BH0);
-        for (let i = 0; i < 3; i++) {
-            const c = at(STYLE.dragon.hand[0] + 4 + i * 2, STYLE.dragon.hand[1] + 2 + i), g = bump(p, 0.12 + i * 0.04, 0.3 + i * 0.03);
-            sparkle(ctx, c.x, c.y, 2 + 4 * g, '#ffffff', g);
-        }
-    }
-    // 竜の大きな爪が三本、討伐隊ぜんたいを左上から右下へ裂く（爪の先が通ったあとに、先細りの爪痕が残る。山場 0.42〜0.45）
-    const rip = win(p, RIP.dragon.a0, RIP.dragon.a1), gone = win(p, 0.48, 0.62);
-    if (boss && rip > 0 && gone < 1) {
-        ctx.save();
-        ctx.globalAlpha = 1 - gone;
-        const marks = ripMarks(a.W, 'dragon', aimOf(a)); // 狙う人の所を、右端の爪痕が通る（bossfx.ts の RIP）
-        for (let i = 0; i < marks.length; i++) {
-            const t = ease(clamp01(rip * RIP.dragon.sp - i * 0.12));
-            const { x0, y0, x1, y1, bow } = marks[i];
-            slashMark(ctx, x0, y0, x1, y1, lerp(14, 5, gone), bow, t, DRAGON_RIP);
-            // 裂けていく先の閃き（爪そのものは描かない。爪痕だけで、裂く向きと勢いを見せる）
-            if (t > 0.02 && t < 1) {
-                const hx = ripX(marks[i], lerp(y0, y1, t)), hy = lerp(y0, y1, t);
-                sparkle(ctx, hx, hy, 4, '#ffffff', 1);
-            }
-        }
-        ctx.restore();
-        flash(a, bump(p, 0.41, 0.46), '#ff3050', 0.3);
-    }
-}
-const DRAGON_RIP = { line: '#1a0208', dark: '#8a0f22', body: '#ff5a6e', hi: '#ffe0e8' };
-// ---- 隙: よろめくボス → （竜は）看破のモノクルで弱点の紋章 → 弱点の属性の大技（属性のないボスは白い会心の一撃） ----
+// ---- 隙: よろめくボス → （属性を答える課題のボスは）看破のモノクルで弱点の紋章 → 弱点の属性の大技（属性のないボスは白い会心の一撃） ----
 function openingFx(a) {
     const { ctx, phase: p } = a;
     const el = ELEMENT_COLOR[a.element ?? ''] ?? ELEMENT_COLOR['光'];
@@ -605,7 +246,7 @@ function openingFx(a) {
         }
         ctx.globalAlpha = 1;
     }
-    // モノクル: 看破を使ったキャラがいれば、竜の胸に大きなレンズと紋章
+    // モノクル: 看破を使ったキャラがいれば、ボスの胸に大きなレンズと紋章
     const scanned = alive(a).some((v) => v.tools.includes('scan'));
     const lk = bump(p, 0.18, 0.5);
     if (lk > 0) {
@@ -637,7 +278,7 @@ function openingFx(a) {
             ctx.lineTo(cx + r * 1.2, cy + r * 1.5);
             ctx.stroke();
         }
-        // 紋章（属性の文字）: 属性を答える課題（竜）のときだけ
+        // 紋章（属性の文字）: 属性を答える課題のときだけ
         ctx.restore();
         if (a.element)
             text(ctx, elementLabel(a.element), cx, cy, R(10 + lk * 10), el.main, lk, el.dark);
@@ -665,7 +306,7 @@ function openingFx(a) {
         }
         ctx.restore();
     }
-    // 反撃: 属性の大技が竜に降りそそぐ
+    // 反撃: 属性の大技がボスに降りそそぐ
     const firsts = alive(a).filter((v) => v.ok && v.atT !== undefined).map((v) => v.atT);
     if (!firsts.length)
         return;
@@ -758,7 +399,7 @@ export function elementStrike(a, element, k) {
             ctx.fillRect(R(bx - 4), -20, 8, a.foot.y + 20);
             ctx.fillRect(R(bx - 60 * k), R(by - 2), R(120 * k), 4);
             break;
-        case '闇': // 黒い渦が竜を飲み込む
+        case '闇': // 黒い渦がボスを飲み込む
             for (let i = 0; i < 4; i++) {
                 ctx.globalAlpha = (1 - k) * 0.8;
                 ctx.strokeStyle = i % 2 ? el.main : el.dark;
@@ -813,7 +454,7 @@ function fogFx(a) {
             ctx.fill();
         }
         ctx.restore();
-        // 霧の中で光る竜の目
+        // 霧の中で光るボスの目
         if (p > 0.1 && p < 0.42) {
             const e = 0.5 + 0.5 * Math.sin(a.frame / 4);
             ctx.fillStyle = `rgba(255,60,60,${e * dens})`;
@@ -848,18 +489,10 @@ function fogFx(a) {
     // 霧が晴れる瞬間の光
     flash(a, bump(p, 0.5, 0.6), '#ffffff', 0.18);
 }
-// ---- 呪文: 竜の真紅の魔法弾 → 冒険者たちの魔法陣から光が集まり、巨大な封印陣で叩き割る ----
+// ---- 呪文: ボスの魔法弾（ボスの魔力の色） → 冒険者たちの魔法陣から光が集まり、巨大な封印陣で叩き割る ----
 // 打ち消しの場面の言葉（ボスの側／冒険者の側）。シーズンのボスごとに、何を唱え合うかが違う
-const CHANT_LABELS = {
-    dragon: [tl('詠唱'), tl('打ち消しの詠唱')],
-    spider: [tl('毒の大技'), tl('解毒の調合')],
-    goblin: [tl('大号令'), tl('合図の読み解き')],
-    kraken: [tl('大技'), tl('旗艦の号令')],
-    golem: [tl('刻印の起動'), tl('解呪の言葉')],
-    vampire: [tl('呪いの紋'), tl('祓いの聖句')],
-    giant: [tl('雪崩の予兆'), tl('避難の合図')],
-};
-const chantLabels = (a) => CHANT_LABELS[a.theme?.kind ?? 'dragon'] ?? CHANT_LABELS.dragon;
+//   BossModule の names.spell
+const chantLabels = (a) => bossOf(a.theme?.kind).names.spell ?? bossOf().names.spell;
 // 中身が見えない冒険者の詠唱（古代文字）
 const RUNE_WORDS = ['ᚨᛚ・ᛞᚱᚨ', 'ᛟᚱ・ᚹᛁᚾ', 'ᛋᛖᛚ・ᚨᚱᚲ', 'ᚦᚢᚱ・ᛖᚾ', 'ᛗᚨᚷ・ᛚᛟᚱ', 'ᚷᚨᛚ・ᛞᚱ'];
 // 詠唱合戦の流れ（場面の進み具合）:
@@ -871,6 +504,8 @@ const IMPACT_SPELL = 0.42; // 外した冒険者に当たる時刻（arena の I
 const spellCasters = (a) => alive(a).filter((v) => v.ok && !v.hit);
 // 打ち消しの呪文を知る者を照らすあいだ、まわりを暗くする（arena の明かりの暗さに足す）
 export function sceneDark(a) {
+    if (a.scene === 'chain' && a.chain?.full)
+        return chainFinaleDark(a.theme?.kind, a.chain, a.phase); // 大魔法の溜めの暗さ（ボスの大魔法だけ。光の柱は 0）
     if (a.scene !== 'spell' || !spellCasters(a).length)
         return 0;
     return 0.45 * win(a.phase, 0.2, 0.26) * (1 - win(a.phase, 0.5, 0.56));
@@ -1292,7 +927,7 @@ function ougiFx(a) {
     // 技名（正解したキャラの答え）
     const own = hitters.find((v) => v.mine);
     const name = own ? own.excerpt.replace(/[「」]/g, '').split(/[：:]/)[0].slice(0, 10) : tl('奥義');
-    // 竜の逆鱗穿ち: 叫んだ属性の大技を重ねる。属性は提出ごとに変わるので、自分の答え（「炎・逆鱗穿ち」）を優先し、なければ場面の属性
+    // 逆鱗穿ち（属性を答える課題）: 叫んだ属性の大技を重ねる。属性は提出ごとに変わるので、自分の答え（「炎・逆鱗穿ち」）を優先し、なければ場面の属性
     const el = /^([炎氷雷風光闇])・/.exec(name)?.[1] ?? a.element;
     if (el)
         elementStrike(a, el, win(k, 0.3, 0.9));
@@ -2763,6 +2398,8 @@ function chainBack(a, c) {
         a.lights?.push({ x: cv.x, y: cv.y - 20, r: 44, a: 0.9 * bump(vn.k, 0, 1.1), col: mineVerse(c, vn.i) ? '#ffd166' : '#bff4ff' });
     if (c.full && p >= c.impact)
         a.lights?.push({ x: a.body.x, y: a.body.y - 10, r: 150, a: 1 - win(p, c.impact + 0.05, c.impact + 0.25), col: '#fff6c8' });
+    if (c.full)
+        drawChainFinaleBack(a, c, SKY); // 大魔法の奥の絵と明かり（ボスの大魔法だけ）
 }
 function groundStar(a, c, rg, k, n, grow) {
     const { ctx, phase: p } = a;

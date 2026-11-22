@@ -2,6 +2,7 @@
 import { focusOf } from './reach.js';
 import { CHAIN_TEMPOS, GAG, GUARD_HIT, IMPACT, MINE_BAND } from './arena-common.js';
 import { bossCue, counterFor, isBaseScene } from './bossmoves.js';
+import { bossOf } from './bossapi.js';
 import { dodgePlan } from './dodgetiming.js';
 import { MELEE_WEAPONS } from '../shared/catalog.js';
 import { isUltScene, shoutEndT, SPELL_T, ultBeats, ultHitT, verseAt } from './scenes.js';
@@ -135,9 +136,9 @@ export function dodgePlanOf(w, f) {
         const s = this.script, on = s.fighters.map((fi, i) => (!fi.off && (w === 0 || s.waves[w - 1]?.aliveAfter[i] !== false) ? i : -1)).filter((i) => i >= 0);
         const me = s.fighters[f];
         const ctx = {
-            kind: (s.theme?.kind ?? 'dragon'), scene: sc, x: me.slot.x, y: me.slot.y, f, idx: Math.max(0, on.indexOf(f)), n: on.length,
+            kind: bossOf(s.theme?.kind).kind, scene: sc, x: me.slot.x, y: me.slot.y, f, idx: Math.max(0, on.indexOf(f)), n: on.length,
             lanes: [...new Set(on.map((i) => Math.round(s.fighters[i].slot.y)))], foot: this.bossFoot, W: 384, partyX: Math.max(...s.fighters.filter((x) => !x.off).map((x) => x.slot.x)), xs: on.map((i) => s.fighters[i].slot.x),
-            // 大きな攻撃が狙う所（bossfx.ts の aimOf と同じ: 1人に寄る窓の人 → 自分の冒険者 → 討伐隊のまん中）
+            // 大きな攻撃が狙う所（bosskit.ts の aimOf と同じ: 1人に寄る窓の人 → 自分の冒険者 → 討伐隊のまん中）
             aim: focusOf(on.map((i) => ({ f: i, x: s.fighters[i].slot.x, y: s.fighters[i].slot.y, alive: true, mine: this.mine.has(i) })), this.solo) ?? undefined,
         };
         plan = dodgePlan(ctx, this.evadeOf(w, f), this.protoOf(w, f)?.pattern.id ?? null);

@@ -80,7 +80,7 @@ const fist = {
         // 拳が突き上がる → 止まって、崩れる
         const rk = win(p, RISE0, T.impact), hold = win(p, T.impact, T.impact + 0.08), crumble = win(p, T.impact + 0.08, T.impact + 0.16);
         if (rk > 0 && crumble < 1) {
-            // 岩の拳（pixart.ts の共通の部品。ボスの「石の巨人」の拳も同じ部品）。突き上げて、当たった瞬間に少し押しこむ
+            // 岩の拳（pixart.ts の共通の部品。ボスの演出でも同じ部品を使える）。突き上げて、当たった瞬間に少し押しこむ
             const s = 2.5, h = 112, topY = ground - h * ease(rk) - 6 * Math.sin(Math.PI * hold) + 40 * crumble * crumble;
             const shake = hold > 0 && hold < 1 ? Math.round(Math.sin(a.frame * 2.1) * 2 * (1 - hold)) : 0;
             drawRockFist(ctx, x + shake, topY, { s, arm: 0.9, vein, glow: 0.5 + 0.5 * rk, alpha: 1 - crumble, ground: ground + 2 });

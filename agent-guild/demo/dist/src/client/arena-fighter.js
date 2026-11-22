@@ -30,7 +30,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         oy += ease(brace) * 1.5;
     }
     // 回避: 溜め → 動作 → 着地・戻り を、区間ごとのイージングでつなぐ
-    // 尾のなぎはらいは、竜に近い者から順に届く（跳ぶ順番がずれる）
+    // 尾のなぎはらいは、ボスに近い者から順に届く（跳ぶ順番がずれる）
     const lag = this.lagOf(w, v.f); // 攻撃がこの冒険者に届くまでの遅れ（arrival.ts。ボス×攻撃×立ち位置ごと）
     const plan = this.dodgePlanOf(w, v.f); // 回避の段取り（dodgetiming.ts。山場を、攻撃の届く時刻にそろえる）
     // 巻物の大技カウンターの主役: いつもの回避・反撃の動きの代わりに、大技の動き（跳躍・乱舞・詠唱）

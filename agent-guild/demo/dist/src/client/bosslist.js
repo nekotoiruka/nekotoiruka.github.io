@@ -4,7 +4,8 @@
 // scripts/build-bosslist.mjs が 1ファイルの HTML にまとめる。画面の作りは必殺技の一覧（ultlist.ts）と同じ。
 import { ArenaRenderer } from './arena.js';
 import { scriptFor } from './api.js';
-import { BOSS_LIST, PAIRS, SPELL_NAME } from './motionlab.js';
+import { labBosses, labPairs } from './motionlab.js';
+import { bossOf } from './bossapi.js';
 const SCENES = ['breath', 'claw', 'dive', 'tail', 'spell'];
 const SECONDS_PER_WAVE = 3.4;
 const T0 = 0.0, T1 = 0.86;
@@ -13,13 +14,13 @@ const data = window.__LAB_DATA__;
 const base = scriptFor(data);
 const waveOf = (sc) => base.waves.findIndex((wv) => base.cases[wv.caseIndex]?.scene === sc);
 const items = [];
-for (const b of BOSS_LIST)
+for (const b of labBosses())
     for (const sc of SCENES) {
         const w = waveOf(sc);
         if (w < 0)
             continue;
-        const pr = sc === 'spell' ? null : PAIRS[b.kind]?.[sc];
-        items.push({ kind: b.kind, boss: b.name, scene: sc, w, label: pr ? pr[0] : `${SPELL_NAME[b.kind] ?? '大技'}（呪文の場面）`, resp: pr ? `冒険者の対応: ${pr[1]}` : '冒険者は呪文を打ち消す' });
+        const pr = sc === 'spell' ? null : labPairs(b.kind)?.[sc];
+        items.push({ kind: b.kind, boss: b.name, scene: sc, w, label: pr ? pr[0] : `${bossOf(b.kind).lab?.spellName ?? '大技'}（呪文の場面）`, resp: pr ? `冒険者の対応: ${pr[1]}` : '冒険者は呪文を打ち消す' });
     }
 const keyOf = (it) => `${it.kind}-${it.scene}`;
 function el(tag, attrs = {}, ...kids) {
@@ -211,6 +212,8 @@ play(0, true);
 setTimeout(thumbStep, 50);
 requestAnimationFrame(loop);
 window.ready = () => q >= thumbs.length;
+// 見比べのページ（scripts/build-bosslist-compare.mjs）が読む、攻撃の一覧（基本の4場面）
+window.labItems = items.filter((it) => it.scene !== 'spell').map((it) => ({ k: it.kind, sc: it.scene, label: `${it.boss}「${it.label}」` }));
 // 確かめ用（自動の画面写し）: ボスと場面と時刻を決めて、止めて1コマ描く
 window.still = (kind, scene, ph) => {
     const i = items.findIndex((it) => it.kind === kind && it.scene === scene);

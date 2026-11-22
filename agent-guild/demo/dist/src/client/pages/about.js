@@ -5,6 +5,8 @@ import { ArenaRenderer } from '../arena.js';
 import { getDemoBattle, scriptFor } from '../api.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from '../boss.js';
 import { BRAND } from '../brand.js';
+import { allBosses } from '../bossapi.js';
+import '../bosses/index.js';
 import { burst, BODY_STYLE, fxColors } from '../fx.js';
 import { elderBeard, GM_GEAR, GM_LOOK } from '../guildmaster.js';
 import { drawFamiliarAt, drawHero, PORTRAIT_H, PORTRAIT_W } from '../hero.js';
@@ -86,15 +88,9 @@ function ctx2d(c) {
     return ctx;
 }
 const wave = (t, sp = 1, ph = 0) => Math.sin(t * sp + ph);
-const BOSSES = [
-    { kind: 'dragon', season: tl('シーズン1'), name: tl('竜の巣の主（老竜）'), line: tl('炎の息と尻尾のなぎはらい。霧に隠れ、呪文を唱え、偉い人の声をまねて惑わせる。'), sky: ['#2a1640', '#4a1f4f', '#7a2f4a', '#1b1030'], ground: ['#4a3a52', '#3c2f45'] },
-    { kind: 'spider', season: tl('シーズン2'), name: tl('大蜘蛛アラクネア'), line: tl('闇の森の洞窟の主。糸と毒牙、そして人の声をまねる。'), sky: ['#0e1f1c', '#163229', '#24483a', '#0a1512'], ground: ['#2f3a2a', '#263022'] },
-    { kind: 'goblin', season: tl('シーズン3'), name: tl('頭目ガルグとゴブリンの大群'), line: tl('砦跡に住みついた大群。群れの中から頭目を見つけられるか。'), sky: ['#3a1e1a', '#7a3b22', '#c8682a', '#2a1410'], ground: ['#5a4632', '#4a3a2a'] },
-    { kind: 'kraken', season: tl('シーズン4'), name: tl('大王クラーケン'), line: tl('揺れる甲板、墨の海、霧の向こうの歌声。旗艦の信号を読み違えるな。'), sky: ['#0d2236', '#123a52', '#1d5a72', '#08182a'], ground: ['#6a4a2e', '#5a3d25'] },
-    { kind: 'golem', season: tl('シーズン5'), name: tl('守護巨人ゴルドム'), line: tl('砂の遺跡の番人。拳と光線と地割れ。命令を装う古代の声が割り込む。'), sky: ['#3a2a1a', '#7a5a32', '#c89a52', '#2a1d10'], ground: ['#8a6e48', '#76603e'] },
-    { kind: 'vampire', season: tl('シーズン0'), name: tl('ヴェスペリオ伯爵'), line: tl('霧ノ谷の古城の主。蝙蝠の群れ、見えない呪いの紋、魅了の声。'), sky: ['#1a0a1e', '#3a0f2a', '#5a1530', '#10060f'], ground: ['#3a2a3a', '#2e2030'] },
-    { kind: 'giant', season: tl('シーズン6'), name: tl('氷巨人グラシエル'), line: tl('雪原に立つ巨人。凍てつく息、氷柱の槍、吹雪にまぎれる死者の声。'), sky: ['#13233f', '#24406a', '#4a74a0', '#0c1830'], ground: ['#c8d8ea', '#a8bcd4'] },
-];
+// 並びと中身は、各ボスの BossModule の showcase（本体は伯爵だけ。--seasons で書き出した紹介ページは、シーズンのパックのボスも並ぶ）
+let BOSSES = [];
+const lpBosses = () => allBosses().filter((b) => b.showcase).sort((a, b) => a.showcase.order - b.showcase.order).map((b) => ({ kind: b.kind, ...b.showcase }));
 function bossPose(t, ph, angry = 0) {
     const roar = angry > 0 ? angry : Math.max(0, wave(t, 0.7, ph) - 0.85) * 6.6; // ときどき吠える
     return {
@@ -290,8 +286,8 @@ function stepScene(kind, ticker) {
             const hit = s > 0.42 && s < 0.6;
             if (hit)
                 p.eye = 'hurt';
-            // 竜は大きいので、頭と前足だけが画面に入るように左へずらして等倍で描く
-            const bc = bossCanvas(p, hit && s < 0.47, 'dragon');
+            // ボスは大きいので、頭と前足だけが画面に入るように左へずらして等倍で描く（紹介ページの一番上のボス）
+            const bc = bossCanvas(p, hit && s < 0.47, BOSSES[0]?.kind);
             ctx.drawImage(bc, -44, H - BH + 6);
             const act = s > 0.25 && s < 0.6 ? 'attack' : 'idle';
             drawHero(ctx, hero.look, hero.gear, 74, 56, { frame: Math.floor(t * 60), flip: true, action: act, t: (s - 0.25) / 0.35 });
@@ -824,6 +820,7 @@ function reel(script, segs, ticker, dir, label) {
 // ページ本体
 // ---------------------------------------------------------------------------
 export async function renderAbout(root, opts = {}) {
+    BOSSES = lpBosses();
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
     const data = await getDemoBattle();
     const first = scriptFor(data);
@@ -913,9 +910,9 @@ export async function renderAbout(root, opts = {}) {
         return { w: c.w, ...win, steady: true, pace: SHOW_PACE, hold: 0.45, tag: WEAPON_LABELS[c.weapon], cam: weaponShot(probe, c.f), solo: c.f, setup: (r) => applyWeapon(r, c) };
     });
     if (dodge.length)
-        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、かわし方が変わる。盾で受け止める、跳んでかわす、伏せてやりすごす、振り向いて迎え撃つ——同じ攻撃でも、手に持つ武器で身のこなしがちがう。'), segs: dressed(dodge, 0) });
+        fx.push({ w: -1, mine: [], title: dodgeTitle, body: tl('ボスの攻撃の種類ごとに、とるべき動きが変わる。盾で受け止める、跳んでかわす、伏せてやりすごす——攻撃を見きわめて正しく動けた者だけが、無傷でしのぎきる。'), segs: dressed(dodge, 0) });
     if (wpSegs.length)
-        fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器それぞれに、かわし方と攻め方がある。'), segs: dressed(wpSegs, 8) });
+        fx.push({ w: -1, mine: [], title: tl('武器ごとの技'), body: tl('斬りかかる者、射ちこむ者、魔法を放つ者——反撃の動きは、手に持つ武器で変わる。16種類の武器に、それぞれの攻め方がある。'), segs: dressed(wpSegs, 8) });
     // 連携詠唱（課題に chain の場面があるときだけ）。討伐の締めくくりで、大魔法がとどめになる（失敗すれば総攻撃）ので、
     // 「討伐の瞬間」の窓と入れ替える（窓は6つのまま）
     // 窓には、7人が交代で唱えて、あなたが最後の第7節で詰まり、大魔法が不発に終わるところを見せる（成功の演出は見せない）。

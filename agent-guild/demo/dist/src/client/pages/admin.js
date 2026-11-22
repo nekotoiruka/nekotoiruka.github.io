@@ -2,7 +2,8 @@
 // 開いているタブは URL（#/admin/kaisai など）で覚える。再読み込みしても同じタブを開く。
 // 危ない操作（消す・いますぐ開催）は、押すとその場に「消えるもの／残るもの」が開き、「確かめました」にチェックしてから赤いボタンで実行する。
 // パスワードと APIキーはサーバーの中だけにあり、この画面には「設定済みかどうか」しか届かない。
-import { demoMode } from '../api.js';
+import { demoMode, getSeason } from '../api.js';
+import { bossProblems } from '../bosshost.js';
 import { h, toast } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 import { NAME_KIND_LABELS, NAME_KINDS } from '../../shared/names.js';
@@ -85,12 +86,24 @@ function adminPage(d, tab, reload) {
         show(n.dataset.tab);
     });
     const logout = h('button', { class: 'btn btn-small', onclick: async () => { await post('api/admin/logout', {}); setAdminNav(false); location.hash = '#/admin'; } }, tl('ログアウト'));
-    const page = h('div', { class: 'admin' }, h('div', { class: 'head-row' }, h('h2', {}, tl('管理者画面')), logout), band(d, waiting, () => { show('names'); tabs.scrollIntoView({ block: 'start' }); }), tabs, panel);
+    const page = h('div', { class: 'admin' }, h('div', { class: 'head-row' }, h('h2', {}, tl('管理者画面')), logout), bossWarn(), band(d, waiting, () => { show('names'); tabs.scrollIntoView({ block: 'start' }); }), tabs, panel);
     show(tab);
     return page;
 }
 // 本物の参加者の出発の数（見本の参加者の出発は数えない）。u.submissions は見本も含めた、いまある出発の全部
 const realSubmissions = (d) => Math.max(0, d.u.submissions - d.people.samples);
+// ===== ボスの演出を読めなかったときの警告（シーズンのパックの fx/。#118） =====
+function bossWarn() {
+    const box = h('div', { class: 'notice warn', role: 'alert', hidden: true });
+    const fill = () => {
+        if (!bossProblems.length)
+            return;
+        box.replaceChildren(h('b', {}, tl('このシーズンのボスの演出を読みこめませんでした。仮の影で表示しています（シーズンパックの fx/ と、SEASON_FX の設定を確かめてください）')), ...bossProblems.map((p) => h('div', { class: 'small muted' }, `${p.kind}: ${p.reason}`)));
+        box.hidden = false;
+    };
+    getSeason().then(fill, fill); // 開催中のシーズンのボスを読んでみる（読めなければ bossProblems に入る）
+    return box;
+}
 // ===== 上の帯: 開催中のようす =====
 function band(d, waiting, goNames) {
     const { u, seasons: si, people } = d;

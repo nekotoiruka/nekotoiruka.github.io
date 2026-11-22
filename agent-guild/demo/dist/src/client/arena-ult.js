@@ -63,7 +63,7 @@ export function ultimate(ctx, w, phase) {
     // 詠唱合戦は、知る者へのスポットライトと詠唱そのものが見せ場なので、カットインで隠さない
     if (this.sceneOf(w) === 'spell')
         return;
-    // 巻物を読むのは「答えを考えるとき」。竜の攻撃より前に見せる
+    // 巻物を読むのは「答えを考えるとき」。ボスの攻撃より前に見せる
     const [t0, t1] = this.ultWindow(sp.st, w);
     if (phase < t0 || phase > t1)
         return;

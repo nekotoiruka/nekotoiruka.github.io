@@ -7,6 +7,7 @@ import { WAVE_SECONDS } from './arena-common.js';
 import { scriptFor } from './api.js';
 import { CHAIN_FX_LIST, chainFx } from './chainfx.js';
 import { setSfx } from './sfx.js';
+chainFx.boss = false; // この見本帳は案を見比べるので、ボスの大魔法（BossModule の chainFinale）は使わない
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const data = window.__LAB_DATA__;
 const first = scriptFor(data);
