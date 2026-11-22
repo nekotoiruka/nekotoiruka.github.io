@@ -1,4 +1,4 @@
-// ボスの演出（bossmotion.ts・bossfx.ts）で使う、小さな数学の関数と、重ね描きの部品（光・煙・ひび・弧・牙・爪・触手・脚・蝙蝠・矢・石…）。
+// ボスの演出（bossmotion.ts・bosskit.ts・bosses/<kind>-fx.ts）で使う、小さな数学の関数と、重ね描きの部品（光・煙・ひび・弧・牙・爪・触手・脚・蝙蝠・矢・石…）。
 // どれも「進行度 t」だけで形が決まる（シークしても同じ絵になる）。位置は画面のドット座標。
 import { flashScale } from './motion.js';
 export const TAU = Math.PI * 2;

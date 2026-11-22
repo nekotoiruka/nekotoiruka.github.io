@@ -381,7 +381,7 @@ export function simulateBattle(entrants, casesIn, seed, mode = 'royale', bossHpO
         }
     }
     return {
-        version: 3, mode, seed, arena: { ...ARENA }, boss: { name: tl('ドラゴン'), maxHp: bossMax, ...BOSS_POS },
+        version: 3, mode, seed, arena: { ...ARENA }, boss: { name: tl('ボス'), maxHp: bossMax, ...BOSS_POS },
         cases, fighters, waves, standings,
     };
 }

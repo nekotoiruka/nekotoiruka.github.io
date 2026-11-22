@@ -1,6 +1,7 @@
 // モーション見本帳の描画（討伐画面の、ボスの攻撃への対応で使う。見本帳のページと同じコード）。
 // モーション見本帳: 通常攻撃・ガード・回避・ジャンプ・必殺技の候補を、ひとつのドットの格子（1ドット = 1画素）で描いて並べる。
 import './bosses/index.js';
+import { allBosses, bossOf } from './bossapi.js';
 // キャラとボスはゲーム本体の描画コード（drawHero / bossCanvas）をそのまま使う。エフェクトはすべて fillRect の点だけで描き、
 // 半透明の代わりにディザ（市松模様の間引き）、なめらかな線の代わりに太さ1〜3ドットの点の並びにしている。
 import { drawHero, muzzleOf } from './hero.js';
@@ -1204,7 +1205,7 @@ const EVADE = [
             e.bg();
             e.boss();
             slashAt(e, 0.4);
-            // 討伐画面では、攻撃の落ちる場所（急降下の着地点・投石・拳）から体が抜けきる所まで転がる（arrival.ts の escapeDx）。見本帳では相手の脇をくぐる
+            // 討伐画面では、攻撃の落ちる場所（急降下の着地点・落とす物・拳）から体が抜けきる所まで転がる（arrival.ts の escapeDx）。見本帳では相手の脇をくぐる
             const dx = ESCAPE ?? -30, dir = dx < 0 ? -1 : 1;
             const k = win(t, 0.3, 0.38); // 当たる瞬間（0.40）の前に、転がり終える
             let x = HX;
@@ -2362,7 +2363,7 @@ const HURT = [
                 star(e.c, W - 6, FY - 26, R(4 * tw), '#ffffff', '#ffe27a');
             hitMark(e, HX - 9, FY - 16, t0, true);
         } },
-    { id: 'hurt-crush', name: 'ぺしゃんこ', note: '上から落ちてきたものにつぶされ、平たくなる。ぽんっと戻って、尻もちで目を回す。岩・踏みつけ・落下向け（石の巨人など）。', draw(e) {
+    { id: 'hurt-crush', name: 'ぺしゃんこ', note: '上から落ちてきたものにつぶされ、平たくなる。ぽんっと戻って、尻もちで目を回す。岩・踏みつけ・落下向け。', draw(e) {
             const t0 = e.t, t = stop(t0, 0.4, 0.05);
             e.shake(bump(t0, 0.4, 0.5) * 2.5);
             e.bg();
@@ -2477,7 +2478,7 @@ const HURT = [
             if (t > HOLD && t < HOLD + 0.08)
                 sparks(e.c, HX, FY - 12, win(t, HOLD, HOLD + 0.08), 8, 12, PAL.shadow, 5); // 呪いが解ける
         } },
-    { id: 'hurt-web', name: '糸でぐるぐる巻き', note: '飛んできた糸に巻かれて、みのむしのように動けない。もぞもぞもがいて、最後に糸を引きちぎる。糸・網向け（大蜘蛛）。', draw(e) {
+    { id: 'hurt-web', name: '糸でぐるぐる巻き', note: '飛んできた糸に巻かれて、みのむしのように動けない。もぞもぞもがいて、最後に糸を引きちぎる。糸・網向け。', draw(e) {
             const t0 = e.t, t = stop(t0, 0.4, 0.04);
             e.bg();
             e.boss({ pose: bossYell(t) });
@@ -2549,7 +2550,7 @@ const HURT = [
                 line(e.c, HX + 6, FY - 30 - s * 10, HX - 3, FY - 36 - s * 10, '#a07850', 1, 1 - s);
             } // 抜いて放る
         } },
-    { id: 'hurt-ink', name: '墨まみれ', note: '墨をまともに浴びて全身まっ黒、目だけ白く光る。ぽたぽた垂れる墨。最後にぶるぶるっと振り払う。墨・水向け（クラーケン）。', draw(e) {
+    { id: 'hurt-ink', name: '墨まみれ', note: '墨をまともに浴びて全身まっ黒、目だけ白く光る。ぽたぽた垂れる墨。最後にぶるぶるっと振り払う。墨・水向け。', draw(e) {
             const t0 = e.t, t = stop(t0, 0.4, 0.04);
             e.bg();
             e.boss({ pose: bossYell(t) });
@@ -2589,7 +2590,7 @@ const HURT = [
             if (shake)
                 debris(e.c, HX, FY - 12, win(t, HOLD, HOLD + 0.08), 10, 14, INK, 7, 1.5, 30);
         } },
-    { id: 'hurt-ice', name: '氷漬け', note: '凍てつく息で氷のかたまりに閉じこめられ、ぴくりとも動けない。ひびが入って割れ、出てきたあともガタガタ震える。氷・冷気向け（氷の巨人）。', draw(e) {
+    { id: 'hurt-ice', name: '氷漬け', note: '冷たい息で氷のかたまりに閉じこめられ、ぴくりとも動けない。ひびが入って割れ、出てきたあともガタガタ震える。氷・冷気向け。', draw(e) {
             const t0 = e.t, t = stop(t0, 0.4, 0.04);
             e.bg();
             e.boss({ pose: bossYell(t) });
@@ -3843,21 +3844,17 @@ for (const c of CATEGORIES)
     for (const p of c.patterns)
         if (HQ[p.id])
             p.draw = HQ[p.id];
-export const BOSS_LIST = [
-    { kind: 'vampire', name: '吸血鬼伯爵' }, { kind: 'dragon', name: '竜' }, { kind: 'spider', name: '大蜘蛛' }, { kind: 'goblin', name: 'ゴブリンの群れ' },
-    { kind: 'kraken', name: 'クラーケン' }, { kind: 'golem', name: '石の巨人' }, { kind: 'giant', name: '氷の巨人' },
-];
-// [ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類]
-export const PAIRS = {
-    dragon: { breath: ['火炎ブレス', '鏡で炎を受ける', 'block'], claw: ['ひっかき', '影を残してすり抜ける', 'step'], dive: ['急降下', '飛びのく', 'dodge'], tail: ['背後から来る子竜', '振り向いて斬る', 'turnCut'] },
-    vampire: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
-    spider: { breath: ['糸の網', '横へ転がってかわす', 'dodge'], claw: ['毒牙', '盾ではじく', 'parry'], dive: ['天井からの落下', '飛びのく', 'dodge'], tail: ['背後に降りる子蜘蛛', '振り向いて斬る', 'turnCut'] },
-    goblin: { breath: ['矢の雨', '盾をかかげて矢を受ける', 'block'], claw: ['落とし穴', '回りこんで避ける', 'step'], dive: ['投石', '投石から飛びのく', 'dodge'], tail: ['背後から忍び寄る斥候', '振り向いて斬る', 'turnCut'] },
-    kraken: { breath: ['墨の噴射', '物陰に伏せる', 'crawl'], claw: ['触手の薙ぎ', '跳んでかわす', 'jump'], dive: ['海からの突き上げ', '跳んで離れる', 'jump'], tail: ['背後の水から伸びる触手', '振り向いて斬る', 'turnCut'] },
-    golem: { breath: ['背後の床から伸びる石の手', '振り向いて受ける', 'turn'], claw: ['岩の拳', '拳から飛びのく', 'dodge'], dive: ['地割れ', '地割れを跳び越える', 'jump'], tail: ['石腕の薙ぎ払い', '伏せてやりすごす', 'crawl'] },
-    giant: { breath: ['凍てつく息', '物陰に伏せる', 'crawl'], claw: ['氷の投げ槍', '左右に駆けてかわす', 'step'], dive: ['氷柱の踏みつけ', '踏みつけから飛びのく', 'dodge'], tail: ['背後の吹きだまりから跳び出す雪狼', '振り向いて斬る', 'turnCut'] },
+// ボスの一覧と、[ボスの技の名前, 冒険者の対応（本番の対応技の説明）, 対応の種類] は、ボスごとの BossModule の lab（name・pairs・spellName）
+/** 見本帳に出すボス（登録した順） */
+// 並び: いつものボス（bossOf() の既定。見本の討伐のボス）を先頭に、ほかは紹介ページと同じ順（BossModule の showcase.order。ないボスは後ろ）。
+// byShowcase なら、いつものボスも紹介ページの順に並べる
+const labOrder = (b) => b.showcase?.order ?? Infinity;
+export const labBosses = (byShowcase = false) => {
+    const first = byShowcase ? undefined : bossOf().kind;
+    return allBosses().filter((b) => b.lab).sort((x, y) => (x.kind === first ? -1 : y.kind === first ? 1 : labOrder(x) - labOrder(y))).map((b) => ({ kind: b.kind, name: b.lab.name }));
 };
-export const SPELL_NAME = { dragon: '呪文', vampire: '呪いの紋', spider: '毒の大技', goblin: '大号令', kraken: '大渦', golem: '刻印の起動', giant: '雪崩' };
+/** そのボスの [技の名前, 冒険者の対応, 対応の種類]（基本の4場面） */
+export const labPairs = (kind) => bossOf(kind).lab?.pairs;
 // 対応の種類 → 見本帳のどの項目の案を使うか
 export const RESP_CAT = {
     block: { cat: 'guard', label: 'ガード' }, barrier: { cat: 'guard', label: 'ガード（結界）', only: 'guard-hex' }, parry: { cat: 'guard', label: 'ガード（はじく）' }, turn: { cat: 'guard', label: '振り向いてガード' }, turnCut: { cat: 'attack', label: '振り向いて斬る' },
@@ -3865,15 +3862,12 @@ export const RESP_CAT = {
     dodge: { cat: 'evade', label: '回避', avoid: 'evade-duck' }, step: { cat: 'evade', label: '回避（すり抜け）', avoid: 'evade-duck' },
     crawl: { cat: 'evade', label: '回避（伏せる）', only: 'evade-duck' }, jump: { cat: 'jump', label: 'ジャンプ' },
 };
-// ボスごとの色と、飛んでくるもの
-const BCOL = {
-    dragon: FLAME, vampire: PAL.blood, spider: ['#ffffff', '#f4f6ff', '#c8d0e0', '#8a90a8'], goblin: ['#fff1d6', '#e8d5a8', '#a07850', '#5a3a1a'],
-    kraken: ['#c8a0ff', '#6a4a9a', '#2a1a4a', '#0a0612'], golem: ['#d8c8a8', '#a8987a', '#7a6a52', '#4a3a2a'], giant: PAL.ice,
-};
+const labOf = (kind) => bossOf(kind).lab;
+const colOf = (kind) => labOf(kind)?.color ?? ['#ffffff', '#d0d4e4', '#9098b8', '#40445c'];
 function missile(c, kind, x, y, f, ang = Math.PI) {
-    const col = BCOL[kind];
-    switch (kind) {
-        case 'vampire': { // 蝙蝠（羽ばたく）
+    const col = colOf(kind);
+    switch (labOf(kind)?.shot) {
+        case 'bat': { // 蝙蝠（羽ばたく）
             const fl = Math.floor(f / 3) % 2, D = '#1a0814', M = '#5a2a6a';
             P(c, x - 2, y - 2, D, 5, 4);
             P(c, x - 1, y - 3, D, 1, 1);
@@ -3894,38 +3888,37 @@ function missile(c, kind, x, y, f, ang = Math.PI) {
             P(c, x + 1, y - 1, '#ff3b5a');
             break;
         }
-        case 'dragon':
-            orb(c, x, y, 3, FLAME);
-            P(c, x + 3, y, FLAME[3], 3, 1);
-            break;
-        case 'spider':
+        case 'orb':
+            orb(c, x, y, 3, col);
+            P(c, x + 3, y, col[3], 3, 1);
+            break; // 光る玉
+        case 'thread':
             line(c, x, y, x + 8, y - 2, '#f4f6ff');
             line(c, x, y, x + 6, y + 4, '#c8d0e0');
             P(c, x, y, '#ffffff', 2, 2);
-            break;
-        case 'goblin':
+            break; // 白い糸
+        case 'arrow':
             line(c, x, y, x - Math.cos(ang) * 9, y - Math.sin(ang) * 9, '#a07850');
             P(c, x, y, '#d5dbe6', 2, 2);
-            break;
-        case 'kraken':
-            disc(c, x, y, 3, '#2a1a4a');
-            P(c, x - 1, y - 1, '#6a4a9a', 2, 1);
-            break;
-        case 'golem':
-            disc(c, x, y, 3, '#7a6a52');
-            P(c, x - 1, y - 2, '#d8c8a8', 2, 1);
-            P(c, x + 1, y + 1, '#4a3a2a', 2, 1);
-            break;
-        case 'giant':
-            line(c, x, y, x + 6, y, PAL.ice[2]);
+            break; // 矢
+        case 'ink':
+            disc(c, x, y, 3, col[2]);
+            P(c, x - 1, y - 1, col[1], 2, 1);
+            break; // しずく
+        case 'stone':
+            disc(c, x, y, 3, col[2]);
+            P(c, x - 1, y - 2, col[0], 2, 1);
+            P(c, x + 1, y + 1, col[3], 2, 1);
+            break; // 石
+        case 'shard':
+            line(c, x, y, x + 6, y, col[2]);
             P(c, x - 1, y - 1, '#ffffff', 2, 3);
-            break;
+            break; // かけら
     }
-    void col;
 }
 // ボスの攻撃（冒険者の立ち位置 hx に向けて）。当たる（届く）瞬間は 0.4 ごろ
 function bossAttack(c, kind, scene, resp, t, f, hx) {
-    const col = BCOL[kind], mx = 50, my = TY - 6, ty = FY - 16;
+    const col = colOf(kind), L = labOf(kind), mx = 50, my = TY - 6, ty = FY - 16;
     if (resp === 'crawl') { // 頭の上を、横に払う一撃が通りすぎる
         const k = win(t, 0.26, 0.52);
         if (k > 0 && k < 1) {
@@ -3936,7 +3929,7 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
         return;
     }
     if (resp === 'jump') { // 足もとを払う（または足もとに穴・地割れ）
-        if (scene === 'claw' && kind === 'goblin') {
+        if (scene === 'claw' && L?.clawPit) {
             const k = bump(t, 0.24, 0.62);
             if (k > 0) {
                 P(c, hx - 10, FY - 1, '#05030c', 20, R(4 * k) + 1);
@@ -3953,7 +3946,7 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
                     line(c, x, FY - 1 + (x % 3), nx, FY - 1 + (nx % 3), '#05030c', 2, k);
                     x = nx;
                 }
-                if (kind === 'kraken')
+                if (L?.diveBubbles)
                     for (let i = 0; i < 6; i++)
                         P(c, hx - 8 + i * 3, FY - 2 - ((f + i) % 5), '#bfe8ff');
             }
@@ -3984,22 +3977,23 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
             if (k <= 0 || k >= 1)
                 continue;
             const tx = hx - 8 + ((i * 7) % 5) - 2, tyy = ty - 10 + ((i * 11) % 22);
-            const x = kind === 'goblin' ? lerp(tx + 30, tx, k) : lerp(mx, tx, k), y = kind === 'goblin' ? lerp(-10, tyy, k) : lerp(my, tyy, k) + Math.sin(k * 6 + i) * 3;
-            missile(c, kind, x, y, f + i, kind === 'goblin' ? -2.2 : Math.PI);
+            const above = L?.breathFrom === 'above'; // 上から降る（BossModule の lab.breathFrom）
+            const x = above ? lerp(tx + 30, tx, k) : lerp(mx, tx, k), y = above ? lerp(-10, tyy, k) : lerp(my, tyy, k) + Math.sin(k * 6 + i) * 3;
+            missile(c, kind, x, y, f + i, above ? -2.2 : Math.PI);
         }
-        if (kind === 'dragon' || kind === 'giant' || kind === 'kraken') {
+        if (L?.breathBeam) {
             const k = bump(t, 0.2, 0.5);
             if (k > 0)
                 rampLine(c, mx, my, lerp(mx, hx - 12, k), lerp(my, ty, k), col, R(2 + 4 * k), 0.8);
         }
         return;
     }
-    if (scene === 'claw') { // 伸びる爪・毒牙・岩の拳・氷の投げ槍
-        if (kind === 'giant') {
+    if (scene === 'claw') { // 伸びる爪・牙・拳・投げる槍
+        if (L?.clawThrow) {
             const k = win(t, 0.22, 0.4);
             if (k > 0 && k < 1) {
                 const x = lerp(mx, hx - 14, k), y = lerp(my - 10, ty, k);
-                rampLine(c, x, y, x + 16, y - 3, PAL.ice, 3);
+                rampLine(c, x, y, x + 16, y - 3, col, 3);
                 P(c, x - 2, y - 1, '#ffffff', 3, 3);
             }
             return;
@@ -4008,21 +4002,22 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
         if (k > 0 && fade > 0)
             for (let i = 0; i < 3; i++) {
                 const y0 = my - 6 + i * 6;
-                rampLine(c, mx, y0, lerp(mx, hx - 12, ease(k)), lerp(y0, ty - 4 + i * 4, ease(k)), col.slice(0, 3), kind === 'golem' ? 5 : 2, fade);
+                rampLine(c, mx, y0, lerp(mx, hx - 12, ease(k)), lerp(y0, ty - 4 + i * 4, ease(k)), col.slice(0, 3), L?.clawWidth ?? 2, fade);
             }
         return;
     }
-    // 急降下・投石・踏みつけ: 頭上から落ちてくる。地面の影が大きくなる
+    // 急降下・落とす物・踏みつけ: 頭上から落ちてくる。地面の影が大きくなる（落ちてくるもの: BossModule の lab.diveDrop）
     const k = win(t, 0.18, 0.42);
     if (k > 0 && k < 1.2)
         disc(c, hx, FY, 3 + 9 * Math.min(1, k), '#05030c', 0.6, 0.3);
     if (k > 0 && k < 1) {
         const y = lerp(-10, FY - 10, easeIn(k)), x = lerp(hx - 30, hx, k);
-        if (kind === 'vampire') {
+        const drop = L?.diveDrop ?? 'beams';
+        if (drop === 'shot') {
             for (let i = 0; i < 3; i++)
                 missile(c, kind, x + i * 5 - 5, y - i * 3, f + i);
         }
-        else if (kind === 'goblin' || kind === 'golem') {
+        else if (drop === 'stone') {
             disc(c, x, y, 5, '#7a6a52');
             P(c, x - 2, y - 3, '#a8987a', 3, 2);
         }
@@ -4036,7 +4031,7 @@ function bossAttack(c, kind, scene, resp, t, f, hx) {
 }
 // 呪文: ボスが詠唱して魔法弾を放つ → 打ち消しの呪文を知る全員の光線がつかまえる → みんなで押し返す → 倍返し
 function spellStage(c, kind, t, f, heroes) {
-    const col = BCOL[kind], A = ['#ffffff', '#d8f8ff', '#8ad8ff', '#3a8ad8'];
+    const col = colOf(kind), A = ['#ffffff', '#d8f8ff', '#8ad8ff', '#3a8ad8'];
     const o = { x: 54, y: TY - 20 }, mid = { x: 92, y: TY - 22 };
     const g = win(t, 0.05, 0.27);
     // ボスの紋

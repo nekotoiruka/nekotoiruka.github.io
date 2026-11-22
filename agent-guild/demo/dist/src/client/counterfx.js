@@ -1,8 +1,9 @@
-// 正しく動けた冒険者の「対応技」の演出（ブレス・爪・急降下・尾の場面）。どの技を使うかは、ボス（シーズン）ごと（bossmoves.ts の COUNTERS）。
+// 正しく動けた冒険者の「対応技」の演出（ブレス・爪・急降下・尾の場面）。どの技を使うかは、ボス（シーズン）ごと（BossModule の counters）。
 // 体の動き（跳ぶ・伏せる・受ける）は arena-fighter.ts、ここでは技の光・かけら・残光を描く。
 // 時間: 0.36〜0.42 構える / 0.42 ボスの技が届く / 0.42〜0.58 受け流す・かわす
 import { Rng } from '../shared/rng.js';
 import { counterFor } from './bossmoves.js';
+import { bossOf } from './bossapi.js';
 import { arrow, bat, bump, dustRing, ease, glowAt, hash, puffs, R, rock, shard, sparkle, TAU, win } from './fxkit.js';
 /** 対応技の演出。基本の4場面でなければ何もしない */
 export function counterFx(a) {
@@ -17,7 +18,7 @@ export function counterFx(a) {
     // 技の名前（「かわした」）は出さない。自分の行動は青い帯の一文で見せる（arena-hud.ts の mineBand）
 }
 const DRAW = {
-    // 鏡で受ける: 正しく動けたキャラの前に青い鏡。炎が上下に割れる（竜）
+    // 鏡で受ける: 正しく動けたキャラの前に青い鏡。炎が上下に割れる（炎の奔流）
     mirror(ctx, v, p, a) {
         const k = win(p, 0.38, 0.44), fade = 1 - win(p, 0.52, 0.6);
         if (k <= 0 || fade <= 0)
@@ -209,7 +210,7 @@ const DRAW = {
         const u = win(p, 0.4, 0.58);
         if (u <= 0 || u >= 1)
             return;
-        const x = v.x - 16, y = v.y - 16, spider = a.theme?.kind === 'spider';
+        const x = v.x - 16, y = v.y - 16;
         ctx.save();
         ctx.globalAlpha = 1 - win(u, 0, 0.4);
         ctx.strokeStyle = '#ffffff';
@@ -220,23 +221,7 @@ const DRAW = {
         ctx.stroke(); // 一閃
         ctx.globalAlpha = 1 - u;
         const fall = ease(u) * 18, apart = ease(u) * 6;
-        if (spider) { // 切れた糸がふわりと垂れる
-            ctx.strokeStyle = co.color;
-            ctx.lineWidth = 1;
-            for (let i = 0; i < 3; i++) {
-                ctx.beginPath();
-                ctx.moveTo(R(x - 4 - apart), R(y - 6 + i * 5));
-                ctx.quadraticCurveTo(R(x - 14 - apart), R(y + i * 5 + fall * 0.5), R(x - 20 - apart), R(y + 4 + i * 5 + fall));
-                ctx.stroke();
-            }
-        }
-        else { // 切れた触手の先が落ちる
-            ctx.fillStyle = '#8a2a6a';
-            ctx.fillRect(R(x - 10 - apart), R(y - 2 + fall), 8, 5);
-            ctx.fillStyle = '#f4c8dc';
-            ctx.fillRect(R(x - 8 - apart), R(y + 3 + fall), 2, 1);
-            ctx.fillRect(R(x - 4 - apart), R(y + 3 + fall), 2, 1);
-        }
+        bossOf(a.theme?.kind).fx?.counter?.cut?.(ctx, x, y, u, fall, apart, co.color); // 斬られて落ちるもの（糸・触手の先など）は、ボスごと（BossModule の fx.counter.cut）
         ctx.restore();
     },
     // 跳び越える: 跳んだ弧に光の粒の軌跡、着地にきらめき
@@ -280,7 +265,7 @@ const DRAW = {
             ctx.globalAlpha = k;
             arrow(ctx, x - 7 + i * 5, y - 2, Math.PI - 1.9 + (hash(i) - 0.5) * 0.4, 8);
             ctx.restore();
-        } // 盾に刺さった矢も、左上から右下へ（矢の雨と同じ向き）
+        } // 盾に刺さった矢も、左上から右下へ（降ってくる矢と同じ向き）
         if (p > 0.4 && p < 0.5)
             sparkle(ctx, x - 7 + (n % 4) * 5, y - 3, 3, '#ffffff', 1 - win(p, 0.4, 0.5));
     },
@@ -351,7 +336,7 @@ const DRAW = {
     },
     // 撃ち落とす: 飛んでくる氷の槍を空中で撃ち抜き、かけらが散る（氷巨人の爪）
     shootDown(ctx, v, p) {
-        const u = win(p, 0.46, 0.58); // 撃った弾が、飛んでくる槍に当たる時刻（arena-fighter.ts の shoot・bossfx.ts の氷の槍と合わせる）
+        const u = win(p, 0.46, 0.58); // 撃った弾が、飛んでくる槍に当たる時刻（arena-fighter.ts の shoot・ボスの演出（シーズン側）の飛んでくる槍と合わせる）
         if (u <= 0 || u >= 1)
             return;
         const x = v.x - 34, y = v.y - 10;

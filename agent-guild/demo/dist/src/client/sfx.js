@@ -555,7 +555,7 @@ function synth(a, t, name, strength) {
             noise(a, t, { dur: 0.6, f0: 6000, f1: 4000, q: 1.2, vol: 0.3 * s, type: 'bandpass', attack: 0.08 });
             [0, 0.08, 0.16].forEach((d) => noise(a, t + 0.1 + d, { dur: 0.02, f0: 3000, q: 4, vol: 0.25 }));
             break;
-        case 'volley': // 矢の雨: 弓弦の音が何本も鳴り、風切りが降ってくる
+        case 'volley': // 弓の一斉射: 弓弦の音が何本も鳴り、風切りが降ってくる
             for (let i = 0; i < 6; i++)
                 tone(a, t + i * 0.03, { type: 'triangle', f0: 180 + i * 12, f1: 120, dur: 0.08, vol: 0.08 });
             for (let i = 0; i < 10; i++)
@@ -567,7 +567,7 @@ function synth(a, t, name, strength) {
             for (let i = 0; i < 8; i++)
                 tone(a, t + 0.18 + i * 0.04 + Math.random() * 0.02, { type: 'sine', f0: 900 + Math.random() * 900, f1: 1600, dur: 0.04, vol: 0.04 });
             break;
-        case 'frost': // 凍てつく息: 高く鳴る吹雪と、ぴきぴき凍る音
+        case 'frost': // 冷気: 高く鳴る吹雪と、ぴきぴき凍る音
             noise(a, t, { dur: 0.9, f0: 2500, f1: 6000, q: 1.5, vol: 0.32, type: 'bandpass', attack: 0.2, trem: [7, 0.4], wet: 0.4 });
             for (let i = 0; i < 6; i++)
                 fm(a, t + 0.3 + i * 0.07, { f: 2500 + Math.random() * 1500, ratio: 2.7, index: 1.5, dur: 0.1, vol: 0.04, wet: 0.4 });

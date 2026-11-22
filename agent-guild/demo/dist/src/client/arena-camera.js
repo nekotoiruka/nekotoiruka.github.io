@@ -2,6 +2,7 @@ import { bump, GAG, IMPACT, lerp, win01 } from './arena-common.js';
 import { shoutEndT, ultCam, ultShake, verseAt } from './scenes.js';
 import { shakeScale } from './motion.js';
 import { counterFor } from './bossmoves.js';
+import { chainFeel } from './chainfx.js';
 export function updateCamera(c) {
     const s = this.script;
     const { w: AW, h: AH } = s.arena;
@@ -147,6 +148,9 @@ export function updateCamera(c) {
             const age = phase - c.impact;
             if (age >= 0 && age < 0.12)
                 shake = Math.max(shake, 7 * (1 - age / 0.12));
+            const fe = chainFeel(this.script.theme?.kind, c, phase, this.frame);
+            if (fe)
+                shake = fe.shake; // ボスの大魔法の手ごたえ（光の柱は null）
         }
         else {
             if (phase >= r0 && phase < c.breakT)

@@ -27,6 +27,7 @@ import { counterEarliest } from './dodgetiming.js';
 const round3 = (v) => Math.round(v * 1000) / 1000;
 import { hurtFor } from './hurtmoves.js';
 import { applyLighting, foreground, fxLayer, makeBackground } from './arena-scene.js';
+import { bossOf } from './bossapi.js';
 // 画面の部品ごとに、描画を arena-*.ts に分けてある（同じ ArenaRenderer のメソッドとして取り付ける）
 export { SCALE, OUTRO, CHAIN_TEMPOS, GUARD_HIT, TOOL_SHORT } from './arena-common.js';
 // 円や楕円の半径が計算の途中で負になっても、描画で例外にしない（0として描く）
@@ -432,7 +433,7 @@ export class ArenaRenderer {
             return picked;
         return attackPattern(this.looks[f].weapon, w + f);
     }
-    /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。竜は場面の属性、ほかのボスは決まった弱点（bossmoves.ts）。弱点の属性がないボスは undefined（ふだんの色） */
+    /** 隙の場面の、弱点の属性の色（ほかの場面は undefined）。属性を答える課題では場面の属性、ほかは決まった弱点（bossmoves.ts）。弱点の属性がないボスは undefined（ふだんの色） */
     elementTint(w) {
         if (this.sceneOf(w) !== 'opening')
             return undefined;
@@ -512,9 +513,12 @@ export class ArenaRenderer {
             const px = (this.cam.x - AW / 2) * 0.35, py = (this.cam.y - AH / 2) * 0.2;
             ctx.drawImage(this.wall, Math.round(px) - 40, Math.round(py), this.wall.width, 80);
         }
+        const stage = bossOf(s.theme?.kind).stage; // ボスの舞台の光源（舞台のないボスは、城の松明2つ）
         this.lights = [
-            { x: 198, y: 34, r: 70 + Math.sin(this.frame / 3) * 4, a: 0.9, col: '#ffb050' },
-            { x: 294, y: 34, r: 70 + Math.cos(this.frame / 3.4) * 4, a: 0.9, col: '#ffb050' },
+            ...(stage ? stage.lights?.(this.frame) ?? [] : [
+                { x: 198, y: 34, r: 70 + Math.sin(this.frame / 3) * 4, a: 0.9, col: '#ffb050' },
+                { x: 294, y: 34, r: 70 + Math.cos(this.frame / 3.4) * 4, a: 0.9, col: '#ffb050' },
+            ]),
             { x: this.bossBody.x, y: this.bossBody.y - 10, r: 80, a: 0.55 },
         ];
         // 体を描く位置を、何かを描く前に決める（このあと描く、体に付くものがみんな使う）
@@ -551,7 +555,7 @@ export class ArenaRenderer {
             // 1人だけ見せる窓でも、蝙蝠の群れの通り道は討伐隊ぜんたいの段で決める（arena-timing.ts の dodgePlanOf と同じ並び）
             ...(this.solo !== null ? { solo: this.solo, lanes: [...new Set(s.fighters.map((fi, i) => (!fi.off && (w === 0 || s.waves[w - 1]?.aliveAfter[i] !== false) ? Math.round(fi.slot.y) : null)).filter((y) => y !== null))] } : {}),
             ...(this.showcase ? { showcase: true } : {}),
-            bossSil: bossSilhouette((s.theme?.kind ?? 'dragon')),
+            bossSil: bossSilhouette(s.theme?.kind),
             ...(chain ? { chain: chain.view, figures: this.figuresOf() } : {}),
         } : null;
         const quietUlt = this.ultQuiet(w);
@@ -592,7 +596,7 @@ export class ArenaRenderer {
             }
             ctx.restore();
         }
-        // 背後から来る攻撃（bossmoves.ts の BACK_SCENE）: 前から来る共通の攻撃（床を払う帯・飛び道具）は描かない。背後の相手は場面の演出（bossfx.ts の backRaid）が描く
+        // 背後から来る攻撃（BossModule の backScene）: 前から来る共通の攻撃（床を払う帯・飛び道具）は描かない。背後の相手は場面の演出（bosskit.ts の backRaid）が描く
         const backAtk = isBackScene(s.theme?.kind, this.respScene(w));
         if (!this.showcase && !chain && !dazed && !backAtk && !(atk === 'meteor' && (scene === 'dive' || scene === 'illusion')))
             this.fxLayer(ctx, (c) => this.attackFxBack(c, atk, phase, vis, targeted, scene));

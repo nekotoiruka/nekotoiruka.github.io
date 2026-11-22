@@ -3,8 +3,11 @@
 // 空の魔法陣・唱える人の光の糸・特大のダメージ数字・効果音は、案によらず共通（scenes.ts の chainTop・arena-hud.ts）。
 import { Rng } from '../shared/rng.js';
 import { bump, clamp01, dustCloud, ease, flash, glowLine, impactBurst, lerp, R, rocks, starSpark, swordAt, TAU, win } from './ultkit.js';
-/** いま使う案（見本帳で切り替える。本番の既定は 'pillar'＝これまでの光の柱） */
-export const chainFx = { style: 'pillar' };
+import { bossOf } from './bossapi.js';
+/** いま使う案（見本帳で切り替える。既定は 'pillar'＝これまでの光の柱）。boss: ボスの大魔法（BossModule の chainFinale）があれば、そちらを使う（見本帳 chainfxlab は false） */
+export const chainFx = { style: 'pillar', boss: true };
+/** ボスの大魔法（chainkit.ts の受け口。ないボスは、これまでの案） */
+const finaleOf = (kind) => (chainFx.boss ? bossOf(kind).chainFinale : undefined);
 export const CHAIN_FX_LIST = [
     { id: 'pillar', name: 'A. 光の柱（いまの演出）', note: '空の魔法陣の中心から、ボスへ極大の光の柱が落ちる。' },
     { id: 'prism', name: 'B. 七色の収束', note: '唱えた全員の頭上から、節の色の光が空の魔法陣へ集まり、七色を束ねた光線になってボスを貫く。' },
@@ -14,6 +17,11 @@ export const CHAIN_FX_LIST = [
 ];
 /** 大魔法を描く。sky: 空の魔法陣の中心 / heads: 節ごとの唱える人の頭上（いなければ null）/ cols: 節ごとの輪の色 */
 export function drawChainFinale(a, c, sky, heads, cols) {
+    const fin = finaleOf(a.theme?.kind);
+    if (fin) {
+        fin.top(a, c, sky, heads, cols);
+        return;
+    }
     switch (chainFx.style) {
         case 'prism':
             prism(a, c, sky, heads, cols);
@@ -30,6 +38,12 @@ export function drawChainFinale(a, c, sky, heads, cols) {
         default: pillar(a, c, sky);
     }
 }
+/** 大魔法の奥の絵と明かり（キャラより後ろ。ボスの大魔法だけ） */
+export function drawChainFinaleBack(a, c, sky) { finaleOf(a.theme?.kind)?.back?.(a, c, sky); }
+/** 大魔法の溜めで場面を暗くする分（ボスの大魔法だけ。ほかは 0） */
+export function chainFinaleDark(kind, c, p) { return finaleOf(kind)?.dark?.(c, p) ?? 0; }
+/** 大魔法の手ごたえ（ボスののけぞり・画面のゆれ）。null なら光の柱と同じ */
+export function chainFeel(kind, c, p, frame) { return finaleOf(kind)?.feel?.(c, p, frame) ?? null; }
 // ---- A. 光の柱（これまでの演出。scenes.ts から移した） ----
 function pillar(a, c, sky) {
     const { ctx, phase: p } = a;

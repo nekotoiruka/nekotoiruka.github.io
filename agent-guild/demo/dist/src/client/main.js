@@ -1,4 +1,5 @@
 // エントリポイント: ハッシュルーティング
+import { installBoss } from './bosshost.js';
 import { demoMode, detectMode, getMe, mySubmissions } from './api.js';
 import { renderAdmin, setAdminNav } from './pages/admin.js';
 import { renderArena } from './pages/arena.js';
@@ -97,6 +98,15 @@ function lockNav(locked) {
     });
 }
 await detectMode();
+// 静的デモに入れたシーズンのボス（scripts/build-static.mjs --seasons。window.__BOSS_FX__ の置き場所を、先に登録する）
+for (const u of window.__BOSS_FX__ ?? []) {
+    try {
+        installBoss(await import(new URL(u, document.baseURI).href));
+    }
+    catch (e) {
+        console.error(e);
+    }
+}
 // ログイン中のユーザーを先に確かめる（人ごとの下書きなどを、その人の分だけ読むため。ほかの人の分と昔のキーは、ここで消える）
 if (!demoMode)
     setUser((await getMe().catch(() => null))?.name ?? null);

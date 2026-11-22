@@ -1,4 +1,5 @@
 // サーバー API。サーバーがない（静的デモ）ときはデモデータで動く
+import { ensureBoss } from './bosshost.js';
 import { simulateBattle } from '../shared/simulate.js';
 import { caseTitleOf } from '../shared/types.js';
 import { computeStats } from '../shared/stats.js';
@@ -67,6 +68,7 @@ export async function getSeason() {
     const season = await req('GET', 'api/season');
     const { applyCostRules } = await import('../shared/catalog.js');
     applyCostRules(season.costRules);
+    await ensureBoss(season.task.briefing?.boss); // シーズンのパックのボス（なければ仮の影）
     return season;
 }
 // season を渡すと、過去のシーズンの討伐（再生用）
@@ -76,7 +78,9 @@ export async function getBattle(season) {
             throw new Error(tl('デモ版には過去のシーズンはありません'));
         return getDemo();
     }
-    return req('GET', season ? `api/battle?season=${encodeURIComponent(season)}` : 'api/battle');
+    const d = await req('GET', season ? `api/battle?season=${encodeURIComponent(season)}` : 'api/battle');
+    await ensureBoss(d.task.briefing?.boss); // シーズンのパックのボス（なければ仮の影）
+    return d;
 }
 // 過去のシーズンの一覧（新しい順）。デモ版には無い
 export async function getPastSeasons() {

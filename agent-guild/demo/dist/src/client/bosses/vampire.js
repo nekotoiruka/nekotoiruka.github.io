@@ -1,7 +1,13 @@
 // ボス: vampire（霧の城の主 ヴェスペリオ伯爵）。右向き・96x84 ドット。ポーズの意味は boss.ts の BossPose を参照
 // 長身の貴族: 青白い顔・オールバックの黒髪・とがった耳・赤い目・牙。黒い燕尾服に赤い裏地のマント（コウモリの翼形）。
 // 光源は左上。主色・影・濃い影・ハイライトの4段階＋境目に少しディザ。ふちは outline() が付ける。
-import { BOSS_RENDERERS, BW, BH, G, outline } from '../boss.js';
+import { BW, BH, G, outline } from '../boss.js';
+import { BOSS_API, counter, registerBoss } from '../bossapi.js';
+import { tl } from '../../shared/i18n.js';
+import * as kit from '../fxkit.js';
+import { arrivalFns, fx } from './vampire-fx.js';
+import { stage } from './vampire-stage.js';
+import { chainFinale } from './vampire-chain.js';
 import { shade } from '../sprites.js';
 const hash = (x, y) => { const v = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; return v - Math.floor(v); };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -422,5 +428,164 @@ export function render(p) {
     bats.forEach(([x, y], i) => bat(g, x + Math.sin(i * 2 + p.bob) * 1.5, y + y0 * 0.4 + (i % 2 ? p.bob : -p.bob) * 0.6, f ^ (i & 1), batBody, EYE));
     return outline(g);
 }
-BOSS_RENDERERS.vampire = render;
+// ---- このボスの表（#118: もとは bossstyle.ts・bossmoves.ts・hurtmoves.ts・arrival.ts・scenes.ts・bossfx.ts・motionlab.ts にあったもの） ----
+registerBoss({
+    api: BOSS_API, kind: 'vampire', render,
+    fx, // 攻撃の演出（vampire-fx.ts）
+    style: { mouth: [61, 29], eye: [60, 22], head: [58, 22], body: [48, 46], hand: [78, 50], tail: [18, 52], glow: ['#ffd0e0', '#d02050'], smoke: '#7a3a9a', eyeGlow: '#ff2030', voice: '#ff9ad0', dust: '#7a3a9a', flies: true, ground: { y0: 73, followX: true }, tailBand: ['#6a3a8a', '#3a1a52'] },
+    names: {
+        atk: { claw: tl('伸びる爪'), breath: tl('蝙蝠の群れ'), tail: tl('霧の蝙蝠'), meteor: tl('血の雨'), nova: tl('紅の呪い') },
+        scene: { dive: tl('蝙蝠の急降下'), spell: tl('呪いの紋'), ougi: tl('伯爵の悪あがき'), rush: tl('血の秘術'), ally: tl('伯爵の一撃') },
+        head: { breath: tl('蝙蝠の群れ'), claw: tl('伸びる爪'), dive: tl('蝙蝠の急降下'), tail: tl('背後の霧'), rush: tl('血の秘術') },
+        spell: [tl('呪いの紋'), tl('祓いの聖句')],
+    },
+    spellColor: { main: '#e8204a', light: '#ff7a9a', deep: 'rgba(130,0,40,0.6)', pale: '#ffd0da', warn: '#ff6b8a', ring: '#e8204a' },
+    weakness: '光',
+    backScene: 'tail',
+    // 伯爵: 蝙蝠の群れは床に伏せてやり過ごし（床伏せ）、爪は銀の盾で受け（銀盾受け）、急降下は柱の陰へ駆けこみ（柱陰走り）、背後の霧は振り向いて斬る（背面斬り）。
+    //   動きはシーズンの正解の中身に合わせる（2026-10-24。以前は聖なる光・はじく・受け止める で、正解の名前と絵が食い違っていた）
+    counters: { breath: counter('crawl', 'dust', 'whoosh', '#e0c8f0'), claw: counter('block', 'parry', 'guard', '#ffd0da'), dive: counter('dodge', 'roll', 'whoosh', '#e0c8f0'), tail: counter('turnCut', 'backGuard', 'slash', '#ffd0e0') },
+    cue: (scene) => {
+        if (scene === 'breath')
+            return { t: 0.36, s: 'bats' };
+        return undefined;
+    },
+    hurt: { breath: 'hurt-daze', claw: 'hurt-daze', dive: 'hurt-crush', tail: 'hurt-daze' }, // 蝙蝠の群れ / 伸びる爪 / 真上からの一撃→つぶれる / 背後の霧の蝙蝠
+    arrival: { ...arrivalFns, visible: { breath: 0.38, claw: 0.37, dive: 0.33, tail: 0.3 } },
+    lab: { name: '吸血鬼伯爵', spellName: '呪いの紋', pairs: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
+        // 見本帳の小さな絵
+        color: ['#ffd0d8', '#ff6a8a', '#c81a4a', '#5a0a24'], shot: 'bat', diveDrop: 'shot', },
+    // 紹介ページのボスの欄
+    stage, // 月明かりの礼拝堂（vampire-stage.ts）
+    chainFinale, // 大魔法「朝日の奔流」（vampire-chain.ts）
+    showcase: { order: 5, season: tl('シーズン0'), name: tl('ヴェスペリオ伯爵'), line: tl('霧ノ谷の古城の主。蝙蝠の群れ、見えない呪いの紋、魅了の声。'), sky: ['#1a0a1e', '#3a0f2a', '#5a1530', '#10060f'], ground: ['#3a2a3a', '#2e2030'] },
+    // 体の動き（#118: もとは bossmotion.ts の種類ごとの分岐）
+    motion: {
+        // 突進は血の秘術（魔術。special）。隕石を呼ぶのは詠唱（cast）
+        moveFor: (scene, _atk, base) => (scene === 'rush' ? 'special' : base === 'dive' && scene !== 'dive' ? 'cast' : base),
+        moves: {
+            // 蝙蝠の群れ: マントを広げ、目と口が紅く光り、霧が足もとから湧いて、蝙蝠の群れが飛び出す
+            breath: (q, base) => base({
+                noStrike: true,
+                pose: (m, { inh, wind, rel, out, p }) => { m.pose.wing = 2 * Math.max(inh, wind) * (p < 0.46 ? 1 : out); m.pose.mouth = Math.min(1, m.pose.mouth ?? 0); m.sy = 1 + 0.03 * inh; m.sx = 1 + 0.06 * inh * (1 - rel); },
+                glow: (ctx, at, mo, { k, big }) => { const S = q.S, e = at(S.eye[0], S.eye[1]); kit.glowAt(ctx, e.x, e.y, 3 + 4 * k, S.glow[0], S.glow[1], 0.9 * k); kit.glowAt(ctx, mo.x, mo.y, big * 0.7, S.glow[0], S.glow[1], 0.5 * k); },
+                extra: (ctx, layer, at, _mo, { p, k }) => {
+                    const lay = layer === 'front', t = p;
+                    const b = at(48, 70);
+                    if (!lay)
+                        kit.puffs(ctx, b.x, b.y, { n: 8, t: t * 1.6, dx: 4, dy: -34, spread: 44, r0: 3, r1: 8, color: q.S.smoke, alpha: 0.5 * Math.min(1, k * 2.5), seed: 5 });
+                    if (lay && p > 0.38 && p < 0.58) { // 蝙蝠の群れが飛び出す
+                        const u = kit.win(p, 0.38, 0.58);
+                        ctx.save();
+                        ctx.fillStyle = '#1a0a24';
+                        for (let i = 0; i < 9; i++) {
+                            const bx = kit.lerp(b.x, b.x + 150, u * (0.6 + kit.hash(i) * 0.7)), by = b.y - 28 + (kit.hash(i, 2) - 0.5) * 50 - Math.sin(u * 6 + i) * 4;
+                            ctx.globalAlpha = 1 - u * 0.5;
+                            const f = Math.sin(p * 80 + i) > 0 ? -2 : 2;
+                            ctx.fillRect(Math.round(bx - 3), Math.round(by + f * 0.5), 2, 1);
+                            ctx.fillRect(Math.round(bx + 2), Math.round(by + f * 0.5), 2, 1);
+                            ctx.fillRect(Math.round(bx - 1), Math.round(by), 3, 2);
+                        }
+                        ctx.restore();
+                    }
+                },
+            }),
+            // 伸びる爪: すっと浮いて、滑るように踏みこむ（マントが広がる）。足もとはかかない
+            claw: (_q, base) => base({
+                trail: '#7a3a9a', noScrape: true,
+                pose: (m, { p, wind, strike, ww }) => { m.pose = { eye: m.pose.eye, lean: -3 * ww + 10 * strike, wing: 1 + 1.5 * wind - 1 * strike, mouth: strike }; m.dy = -4 * wind * (1 - kit.win(p, 0.4, 0.5)); m.sy = 1 + 0.02 * wind; },
+            }),
+            // 蝙蝠の急降下: 蝙蝠になって舞い上がり（〜0.26）、討伐隊の真上から突っこむ（bosskit.ts の fallingBoss・0.27〜0.42）。0.5〜0.56 にもとの場所へ
+            dive: (q, base) => base({
+                sky: true,
+                pose: (m, v) => { m.pose.wing = 2 * kit.bump(q.p, 0.14, 0.5) + Math.sin(q.p * 70) * 1.2 * (v.up > 0 && v.drop < 1 ? 1 : 0); },
+                extra: (ctx, layer, at) => {
+                    const p = q.p;
+                    if (layer === 'front' && p > 0.14 && p < 0.56) { // 蝙蝠になって舞い上がる
+                        const b = at(48, 40);
+                        ctx.save();
+                        ctx.fillStyle = '#1a0a24';
+                        for (let i = 0; i < 10; i++) {
+                            const u = kit.fract(p * 1.5 + i / 10);
+                            const bx = b.x + (kit.hash(i) - 0.5) * 70, by = b.y - u * 110 + Math.sin(p * 60 + i) * 3;
+                            ctx.globalAlpha = (1 - u) * 0.9;
+                            ctx.fillRect(Math.round(bx - 3), Math.round(by), 2, 1);
+                            ctx.fillRect(Math.round(bx + 2), Math.round(by), 2, 1);
+                            ctx.fillRect(Math.round(bx - 1), Math.round(by), 3, 2);
+                        }
+                        ctx.restore();
+                    }
+                },
+            }),
+            // 背後の霧: 霧にほどけて消え、霧が床を這って討伐隊の背後へ流れる。
+            //   襲うのは、霧から湧く蝙蝠（冒険者ひとりずつの背後に2匹。vampire-fx.ts）。本体は 0.52〜0.6 にもとの場所で姿をもどす
+            tail: (q) => {
+                const { p, S, reach } = q, m = q.blank();
+                m.move = 'tail';
+                const fade = kit.win(p, 0.08, 0.24), home = kit.win(p, 0.52, 0.6);
+                m.alpha = p < 0.5 ? 1 - fade : home;
+                m.pose = { eye: 'angry', wing: 1.5 * fade * (1 - home), mouth: 0 };
+                m.sy = 1 - 0.02 * fade;
+                m.tremble = 0.5 * fade * (1 - kit.win(p, 0.24, 0.28));
+                m.fx = (ctx, layer, _a, foot) => {
+                    if (layer === 'back' && p > 0.06 && p < 0.64) {
+                        const dens = Math.max(fade * (1 - kit.win(p, 0.3, 0.4)), kit.bump(p, 0.48, 0.62));
+                        kit.puffs(ctx, foot.x, foot.y - 26, { n: 12, t: p * 3, dx: 0, dy: -16, spread: 46, r0: 3, r1: 9, color: S.smoke, alpha: 0.7 * dens, seed: 17 });
+                        if (p > 0.2 && p < 0.38)
+                            kit.puffs(ctx, foot.x + 20, foot.y - 14, { n: 14, t: (p - 0.2) * 3, dx: reach - 10, dy: 0, spread: 22, r0: 3, r1: 8, color: S.smoke, alpha: 0.55, seed: 18 }); // 霧が背後へ流れる
+                    }
+                };
+                return m;
+            },
+            // 呪いの紋・血の秘術・眷属召喚: マントを広げ、片手をかざして紅の紋を描く
+            special: (q, base) => {
+                const { p, S, scene } = q, m = base();
+                const big = scene === undefined || scene === 'ougi' || scene === 'summon' || scene === 'seal' || scene === 'awaken';
+                const k = kit.ease(kit.win(p, 0.05, 0.36)) * (1 - kit.win(p, 0.44, 0.58)), rel = kit.bump(p, 0.38, 0.5);
+                m.pose = { eye: 'angry', wing: 2 * k, lean: -2 * k + 3 * rel, mouth: 0 };
+                m.dy = -7 * k + Math.sin(p * 16) * k;
+                m.sy = 1 + 0.02 * k;
+                m.fx = (ctx, layer, at, foot) => {
+                    const h = at(S.hand[0] + 6, S.hand[1] - 4);
+                    if (layer === 'back') {
+                        kit.puffs(ctx, foot.x + 4, foot.y - 6, { n: 8, t: p * 2, dx: 0, dy: -24, spread: 54, r0: 3, r1: 8, color: '#5a2a7a', alpha: 0.4 * k, seed: 101 });
+                        return;
+                    }
+                    kit.glowAt(ctx, h.x, h.y, 8 + 14 * k, '#ffd0e0', '#d02050', 0.8 * k);
+                    ctx.save();
+                    ctx.globalAlpha = k;
+                    ctx.strokeStyle = '#ff3050';
+                    ctx.lineWidth = 1.5;
+                    ctx.translate(h.x + 6, h.y - 4);
+                    ctx.rotate(p * 8);
+                    ctx.scale(1, 0.8);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 7 + 8 * k, 0, kit.TAU);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    for (let i = 0; i <= 5; i++) {
+                        const a = (i * 2 * kit.TAU) / 5;
+                        const x = Math.cos(a) * (6 + 7 * k), y = Math.sin(a) * (6 + 7 * k);
+                        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                    if (big)
+                        for (let i = 0; i < 8; i++) {
+                            const u = kit.fract(p * 1.4 + i / 8);
+                            ctx.save();
+                            ctx.globalAlpha = k * (1 - u);
+                            ctx.fillStyle = '#1a0a24';
+                            const bx = at(48, 40).x + (kit.hash(i) - 0.5) * 60, by = at(48, 40).y - u * 70;
+                            ctx.fillRect(Math.round(bx - 3), Math.round(by), 2, 1);
+                            ctx.fillRect(Math.round(bx + 2), Math.round(by), 2, 1);
+                            ctx.fillRect(Math.round(bx - 1), Math.round(by), 3, 2);
+                            ctx.restore();
+                        }
+                };
+                return m;
+            },
+        },
+    },
+});
 //# sourceMappingURL=vampire.js.map

@@ -1,9 +1,17 @@
 import { Rng } from '../shared/rng.js';
 import { isUltScene } from './scenes.js';
 import { beginDefer, crispen, endDefer, fxLook, ULT_CRISP } from './fxlook.js';
-// --- 背景: 城の大広間（上に壁と旗と松明、下に石畳） ---
+import { bossOf } from './bossapi.js';
+import { drawMotes, paintStage } from './stagekit.js';
+// --- 背景: ボスの舞台（BossModule の stage。stagekit.ts）。舞台のないボスは、城の大広間（上に壁と旗と松明、下に石畳） ---
 export function makeBackground() {
     const { w, h } = this.script.arena;
+    const st = bossOf(this.script.theme?.kind).stage;
+    if (st) {
+        const p = paintStage(st, w, h, 'stage:' + st.id);
+        this.wall = p.wall;
+        return p.bg;
+    }
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
@@ -73,7 +81,7 @@ export function applyLighting(ctx, scene, chain = false, extra = 0) {
         this.lightmap.height = AH;
     }
     const lm = this.lightmap.getContext('2d');
-    const dark = Math.min(0.9, (scene === 'fog' ? 0.62 : scene === 'illusion' ? 0.5 : chain ? 0.55 : 0.38) + extra);
+    const dark = Math.min(0.9, (scene === 'fog' ? 0.62 : scene === 'illusion' ? 0.5 : chain ? 0.55 : 0.38) + extra + (bossOf(this.script.theme?.kind).stage?.dark ?? 0)); // 舞台ごとの暗さの足し引き
     lm.globalCompositeOperation = 'source-over';
     lm.clearRect(0, 0, AW, AH);
     lm.fillStyle = `rgba(6,4,18,${dark})`;
@@ -112,6 +120,17 @@ export function applyLighting(ctx, scene, chain = false, extra = 0) {
 export function foreground(ctx) {
     const { w: AW, h: AH } = this.script.arena;
     const px = -(this.cam.x - AW / 2) * 0.5;
+    const st = bossOf(this.script.theme?.kind).stage;
+    if (st) { // ボスの舞台の手前（柱・木など）と、ただようもの
+        const keep = 1 - Math.min(1, Math.max(0, (this.cam.z - 1.08) / 0.2));
+        ctx.save();
+        st.front?.(ctx, { px, keep, frame: this.frame, W: AW, H: AH });
+        ctx.globalAlpha = 1;
+        if (st.motes)
+            drawMotes(ctx, st.motes, this.frame, px, AW, AH, this.script.seed);
+        ctx.restore();
+        return;
+    }
     ctx.save();
     // 寄ったとき（ズーム）は、手前の柱が冒険者のすぐ横まで入りこんで、背後の動き（背後の霧の蝙蝠など）を隠すので、寄るほど薄くする
     const keep = 1 - Math.min(1, Math.max(0, (this.cam.z - 1.08) / 0.2));

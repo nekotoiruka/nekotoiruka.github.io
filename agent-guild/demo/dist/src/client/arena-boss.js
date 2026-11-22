@@ -1,11 +1,14 @@
 import { attackHitFx, tailBandColors } from './bossfx.js';
-import { STYLE, spriteToWorld } from './bossstyle.js';
-import { IMPACT, clamp01, lerp, win01 } from './arena-common.js';
+import { spriteToWorld } from './bossstyle.js';
+import { bossOf } from './bossapi.js';
+import './bosses/index.js';
+import { IMPACT, SCALE, clamp01, lerp, win01 } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from './boss.js';
 import { reducedMotion } from './motion.js';
-import { flameBall, slashMark } from './fxkit.js';
+import { boomBurst } from './bosskit.js';
 import { bossMotion, makeAt } from './bossmotion.js';
+import { chainFeel } from './chainfx.js';
 // --- ボス: 構え → 攻撃 → 被弾でひるむ → 撃破で倒れる ---
 export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing = false, scene) {
     const s = this.script;
@@ -21,7 +24,16 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
             p.lean = -3 * k; /* 構えたまま動かさない（口・杯・翼を出し入れすると落ち着かない）。ゆっくり息をするように揺れるだけ */
             dy = Math.round(Math.sin(this.frame / 16) * k);
         }
-        if (c.full && phase >= c.impact && phase < c.impact + 0.12) {
+        const fe = c.full ? chainFeel(s.theme?.kind, c, phase, this.frame) : null; // ボスの大魔法の手ごたえ（光の柱は null）
+        if (fe) {
+            if (fe.hurt)
+                p.eye = 'hurt';
+            dx += fe.dx;
+            dy += fe.dy;
+            p.squash = Math.max(p.squash, fe.squash);
+            flash = flash || fe.flash;
+        }
+        else if (c.full && phase >= c.impact && phase < c.impact + 0.12) {
             const h = phase - c.impact;
             p.eye = 'hurt';
             dx -= h < 0.04 ? 6 : 3;
@@ -33,7 +45,7 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
         }
     }
     // 攻撃の準備と攻撃のモーション（場面とボスの種類ごと。予兆に合わせて動く）。連携詠唱・撃破・逃走のときは使わない
-    const kind = (s.theme?.kind ?? 'dragon');
+    const kind = bossOf(s.theme?.kind).kind;
     const mo = !chain && down < 0 && !fleeing && atk !== 'treasure' ? bossMotion(kind, scene, atk, phase, { reach: Math.max(...s.fighters.filter((f) => !f.off).map((f) => f.slot.x)) + 28 - s.boss.x }) : null;
     if (mo?.move) {
         Object.assign(p, mo.pose);
@@ -89,9 +101,9 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
     mv?.fx?.(ctx, 'back', at, foot); // 土ぼこり・足もとの霧など
     const body = bossCanvas(p, flash && !reducedMotion(), kind);
     // 足場（海面・霧の台座）は、体が跳ねても・傾いても動かさない。体は足場の線より上だけ描き、足場の帯は絵の下から切り出して同じ場所に描く
-    const gr = STYLE[kind].ground;
+    const gr = bossOf(kind).style.ground;
     const moved = transformed || dy !== 0 || tr.y !== 0;
-    // 海の足場（クラーケン）: 動くときは、体だけの絵を動かし、海は動かさない（波が体についていかないように。#102）
+    // 海の足場（bossStyle の sea）: 動くときは、体だけの絵を動かし、海は動かさない（波が体についていかないように。#102）
     const sea = !!gr?.sea && moved;
     const bodyOnly = sea ? bossCanvas({ ...p, hide: 2 }, flash && !reducedMotion(), kind) : body;
     const drawBody = (offX, a, withGround = true) => {
@@ -143,16 +155,27 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
     ctx.globalAlpha = 1;
     mv?.fx?.(ctx, 'front', at, foot); // 口の光・煙・星・声の輪など
     ctx.restore();
+    // 舞台の、ボスの手前（海の波・雪の吹きだまりなど。stagekit.ts）。逃げるときの体のずれは付けない
+    const bossFront = bossOf(kind).stage?.bossFront;
+    if (bossFront) {
+        const { w: W, h: H } = s.arena;
+        const rise = mo?.move ? Math.max(0, -mo.dy) + Math.max(0, (mo.sy - 1) * 84) : 0; // 体が足場から持ち上がっている高さ
+        ctx.save();
+        if (!this.intro)
+            ctx.setTransform(SCALE * this.cam.z, 0, 0, SCALE * this.cam.z, SCALE * (W / 2 + this.shakeXY.x) - SCALE * this.cam.z * this.cam.x, SCALE * (H / 2 + this.shakeXY.y) - SCALE * this.cam.z * this.cam.y);
+        bossFront(ctx, { foot: this.bossFoot, frame: this.frame, rise, W, H });
+        ctx.restore();
+    }
 }
 // 攻撃エフェクト（キャラの後ろ）: 地を這う衝撃波・爆発の輪・隕石の影
 export function attackFxBack(ctx, atk, phase, views, targeted, scene) {
-    if (atk === 'tail' && !(scene === 'tail' && (this.script.theme?.kind ?? 'dragon') === 'dragon')) { // 竜の尾の場面は、尾そのもの（scenes.ts の dragonTail）が床を払う
+    if (atk === 'tail' && !(scene && bossOf(this.script.theme?.kind).fx?.hideTailBand?.includes(scene))) { // 尾の床の帯を描かない場面（BossModule の fx.hideTailBand）
         const k = clamp01((phase - 0.4) / 0.1);
         if (k > 0 && k < 1) {
             const x = lerp(this.bossFoot.x + 30, 384, k);
             ctx.save();
             ctx.globalAlpha = 1 - k * 0.6;
-            const bc = tailBandColors((this.script.theme?.kind ?? 'dragon')) ?? ['#e8d5a8', '#b8a37a'];
+            const bc = tailBandColors(bossOf(this.script.theme?.kind).kind) ?? ['#e8d5a8', '#b8a37a']; // ないボスは、床の砂ぼこり
             for (let y = 96; y < 212; y += 6) {
                 ctx.fillStyle = y % 12 ? bc[0] : bc[1];
                 ctx.fillRect(Math.round(x - 6 + Math.sin(y / 9) * 4), y, 8, 4);
@@ -196,8 +219,8 @@ export function attackFxBack(ctx, atk, phase, views, targeted, scene) {
 /** 身をかわす動き（攻撃は、元いた所を通りすぎる） */
 const PASS_EVADES = ['step', 'dodge', 'jump', 'crawl'];
 export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items, w = -1) {
-    const kind = (this.script.theme?.kind ?? 'dragon');
-    const mouth = kind === 'dragon' ? { x: this.bossFoot.x + 46, y: this.bossFoot.y - 50 } : spriteToWorld(this.bossFoot, STYLE[kind].mouth);
+    const kind = bossOf(this.script.theme?.kind).kind;
+    const mouth = bossOf(kind).fx?.mouth?.(this.bossFoot) ?? spriteToWorld(this.bossFoot, bossOf(kind).style.mouth);
     const rng = new Rng(`fx:${Math.floor(this.lastTime)}`);
     for (const v of views) {
         if (!targeted(v.f))
@@ -206,63 +229,8 @@ export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items, w
         // かわした人（横へ抜ける・跳ぶ・伏せる）への攻撃は、元いた所（立ち位置）まで届く（体は回避の動きで抜けている。#120）。受け止める・迎え撃つ人の前では、手前で止まる
         const pass = blocked && w >= 0 && PASS_EVADES.includes(this.evadeOf(w, v.f));
         const stopX = v.x - (blocked && !pass ? 12 : 0), over = pass && this.evadeOf(w, v.f) === 'crawl';
-        // 竜以外のボスは、ボスごとの飛び道具（蝙蝠・糸・矢・墨・岩・氷など）。竜は今までどおり
-        if (attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, pass, swarm: w >= 0 && this.sceneOf(w) === 'breath', ...(over ? { ty: v.y - 30 } : {}), mouth, hand: spriteToWorld(this.bossFoot, STYLE[kind].hand) }))
-            continue;
-        if (atk === 'claw') { // 竜の爪: ひとり分の、三本の爪痕
-            const k = clamp01((phase - 0.4) / 0.06), fade = 1 - clamp01((phase - 0.48) / 0.1);
-            if (k > 0 && fade > 0) {
-                ctx.save();
-                ctx.globalAlpha = fade * 0.8;
-                for (let i = 0; i < 3; i++)
-                    slashMark(ctx, stopX - 10 + i * 5, v.y - 30, stopX - 2 + i * 5, v.y - 4, 2.5, -2, clamp01(k * 1.4 - i * 0.15), { line: '#1a0208', dark: '#8a0f22', body: '#ff5a6e', hi: '#ffe0e8' });
-                ctx.restore();
-            }
-        }
-        if (atk === 'breath') { // 竜の炎: 炎のかたまりが飛んで（0.38〜0.43）、当たった人を包んで燃える（〜0.66。場面の炎の奔流と同じ時刻に消える）
-            const k = clamp01((phase - 0.38) / 0.05), burn = clamp01((phase - 0.43) / 0.23);
-            if (k > 0 && k < 1)
-                for (let i = 0; i < 3; i++) {
-                    const t = clamp01(k * 1.25 - i * 0.12);
-                    if (t <= 0 || t >= 1)
-                        continue;
-                    flameBall(ctx, lerp(mouth.x, stopX, t), lerp(mouth.y, v.y - 12, t) + Math.sin(t * 9 + i) * 2, 2 + t * 3.5 - i * 0.6);
-                }
-            if (k >= 1 && burn < 1) {
-                const fade = 1 - clamp01((burn - 0.6) / 0.4);
-                if (blocked) { // 鏡ではじかれた炎は、手前で上下に割れて散る
-                    for (let i = 0; i < 5; i++) {
-                        const u = (burn * 2.2 + i / 5) % 1, sgn = i % 2 ? 1 : -1;
-                        flameBall(ctx, stopX - 4 - u * 10, v.y - 12 + sgn * u * 16, (3 - u * 2.4) * fade, fade);
-                    }
-                }
-                else { // 体を包んで燃える炎（下から立ちのぼる）
-                    for (let i = 0; i < 6; i++) {
-                        const u = (burn * 2.6 + i / 6) % 1;
-                        flameBall(ctx, v.x - 7 + (i % 3) * 7 + Math.sin(this.frame / 2 + i) * 1.5, v.y - 2 - u * 22, (4.2 - u * 3.6) * fade, fade);
-                    }
-                }
-            }
-        }
-        if (atk === 'meteor') {
-            const k = clamp01((phase - 0.3) / 0.12);
-            if (k > 0 && k < 1) {
-                const y = lerp(-20, blocked ? v.y - 30 : v.y - 6, k), x = lerp(v.x + 30, stopX + 4, k);
-                for (let i = 1; i <= 4; i++) {
-                    ctx.fillStyle = `rgba(254,174,52,${0.5 - i * 0.1})`;
-                    ctx.fillRect(Math.round(x + i * 3), Math.round(y - i * 5), 4, 4);
-                }
-                ctx.fillStyle = '#5a3a2a';
-                ctx.fillRect(Math.round(x - 4), Math.round(y - 4), 9, 9);
-                ctx.fillStyle = '#8a5a3a';
-                ctx.fillRect(Math.round(x - 3), Math.round(y - 3), 5, 5);
-                ctx.fillStyle = '#ff5a3a';
-                ctx.fillRect(Math.round(x + 2), Math.round(y - 4), 3, 3);
-            }
-            const kb = clamp01((phase - 0.42) / 0.06);
-            if (kb > 0 && kb < 1)
-                this.boom(ctx, stopX, blocked ? v.y - 30 : v.y - 4, kb, '#feae34');
-        }
+        // ボスごとの飛び道具（BossModule の fx.hit）。ないボスは、何も飛ばさない
+        attackHitFx(kind, atk, { ctx, phase, frame: this.frame, x: v.x, y: v.y, stopX, blocked, pass, swarm: w >= 0 && this.sceneOf(w) === 'breath', ...(over ? { ty: v.y - 30 } : {}), mouth, hand: spriteToWorld(this.bossFoot, bossOf(kind).style.hand) });
     }
     if (atk === 'treasure') {
         for (const v of views) {
@@ -280,19 +248,6 @@ export function attackFxFront(ctx, atk, phase, views, targeted, evaded, items, w
     }
 }
 export function boom(ctx, x, y, k, col) {
-    ctx.save();
-    ctx.globalAlpha = 1 - k;
-    ctx.fillStyle = col;
-    for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * Math.PI * 2;
-        ctx.fillRect(Math.round(x + Math.cos(a) * k * 16), Math.round(y + Math.sin(a) * k * 10), 3, 3);
-    }
-    if (k < 0.4) {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, y, 8 * (1 - k), 0, Math.PI * 2);
-        ctx.fill();
-    }
-    ctx.restore();
+    boomBurst(ctx, x, y, k, col);
 }
 //# sourceMappingURL=arena-boss.js.map

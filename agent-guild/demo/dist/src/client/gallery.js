@@ -12,26 +12,16 @@ import { FX_LOOK_BEFORE, FX_LOOK_DEFAULT, setFxLook } from './fxlook.js';
 import { h } from './ui.js';
 import { tl } from '../shared/i18n.js';
 import { bossWeakness } from './bossmoves.js';
+import { bossOf } from './bossapi.js';
+import { labBosses, labPairs } from './motionlab.js';
 import { MOVE_LABEL, ultMove } from './ultmoves.js';
 const SCENE_JA = { ougi: tl('奥義（跳躍）'), rush: tl('乱舞'), summon: tl('召喚'), parry: tl('返し技'), seal: tl('封印'), awaken: tl('覚醒') };
 const SECONDS_PER_WAVE = 3.4;
-// ボスのモーション: ボスの種類（と、そのボスのブレスの種類）と、見せる場面（bossmotion.ts の moveFor で動きが決まる）
-const BOSSES = [
-    { kind: 'dragon', name: '竜', breath: 'fire' }, { kind: 'spider', name: '大蜘蛛', breath: 'web' }, { kind: 'goblin', name: 'ゴブリンの群れ', breath: 'arrows' },
-    { kind: 'kraken', name: 'クラーケン', breath: 'water' }, { kind: 'golem', name: '石の巨人', breath: 'rocks' }, { kind: 'vampire', name: '吸血鬼伯爵', breath: 'mist' },
-    { kind: 'giant', name: '氷の巨人', breath: 'ice' },
-];
-// 正しく動けた冒険者の対応技（bossmoves.ts の COUNTERS と同じ組み合わせ）。ギャラリーで動きと見比べるための説明で、本番の画面には出さない
+// ボスのモーション: ボスの種類と、見せる場面（bossmotion.ts の moveFor で動きが決まる）。ボスは、登録されたボス（見本帳の名前 lab.name があるもの）。並びは紹介ページと同じ
+const BOSSES = labBosses(true);
+// 正しく動けた冒険者の対応技の説明（見本帳の lab.pairs）。ギャラリーで動きと見比べるための説明で、本番の画面には出さない
 // （本番の技名は、自分の冒険者がその場面で答えた言葉。ほかの人は「かわした」）
-const COUNTER_NAMES = {
-    dragon: { breath: '鏡で炎を受ける', claw: '影を残してすり抜ける', dive: '飛びのく', tail: '跳んでかわす' },
-    vampire: { breath: '聖なる光で蝙蝠を散らす', claw: '爪をはじく', dive: '飛びのく', tail: '振り向いて受け止める' },
-    spider: { breath: '糸を斬りはらう', claw: '横へ跳ぶ', dive: '影を残してすり抜ける', tail: '脚を跳び越える' },
-    goblin: { breath: '盾をかかげて矢を受ける', claw: '落とし穴を跳び越える', dive: '投石から飛びのく', tail: '穂先をはらう' },
-    kraken: { breath: '風で墨を吹きはらう', claw: '伏せて触手をくぐる', dive: '跳んで離れる', tail: '触手を斬る' },
-    golem: { breath: '石礫を打ち砕く', claw: '拳から飛びのく', dive: '地割れを跳び越える', tail: '伏せてやりすごす' },
-    giant: { breath: '炎で冷気を溶かす', claw: '氷の槍を撃ち落とす', dive: '踏みつけから飛びのく', tail: '棍棒を跳び越える' },
-};
+const counterName = (kind, scene) => labPairs(kind)?.[scene]?.[1];
 const MOTION_SCENES = [
     { scene: 'breath', name: 'ブレス（息を吸って吐く）' }, { scene: 'claw', name: '爪・突進' }, { scene: 'tail', name: '尾（背を向けて振る）' },
     { scene: 'dive', name: '急降下（跳ぶ・登る・踏みつけ）' }, { scene: 'opening', name: 'ふらつき（隙）' }, { scene: 'fog', name: '霧の中' },
@@ -105,7 +95,7 @@ async function main() {
     };
     // ---- ボスのモーション: ボス × 場面。見本の討伐のふつうの場面の上で、ボスの種類と場面を差し替えて再生する ----
     const normW = Math.max(0, full.waves.findIndex((wv) => full.cases[wv.caseIndex]?.kind === 'normal'));
-    let mKind = 'dragon', mScene = 'breath', mt = 0, mAuto = false, mElement = '炎';
+    let mKind = BOSSES[0]?.kind ?? 'vampire', mScene = 'breath', mt = 0, mAuto = false, mElement = '炎';
     const ELEMENTS = ['炎', '氷', '雷', '風', '光', '闇'];
     const mElementRow = h('div', { class: 'g-row' });
     let mProto = true; // 冒険者の動き: モーション見本帳で武器ごとに選んだ動き（本番）／以前の動き
@@ -118,12 +108,13 @@ async function main() {
     let mr;
     const makeMotion = () => {
         const b = BOSSES.find((x) => x.kind === mKind);
-        const theme = { hue: 0, kind: mKind, breath: b.breath };
+        const theme = { hue: 0, kind: mKind, breath: '' };
         // 正しく動けた冒険者の答えを、この組み合わせの対応技の説明に差し替える（技名の表示と吹き出しが、動きと一致するように）
-        const counter = COUNTER_NAMES[mKind][mScene] ?? '（共通の動き）'; // （ で始まる答えは、技名・呪文名として出さない
+        const counter = counterName(mKind, mScene) ?? '（共通の動き）'; // （ で始まる答えは、技名・呪文名として出さない
         const waves = full.waves.map((wv, i) => (i !== normW ? wv : { ...wv, events: wv.events.map((e) => (e.type === 'strike' && e.success ? { ...e, excerpt: counter } : e)) }));
-        // 隙の場面: 竜は弱点の属性を差し替える（提出ごとに変わる）。ほかのボスは決まった弱点（ないボスは属性なし）
-        const cases = full.cases.map((c, i) => (i === full.waves[normW].caseIndex ? { ...c, element: mKind === 'dragon' ? mElement : undefined } : c));
+        // 隙の場面: 属性を答える課題のボス（BossModule の elements）は、弱点の属性を差し替える（提出ごとに変わる）。ほかのボスは決まった弱点（ないボスは属性なし）
+        const quiz = !!bossOf(mKind).elements;
+        const cases = full.cases.map((c, i) => (i === full.waves[normW].caseIndex ? { ...c, element: quiz ? mElement : undefined } : c));
         const sc = { ...full, waves, cases, theme, boss: { ...full.boss, name: b.name } };
         const cv = h('canvas', { class: 'arena-canvas pixel' });
         mr = new ArenaRenderer(cv, sc);
@@ -138,15 +129,15 @@ async function main() {
         mTitle.textContent = `${b.name}：${MOTION_SCENES.find((x) => x.scene === mScene).name}`;
         const wk = bossWeakness(mKind);
         mCounter.textContent = mScene === 'opening'
-            ? (mKind === 'dragon' ? '竜の弱点は戦いの流れで変わり、答える属性も提出ごとに変わります。属性を選んで見られます' : wk ? `弱点の属性は「${wk}」で固定（答えに属性は要りません）` : '弱点の属性がはっきりしないボスなので、属性なし（白い会心の一撃）')
-            : COUNTER_NAMES[mKind][mScene] ? `正しく動けた冒険者の対応技：${counter}` : 'この場面の冒険者の動きは、ボスによらず共通です';
+            ? (quiz ? 'このボスの弱点は戦いの流れで変わり、答える属性も提出ごとに変わります。属性を選んで見られます' : wk ? `弱点の属性は「${wk}」で固定（答えに属性は要りません）` : '弱点の属性がはっきりしないボスなので、属性なし（白い会心の一撃）')
+            : counterName(mKind, mScene) ? `正しく動けた冒険者の対応技：${counter}` : 'この場面の冒険者の動きは、ボスによらず共通です';
         for (const x of mKindRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === mKind);
         for (const x of mSceneRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === mScene);
         for (const x of mElementRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === mElement);
-        mElementRow.hidden = mScene !== 'opening' || mKind !== 'dragon';
+        mElementRow.hidden = mScene !== 'opening' || !quiz;
         for (const x of mProtoRow.querySelectorAll('button'))
             x.classList.toggle('on', x.dataset.k === String(mProto));
     };

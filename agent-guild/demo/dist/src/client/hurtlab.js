@@ -1,8 +1,8 @@
 // 被弾モーション見本帳（運営・開発用）: 外した冒険者がボスの攻撃を受けるときの動きの候補を並べて、見比べて選ぶ。
 // scripts/build-hurtlab.mjs が 1ファイルの HTML にまとめる。絵は見本帳（motionlab.ts）の「被弾」の型をそのまま使う。
-import { CATEGORIES, CH, CW, H, W, BOSS_LIST, PAIRS, STAND, crowdSlots, protoPattern, render, renderCrowd, setBossKind, setReduced } from './motionlab.js';
+import { CATEGORIES, CH, CW, H, W, labBosses, labPairs, STAND, crowdSlots, protoPattern, render, renderCrowd, setBossKind, setReduced } from './motionlab.js';
 import { MOTION_PICKS } from './motionpicks.js';
-import { HURT_BY_BOSS } from './hurtmoves.js';
+import { bossOf } from './bossapi.js';
 import { NO_GEAR } from './arena-common.js';
 import { BODY_TYPES } from '../shared/build.js';
 import { WEAPON_KINDS, WEAPON_LABELS } from '../shared/catalog.js';
@@ -13,18 +13,18 @@ const FITS = {
     'hurt-now': 'いまの全場面',
     'hurt-daze': 'すべての被弾の土台（爪・尾など）',
     'hurt-fly': '「吹き飛ばされた！」・ボスの大技（召喚など）',
-    'hurt-crush': '岩・踏みつけ・落下（石の巨人）',
-    'hurt-scorch': '炎・雷（竜）',
+    'hurt-crush': '岩・踏みつけ・落下',
+    'hurt-scorch': '炎・雷',
     'hurt-curse': '呪い・霧（吸血鬼伯爵）',
-    'hurt-web': '糸・網（大蜘蛛）',
-    'hurt-arrow': '矢・投げ槍（ゴブリンの群れ）',
-    'hurt-ink': '墨・水（クラーケン）',
-    'hurt-ice': '氷・冷気（氷の巨人）',
+    'hurt-web': '糸・網',
+    'hurt-arrow': '矢・投げ槍',
+    'hurt-ink': '墨・水',
+    'hurt-ice': '氷・冷気',
     'hurt-soul-ghost': 'ボスの大技を浴びたとき（第一候補）',
     'hurt-soul-mouth': 'ボスの大技を浴びたとき（おばけと交互）',
 };
 // ボス・場面を切り替えると、12人の画面の被弾の型は本番の割り当て（hurtmoves.ts）に変わる
-const syncHurt = () => { st.crowd = HURT_BY_BOSS[st.boss][st.scene]; crowdSel.value = st.crowd; };
+const syncHurt = () => { st.crowd = bossOf(st.boss).hurt[st.scene]; crowdSel.value = st.crowd; };
 // いま本番で使っている成功の動き（見本帳で武器ごとに選ばれた型）と、使っている武器の数
 const SUCCESS = ['guard', 'evade', 'jump'].flatMap((cat) => {
     const c = CATEGORIES.find((x) => x.id === cat);
@@ -82,7 +82,7 @@ for (const sp of [1, 0.5, 0.25]) {
     b.onclick = () => { st.speed = sp; speedRow.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); };
     speedRow.append(b);
 }
-app.append(el('section', { class: 'bar' }, select('冒険者', BODY_TYPES, (v) => BODY_JA[v] ?? v, st.body, (v) => { st.body = v; }), select('武器', WEAPON_KINDS, (v) => WEAPON_LABELS[v] ?? v, st.weapon, (v) => { st.weapon = v; }), select('うしろのボス', BOSS_LIST.map((b) => b.kind), (v) => BOSS_LIST.find((b) => b.kind === v).name, st.boss, (v) => { st.boss = v; syncHurt(); paintScenes(); }), el('div', { class: 'ctl' }, el('span', {}, '速さ'), speedRow), el('div', { class: 'ctl grow' }, el('span', {}, '時刻'), el('div', { class: 'row' }, pauseBtn, timeIn))));
+app.append(el('section', { class: 'bar' }, select('冒険者', BODY_TYPES, (v) => BODY_JA[v] ?? v, st.body, (v) => { st.body = v; }), select('武器', WEAPON_KINDS, (v) => WEAPON_LABELS[v] ?? v, st.weapon, (v) => { st.weapon = v; }), select('うしろのボス', labBosses().map((b) => b.kind), (v) => labBosses().find((b) => b.kind === v).name, st.boss, (v) => { st.boss = v; syncHurt(); paintScenes(); }), el('div', { class: 'ctl' }, el('span', {}, '速さ'), speedRow), el('div', { class: 'ctl grow' }, el('span', {}, '時刻'), el('div', { class: 'row' }, pauseBtn, timeIn))));
 // 候補のカード
 app.append(el('h2', { class: 'sec' }, '被弾の案'));
 const grid = el('section', { class: 'grid' });
@@ -126,7 +126,7 @@ crowdSel.onchange = () => { st.crowd = crowdSel.value; };
 const sceneRow = el('div', { class: 'seg' });
 function paintScenes() {
     sceneRow.replaceChildren(...SCENES.map((sc) => {
-        const b = el('button', { class: sc === st.scene ? 'on' : '' }, PAIRS[st.boss][sc][0]);
+        const b = el('button', { class: sc === st.scene ? 'on' : '' }, labPairs(st.boss)[sc][0]);
         b.onclick = () => { st.scene = sc; syncHurt(); paintScenes(); };
         return b;
     }));
@@ -180,7 +180,7 @@ function frame(now) {
     for (const { p, c } of cards)
         render(c, p, st.t, L);
     const pat = HURT.find((p) => p.id === st.crowd) ?? HURT[0];
-    const resp = PAIRS[st.boss][st.scene][2];
+    const resp = labPairs(st.boss)[st.scene][2];
     const okPat = (lk, i) => protoPattern(resp, lk.look.weapon, i) ?? (resp === 'crawl' ? CATEGORIES.find((c) => c.id === 'evade').patterns.find((x) => x.id === 'evade-duck') : resp === 'barrier' ? CATEGORIES.find((c) => c.id === 'guard').patterns.find((x) => x.id === 'guard-hex') : STAND);
     const members = crowdSlots().map((slot, i) => { const lk = i === 5 ? L : crowdLooks[i]; return { look: lk, pattern: st.all || HIT4.has(i) ? pat : okPat(lk, i), mine: i === 5, slot, delay: ((i * 7) % 5) * 0.006 }; });
     renderCrowd(crowdCtx, members, st.t, false, false);

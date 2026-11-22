@@ -46,12 +46,25 @@ export async function loadLang(l) {
     // 1ファイルに書き出したデモ: 辞書はページに埋めこんである
     const inline = globalThis.__DICTS__?.[l];
     if (inline) {
-        dicts[l] = inline;
+        dicts[l] = { ...(extra[l] ?? {}), ...inline };
         return;
     }
     // 1ファイルにまとめるとき（bun build）に辞書を巻きこまないよう、読みこむ先は実行時に組み立てる
     const spec = new URL(`./locales/${l}.js`, import.meta.url).href;
-    dicts[l] = (await import(spec)).default;
+    dicts[l] = { ...(extra[l] ?? {}), ...(await import(spec)).default };
+}
+// あとから足す訳（シーズンのパックのボスの言葉など。#118）。辞書を読む前に足したものは、読んだときに重ねる
+const extra = {};
+/** 訳を足す（言語 → 原文 → 訳）。もとの辞書にある訳は上書きしない（本体の言葉は本体の訳のまま） */
+export function addTranslations(add) {
+    for (const [l, d] of Object.entries(add)) {
+        if (!isLang(l) || l === 'ja' || !d)
+            continue;
+        const plain = Object.fromEntries(Object.entries(d).filter(([k, v]) => typeof k === 'string' && typeof v === 'string'));
+        extra[l] = { ...plain, ...(extra[l] ?? {}) };
+        if (dicts[l])
+            dicts[l] = { ...plain, ...dicts[l] };
+    }
 }
 export async function loadAllLangs() { await Promise.all(LANG_CODES.map(loadLang)); }
 export const setLangProvider = (p) => { provider = p; };
