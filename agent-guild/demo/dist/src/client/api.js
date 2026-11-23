@@ -4,21 +4,31 @@ import { simulateBattle } from '../shared/simulate.js';
 import { caseTitleOf } from '../shared/types.js';
 import { computeStats } from '../shared/stats.js';
 import { getLang, tl } from '../shared/i18n.js';
+import { registerSeasonTools } from '../shared/catalog.js';
 export let demoMode = false;
 let demoData = null;
 // 紹介ページ用: サーバーの有無にかかわらず、同梱のデモ討伐データを読む
 export function getDemoBattle() { return getDemo(); }
+/** 課題のシーズンのパックの道具（#149）を、道具の一覧に足す（名前・アイコン・おとりの一言などを、討伐画面や冒険の記録で使う） */
+export function installTaskTools(task) {
+    if (task?.toolDefs?.length)
+        registerSeasonTools(task.toolDefs);
+}
 async function getDemo() {
     if (demoData)
         return demoData;
-    if (window.__DEMO__)
-        return (demoData = window.__DEMO__);
-    if (window.__DEMOS__)
-        return (demoData = window.__DEMOS__[getLang()] ?? window.__DEMOS__.ja);
-    // 言語ごとのデモ（demo/battle.<lang>.json）。無ければ日本語のもの
-    const l = getLang();
-    const r = (l !== 'ja' && (await fetch(`demo/battle.${l}.json`).catch(() => null))) || null;
-    return (demoData = await (r?.ok ? r : await fetch('demo/battle.json')).json());
+    const d = await (async () => {
+        if (window.__DEMO__)
+            return window.__DEMO__;
+        if (window.__DEMOS__)
+            return window.__DEMOS__[getLang()] ?? window.__DEMOS__.ja;
+        // 言語ごとのデモ（demo/battle.<lang>.json）。無ければ日本語のもの
+        const l = getLang();
+        const r = (l !== 'ja' && (await fetch(`demo/battle.${l}.json`).catch(() => null))) || null;
+        return (await (r?.ok ? r : await fetch('demo/battle.json')).json());
+    })();
+    installTaskTools(d.task);
+    return (demoData = d);
 }
 async function req(method, path, body) {
     const r = await fetch(path, {
@@ -69,6 +79,7 @@ export async function getSeason() {
     const { applyCostRules } = await import('../shared/catalog.js');
     applyCostRules(season.costRules);
     await ensureBoss(season.task.briefing?.boss); // シーズンのパックのボス（なければ仮の影）
+    installTaskTools(season.task); // シーズンのパックの道具
     return season;
 }
 // season を渡すと、過去のシーズンの討伐（再生用）
@@ -80,6 +91,7 @@ export async function getBattle(season) {
     }
     const d = await req('GET', season ? `api/battle?season=${encodeURIComponent(season)}` : 'api/battle');
     await ensureBoss(d.task.briefing?.boss); // シーズンのパックのボス（なければ仮の影）
+    installTaskTools(d.task); // シーズンのパックの道具
     return d;
 }
 // 過去のシーズンの一覧（新しい順）。デモ版には無い

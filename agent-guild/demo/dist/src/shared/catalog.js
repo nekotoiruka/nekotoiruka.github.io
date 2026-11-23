@@ -1,6 +1,6 @@
 // 運営が用意するツールカタログ。参加者は任意コードを持ち込めず、ここから選ぶ。
 // cost はビルドコスト（上限100）に加算される。weapon は見た目の武器。
-import { getLang, perLang, tl } from './i18n.js';
+import { addTranslations, getLang, perLang, tIn, tl } from './i18n.js';
 export const WEAPON_KINDS = ['bow', 'spear', 'dagger', 'wand', 'shield', 'axe', 'hammer', 'book', 'sword', 'katana', 'scythe', 'fan', 'blaster', 'pan', 'umbrella', 'guitar'];
 export const WEAPON_LABELS = perLang(() => ({
     bow: tl('弓'), spear: tl('槍'), dagger: tl('短剣'), wand: tl('杖'), shield: tl('盾'), axe: tl('斧'), hammer: tl('ハンマー'), book: tl('魔導書'),
@@ -33,7 +33,7 @@ export function apLevel(ap, cap) {
     const r = ap / cap;
     return r < 0.03 ? 1 : r < 0.15 ? 2 : r < 0.4 ? 3 : 4;
 }
-export const TOOL_CATALOG = perLang(() => ([
+const BUILTIN_TOOLS = () => ([
     {
         id: 'kb_search',
         name: tl('社内ナレッジ検索'),
@@ -165,96 +165,12 @@ export const TOOL_CATALOG = perLang(() => ([
         optIn: true,
         decoy: tl('お守りを握りしめた！ …気のせいだった'),
     },
-    {
-        id: 'dragon_horn',
-        name: tl('竜呼びの角笛'),
-        cost: 10,
-        weapon: 'guitar',
-        description: tl('吹けば、竜と話ができるという言い伝えがある。'),
-        inputSchema: { type: 'object', properties: { message: { type: 'string' } } },
-        optIn: true,
-        decoy: tl('角笛を吹いた！ …竜は聞いていない'),
-    },
-    // --- シーズン2（大蜘蛛）・シーズン3（ゴブリンの大群）の道具 ---
-    {
-        id: 'poison_vial', effect: tl('毒の種類が分かった'),
-        name: tl('毒見の小瓶'),
-        cost: 10,
-        weapon: 'dagger',
-        description: tl('傷口の血を一滴たらすと色が変わり、体に入った毒の種類が分かる。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        source: 'scan',
-    },
-    {
-        id: 'moss_lantern', effect: tl('闇の中の動きが見えた'),
-        name: tl('光苔のランタン'),
-        cost: 10,
-        weapon: 'wand',
-        description: tl('闇の中でも、あたりにいるものの姿と動きを、青白い光でぼんやり照らし出す。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        source: 'sense',
-    },
-    {
-        id: 'web_cutter',
-        name: tl('糸切りばさみ'),
-        cost: 5,
-        weapon: 'dagger',
-        description: tl('蜘蛛の糸も切れるという、よく研いだはさみ。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        decoy: tl('糸を切った！ …蜘蛛はまた糸を吐いた'),
-    },
-    {
-        id: 'spyglass', effect: tl('遠くの頭目の飾りまで見えた'),
-        name: tl('遠眼鏡'),
-        cost: 10,
-        weapon: 'blaster',
-        description: tl('遠くの敵の姿や持ち物まで、くっきり見える。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        source: 'scan',
-    },
-    {
-        id: 'listening_tube', effect: tl('見えない場所の物音で動きが分かった'),
-        name: tl('聞き耳の筒'),
-        cost: 10,
-        weapon: 'guitar',
-        description: tl('地面に当てると、見えない場所で何が起きているかが、物音で分かる。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        source: 'sense',
-    },
-    {
-        id: 'goblin_mask',
-        name: tl('ゴブリンの仮面'),
-        cost: 5,
-        weapon: 'fan',
-        description: tl('かぶるとゴブリンそっくりに見える、という触れ込みの仮面。'),
-        inputSchema: { type: 'object', properties: {} },
-        optIn: true,
-        decoy: tl('仮面をかぶった！ …すぐにばれた'),
-    },
-    // --- シーズン4〜7（クラーケン・石の巨人・吸血鬼・氷の巨人）の道具 ---
-    { id: 'sea_glass', effect: tl('しぶきの向こうの旗の色が見えた'), name: tl('潮眼鏡'), cost: 10, weapon: 'blaster', description: tl('波しぶきや霧の向こうでも、遠くの旗や船の様子がはっきり見える。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
-    { id: 'sounding_line', effect: tl('濁った水の下の動きが分かった'), name: tl('測鉛'), cost: 10, weapon: 'hammer', description: tl('鉛のおもりを海に垂らすと、濁った水の下で何が動いているかが手ごたえで分かる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
-    { id: 'ship_bell', name: tl('号鐘'), cost: 5, weapon: 'hammer', description: tl('よく響く船の鐘。海の魔物を追い払う、という船乗りもいる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('鐘を鳴らした！ …クラーケンは気にしていない') },
-    { id: 'rubbing_kit', effect: tl('すり減った刻印の名前が分かった'), name: tl('拓本の道具'), cost: 10, weapon: 'book', description: tl('紙を当てて墨でこすると、すり減って読めない刻印も形が浮かび上がる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
-    { id: 'echo_stone', effect: tl('砂煙の中の巨人の動きが分かった'), name: tl('響き石'), cost: 10, weapon: 'wand', description: tl('地面に置くと、砂煙の向こうで動くものの重さと向きが、震えで分かる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
-    { id: 'pickaxe', name: tl('つるはし'), cost: 5, weapon: 'axe', description: tl('岩でも掘れる頑丈なつるはし。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('力いっぱい叩いた！ …石の巨人には傷ひとつない') },
+    // --- 練習用シーズン（吸血鬼伯爵）の道具。ほかのシーズンだけの道具は、シーズンのパックの tools.json（#149） ---
     { id: 'silver_mirror', effect: tl('目に見えない呪いの紋が映った'), name: tl('銀の手鏡'), cost: 10, weapon: 'shield', description: tl('目に見えない呪いや、化けたものの本当の姿を映し出す。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
     { id: 'blessed_candle', effect: tl('霧の中の影が見えた'), name: tl('聖別の燭台'), cost: 10, weapon: 'wand', description: tl('魔の霧の中でも消えない灯り。霧に隠れたものの影を照らす。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
     // 分厚い書物（城の書庫）: 読むと、結果がとても長い（1万トークンほど）。冒険者が自分で読むと、その場面の 行動力 が尽きる。
     // お供（サブエージェント）に持たせて読ませると、冒険者には要点だけが返る
     { id: 'family_tree', effect: tl('分厚い系譜から、眷属の退け方が分かった'), name: tl('伯爵家の系譜'), cost: 10, weapon: 'book', description: tl('城の書庫にある、伯爵の眷属たちの分厚い系譜。眷属の名と、退け方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    // シーズンパックの各ボスの分厚い書物（お供に読ませる場面。吸血鬼伯爵の系譜と同じ使い方）
-    { id: 'dragon_lineage', effect: tl('分厚い血統録から、若竜の鎮め方が分かった'), name: tl('竜の血統録'), cost: 10, weapon: 'book', description: tl('王都の魔導院が書き継いできた、竜の血統の分厚い記録。鱗の模様と角の形ごとに、若竜の鎮め方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    { id: 'mine_ledger', effect: tl('分厚い坑道帳から、仲間への近道が分かった'), name: tl('銀鉱の坑道帳'), cost: 10, weapon: 'book', description: tl('昔の銀鉱の鉱夫たちが書き残した、坑道の分厚い記録。分かれ道の刻印と跡の続く先ごとに、近道が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    { id: 'pot_records', effect: tl('分厚い記録から、呪い壺の守り方が分かった'), name: tl('呪い壺の記録'), cost: 10, weapon: 'book', description: tl('王立書庫の錬金術師たちが書き継いできた、ゴブリンの呪い壺の分厚い記録。壺の見た目と匂いごとに、身の守り方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    { id: 'lamp_log', effect: tl('分厚い灯火簿から、灯台の知らせの進路が分かった'), name: tl('灯台守の灯火簿'), cost: 10, weapon: 'book', description: tl('双子灯台の灯台守が書き継いできた、灯火の知らせの分厚い記録。灯の色と瞬き方ごとに、船の進路が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    { id: 'statue_catalog', effect: tl('分厚い目録から、守護像の止め方が分かった'), name: tl('守護像目録'), cost: 10, weapon: 'book', description: tl('学術院が百年かけて調べ上げた、遺跡の守護像の分厚い目録。胸の銘板に浮かぶ銘と、止め方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
-    { id: 'track_book', effect: tl('分厚い足跡帳から、獣の追い払い方が分かった'), name: tl('獣の足跡帳'), cost: 10, weapon: 'book', description: tl('犬ぞり使いの組合が書き継いできた、雪原の獣の足跡の分厚い記録。足跡の形と並び方ごとに、追い払い方が載っている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'archive' },
     // 分厚い書物を引く道具（検索）。どのシーズンの書物にも使える。説明はシーズンごとに上書きする（書物の名前を入れる）。
     // 索引は見出しの言葉どおりでないと引けない。水晶玉は言い方が違っても引けるが、似た外れも混じる。古地図の索引は手がかりを2つそろえて引く
     // 紛らわしい道具: 魔物の動きと身のかわし方の早見表。どの相手の表かは、シーズンの説明と結果の見出しで分かる（この戦いの相手ではない）
@@ -263,9 +179,6 @@ export const TOOL_CATALOG = perLang(() => ([
     { id: 'crystal_ball', effect: tl('水晶玉に、近い行が浮かんだ'), name: tl('水晶玉'), cost: 10, weapon: 'wand', description: tl('のぞきこんで手がかりを唱えると、言い方が違っても、分厚い書物の中から意味の近い行を3つ浮かべる。似た別の行が混じることもある。'), inputSchema: { type: 'object', properties: { words: { type: 'string', description: tl('手がかり（見たまま・聞いたままの言葉でよい）') } }, required: ['words'] }, optIn: true, search: 'crystal' },
     { id: 'old_map_index', effect: tl('古地図の索引で、手がかりの重なる行が見つかった'), name: tl('古地図の索引'), cost: 5, weapon: 'book', description: tl('手がかりを2つ以上そろえて渡すと、分厚い書物から、そのすべてを含む行だけを返す。手がかりが1つだけだと、候補が多すぎて返せない。'), inputSchema: { type: 'object', properties: { clues: { type: 'array', items: { type: 'string' }, description: tl('手がかり（2つ以上）') } }, required: ['clues'] }, optIn: true, search: 'atlas' },
     { id: 'garlic', name: tl('にんにくの首飾り'), cost: 5, weapon: 'fan', description: tl('吸血鬼よけの定番、と言われている。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('にんにくを掲げた！ …伯爵は少し顔をしかめただけだった') },
-    { id: 'snow_compass', effect: tl('いま立っている斜面の名前が分かった'), name: tl('雪原の羅針盤'), cost: 10, weapon: 'book', description: tl('吹雪で何も見えなくても、いま立っている斜面の名前を指し示す。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'scan' },
-    { id: 'frost_rod', effect: tl('吹雪の向こうの身ぶりが分かった'), name: tl('霜読みの杖'), cost: 10, weapon: 'spear', description: tl('氷に突き立てると、吹雪の向こうで動く巨人の身ぶりが、氷の震えで分かる。'), inputSchema: { type: 'object', properties: {} }, optIn: true, source: 'sense' },
-    { id: 'hot_stone', name: tl('懐炉石'), cost: 5, weapon: 'pan', description: tl('火で温めて懐に入れる石。雪原の必需品。'), inputSchema: { type: 'object', properties: {} }, optIn: true, decoy: tl('懐が温まった！ …巨人は寒さなど気にしていない') },
     {
         id: 'json_validator',
         name: tl('出力形式チェッカー'),
@@ -274,8 +187,46 @@ export const TOOL_CATALOG = perLang(() => ([
         description: tl('回答 JSON が課題の出力形式を満たすか検証し、問題点を返す。'),
         inputSchema: { type: 'object', properties: { json: { type: 'string' } }, required: ['json'] },
     },
-]));
-export const TOOL_BY_ID = perLang(() => (Object.fromEntries(TOOL_CATALOG.map((t) => [t.id, t]))));
+]);
+const seasonTools = [];
+let toolsVer = 0;
+/** シーズンのパックの道具を足す（サーバーは課題を読むとき、ブラウザはシーズンの課題の toolDefs を受け取ったとき） */
+export function registerSeasonTools(defs, locales) {
+    if (locales)
+        addTranslations(locales);
+    for (const d of defs) {
+        const i = seasonTools.findIndex((x) => x.id === d.id);
+        if (i >= 0)
+            seasonTools[i] = d;
+        else
+            seasonTools.push(d);
+    }
+    toolsVer++;
+}
+/** シーズンのパックから足した道具の id */
+export const seasonToolIds = () => seasonTools.map((t) => t.id);
+/** 足した道具の、並べる位置（after） */
+export const seasonToolAfter = (id) => seasonTools.find((t) => t.id === id)?.after;
+const localized = (d) => {
+    const { after: _after, ...t } = d;
+    const tr = (ja) => tIn(getLang(), ja); // 原文は tools.json の言葉（訳は locales から足したもの）
+    return { ...t, name: tr(t.name), description: tr(t.description), ...(t.effect ? { effect: tr(t.effect) } : {}), ...(t.decoy ? { decoy: tr(t.decoy) } : {}) };
+};
+function withSeasonTools() {
+    const list = BUILTIN_TOOLS();
+    for (const d of seasonTools) {
+        const t = localized(d), at = list.findIndex((x) => x.id === d.id);
+        if (at >= 0) {
+            list[at] = t;
+            continue;
+        }
+        const after = d.after ? list.findIndex((x) => x.id === d.after) : -1;
+        list.splice(after >= 0 ? after + 1 : list.length, 0, t);
+    }
+    return list;
+}
+export const TOOL_CATALOG = perLang(withSeasonTools, () => toolsVer);
+export const TOOL_BY_ID = perLang(() => (Object.fromEntries(TOOL_CATALOG.map((t) => [t.id, t]))), () => toolsVer);
 export function effectiveCatalog(overrides = {}) {
     return TOOL_CATALOG
         .filter((t) => (t.optIn ? overrides[t.id]?.available === true : overrides[t.id]?.available !== false))

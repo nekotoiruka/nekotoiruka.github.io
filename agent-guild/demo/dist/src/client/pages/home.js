@@ -6,12 +6,21 @@ import { myHero } from '../myhero.js';
 import { renderAbout } from './about.js';
 import { h, nodes } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
-function daysLeft(end) {
+// 締切までの残り。1日以上は日数、1日を切ったら時間・分（締切3分前でも「あと1日」と出さない）。終了日時がなければ null、過ぎていれば 0
+function timeLeft(end) {
     if (!end)
         return null;
-    const d = Math.ceil((Date.parse(end) - Date.now()) / 864e5);
-    return Number.isFinite(d) ? Math.max(0, d) : null;
+    const ms = Date.parse(end) - Date.now();
+    if (!Number.isFinite(ms))
+        return null;
+    if (ms <= 0)
+        return 0;
+    if (ms >= 864e5)
+        return { days: Math.ceil(ms / 864e5) };
+    const m = Math.ceil(ms / 6e4);
+    return m >= 60 ? { hours: Math.floor(m / 60), minutes: m % 60 } : { minutes: m };
 }
+const leftText = (l) => l === null ? tl('開催中') : l === 0 ? tl('最終日') : 'days' in l ? tl(`あと{0}日`, l.days) : 'hours' in l ? tl('あと{0}時間{1}分', l.hours, l.minutes) : tl('あと{0}分', l.minutes);
 const stat = (label, value, note = '') => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, String(value)), note ? h('div', { class: 'stat-note small muted' }, note) : null);
 // --- 参加中の人のダッシュボード ---
 async function dashboard(season, me, rerender) {
@@ -21,7 +30,7 @@ async function dashboard(season, me, rerender) {
     const standing = script && myFighter >= 0 ? script.standings.find((s) => s.f === myFighter) : undefined;
     const subs = (await mySubmissions().catch(() => ({ items: [] }))).items;
     const last = subs[0];
-    const left = daysLeft(season.seasonEnd);
+    const left = timeLeft(season.seasonEnd);
     const busy = subs.some((s) => s.status === 'queued' || s.status === 'grading');
     if (busy)
         setTimeout(() => { if (document.querySelector('.dash'))
@@ -38,9 +47,27 @@ async function dashboard(season, me, rerender) {
     return [
         h('div', { class: 'dash' }, accountBar(season, me, rerender), h('p', { class: 'eyebrow' }, tl(`{0}　討伐依頼`, season.task.season)), h('h2', {}, briefingOf(season)?.headline ?? season.task.title), h('div', { class: 'stat-row' }, stat(tl('戦果の順位'), standing ? tl(`{0}位`, standing.rank) : '—', standing ? tl(`全{0}人中・戦果 {1}`, script.fighters.length, standing.score ?? standing.accuracy) : tl('出発するとつきます')), stat(tl('今日の出発'), tl(`残り{0}回`, me.remainingToday), tl(`1日{0}回まで`, season.limits.submissionsPerDay)), season.seasonOver
             ? stat(tl('シーズン'), tl('受付終了'), nextAt ? tl('次は {0} から', nextAt) : '')
-            : stat(tl('シーズン'), left === null ? tl('開催中') : left === 0 ? tl('最終日') : tl(`あと{0}日`, left), season.seasonEnd ? tl(`〜{0}`, new Date(season.seasonEnd).toLocaleDateString(localeOf())) : '')), h('section', { class: 'card next-card' }, h('p', {}, next.text), h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: next.go }, next.label), last?.status === 'done' ? h('a', { class: 'btn', href: `#/build/${last.id}` }, tl('ギルドマスターの講評')) : null, h('a', { class: 'btn', href: '#/task' }, tl('募集要項')), season.seasonOver ? null : h('a', { class: 'btn', href: '#/ranking' }, tl('戦果')))), last ? h('p', { class: 'small muted' }, tl(`直近の出発: {0}（{1}）`, last.name, last.status === 'done' ? tl(`戦果 {0}`, last.accuracy) : last.status === 'error' ? tl(`エラー: {0}`, last.error ?? '') : tl('採点中'))) : null, last?.status === 'done' && last.newCases ? h('p', { class: 'small warn-note' }, tl('この出発のあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度出発すると、増えた場面も採点されます）。', last.newCases)) : null, h('h3', {}, tl('あなたの冒険者')), h('div', { class: 'my-hero-row' }, myHero(myFighter >= 0 ? script.fighters[myFighter].loadout : null, myFighter >= 0 ? script.fighters[myFighter].name : me.name, standing ? tl('{0}位・戦果 {1}', standing.rank, standing.score ?? standing.accuracy) : ''), myFighter >= 0 ? h('div', { class: 'my-hero-go' }, h('p', { class: 'small muted' }, tl('ほかの冒険者と一緒にボスに挑む様子は、討伐の画面で見られます。')), h('a', { class: 'btn btn-primary', href: '#/arena' }, tl('討伐を見る'))) : null)),
+            : stat(tl('シーズン'), leftText(left), season.seasonEnd ? tl(`〜{0}`, new Date(season.seasonEnd).toLocaleDateString(localeOf())) : '')), h('section', { class: 'card next-card' }, h('p', {}, next.text), h('div', { class: 'row-gap' }, h('a', { class: 'btn btn-primary', href: next.go }, next.label), last?.status === 'done' ? h('a', { class: 'btn', href: `#/build/${last.id}` }, tl('ギルドマスターの講評')) : null, h('a', { class: 'btn', href: '#/task' }, tl('募集要項')), season.seasonOver ? null : h('a', { class: 'btn', href: '#/ranking' }, tl('戦果')))), last ? h('p', { class: 'small muted' }, tl(`直近の出発: {0}（{1}）`, last.name, last.status === 'done' ? tl(`戦果 {0}`, last.accuracy) : last.status === 'error' ? tl(`エラー: {0}`, last.error ?? '') : tl('採点中'))) : null, last?.status === 'done' && last.newCases ? h('p', { class: 'small warn-note' }, tl('この出発のあとで、シーズンの場面が{0}つ増えました。増えた場面は0点として数えています（もう一度出発すると、増えた場面も採点されます）。', last.newCases)) : null, h('h3', {}, tl('あなたの冒険者')), h('div', { class: 'my-hero-row' }, myHero(myFighter >= 0 ? script.fighters[myFighter].loadout : null, myFighter >= 0 ? script.fighters[myFighter].name : me.name, standing ? tl('{0}位・戦果 {1}', standing.rank, standing.score ?? standing.accuracy) : ''), myFighter >= 0 ? h('div', { class: 'my-hero-go' }, h('p', { class: 'small muted' }, tl('ほかの冒険者と一緒にボスに挑む様子は、討伐の画面で見られます。')), h('a', { class: 'btn btn-primary', href: '#/arena' }, tl('討伐を見る'))) : null)),
     ];
 }
+// 締切と、次のシーズンの開始の時刻に、ホームを読み込み直す（切り替わっても「受付終了」のまま残らないように）。
+// タブに戻ったときも、しばらく経っていれば読み込み直す
+let homeTimer;
+let homeShownAt = 0;
+function refreshAt(season, redo) {
+    clearTimeout(homeTimer);
+    const at = season.seasonOver ? (season.nextStart ? Date.parse(season.nextStart) : NaN) : season.seasonEnd ? Date.parse(season.seasonEnd) : NaN;
+    if (!Number.isFinite(at))
+        return;
+    // 時刻が過ぎているのに変わらないときは、サーバーの切り替えを待って5秒ごとに見直す
+    const ms = Math.min(at > Date.now() ? at - Date.now() + 1500 : 5000, 2 ** 31 - 1);
+    homeTimer = setTimeout(() => { if (document.querySelector('.dash'))
+        redo(); }, ms);
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Date.now() - homeShownAt > 30_000 && document.querySelector('.dash'))
+        void renderHome(document.querySelector('.dash').parentElement);
+});
 export async function renderHome(root) {
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
     const season = await getSeason();
@@ -57,6 +84,8 @@ export async function renderHome(root) {
     }
     if (me && me.entered) {
         root.replaceChildren(...nodes(...(await dashboard(season, me, redo))));
+        homeShownAt = Date.now();
+        refreshAt(season, redo);
         return;
     }
     // まだ参加していない人にも、紹介ページと同じ中身を見せる。参加（登録）は募集要項のページから

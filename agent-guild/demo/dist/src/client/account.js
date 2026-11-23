@@ -1,6 +1,6 @@
 // ログイン／登録とエントリーの共通部品（ホームと「つくる」画面で使う）
 import { demoMode, enterSeason, login, logout } from './api.js';
-import { h, toast } from './ui.js';
+import { h, NO_PASSWORD_MANAGER, toast } from './ui.js';
 import { tl } from '../shared/i18n.js';
 import { setUser, signOut } from './userStore.js';
 const addAdminLink = (me) => {
@@ -11,12 +11,14 @@ const addAdminLink = (me) => {
 export function loginForm(season, onDone) {
     if (season.authMode === 'header')
         return h('p', { class: 'notice' }, tl('シングルサインオン（SSO）でログインしてから、もう一度開いてください。'));
-    const nameIn = h('input', { placeholder: tl('表示名（みんなに分かる名前）'), maxlength: 20, 'aria-label': tl('表示名'), autocomplete: 'username' });
+    // 表示名と合言葉は本当のログインの欄なので、ブラウザの標準どおり username / current-password にする（#23）。name も付けて、パスワード管理が正しい組として扱えるようにする
+    const nameIn = h('input', { name: 'username', placeholder: tl('表示名（みんなに分かる名前）'), maxlength: 20, 'aria-label': tl('表示名'), autocomplete: 'username' });
     // 登録とログインが同じフォームなので、合言葉の欄は current-password のまま（次回も同じ合言葉を使うので、パスワード管理に保存できるようにしておく）。
     // パスワード管理の拡張機能の吹き出しが欄にかぶさったときは、Esc で欄から抜ければ（欄の外に出ると）閉じられるようにする
-    const passIn = h('input', { type: 'password', placeholder: tl('合言葉（8文字以上・次回も同じもの）'), 'aria-label': tl('合言葉'), autocomplete: 'current-password' });
+    const passIn = h('input', { type: 'password', name: 'password', placeholder: tl('合言葉（8文字以上・次回も同じもの）'), 'aria-label': tl('合言葉'), autocomplete: 'current-password' });
     // 招待の合言葉: 運営が決めているときだけ欄を出す。案内の URL に ?invite=… が付いていれば、はじめから入れておく
-    const inviteIn = season.inviteRequired ? h('input', { placeholder: tl('招待の合言葉（初めての人だけ）'), maxlength: 200, 'aria-label': tl('招待の合言葉'), autocomplete: 'off', value: new URLSearchParams(location.search).get('invite') ?? '' }) : null;
+    const inviteIn = season.inviteRequired ? h('input', { placeholder: tl('招待の合言葉（初めての人だけ）'), maxlength: 200, 'aria-label': tl('招待の合言葉'), ...NO_PASSWORD_MANAGER, value: new URLSearchParams(location.search).get('invite') ?? '' }) : null;
+    // 招待の合言葉は、みんなで同じ言葉を使う招待の印で、パスワードではない。パスワード管理に反応させない（#23）
     for (const el of [nameIn, passIn])
         el.addEventListener('keydown', (e) => { if (e.key === 'Escape')
             el.blur(); });

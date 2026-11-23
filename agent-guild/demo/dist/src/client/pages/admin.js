@@ -4,7 +4,7 @@
 // パスワードと APIキーはサーバーの中だけにあり、この画面には「設定済みかどうか」しか届かない。
 import { demoMode, getSeason } from '../api.js';
 import { bossProblems } from '../bosshost.js';
-import { h, toast } from '../ui.js';
+import { h, NO_PASSWORD_MANAGER, toast } from '../ui.js';
 import { localeOf, tl } from '../../shared/i18n.js';
 import { NAME_KIND_LABELS, NAME_KINDS } from '../../shared/names.js';
 const TABS = ['kaisai', 'ai', 'people', 'names'];
@@ -35,6 +35,22 @@ const leftText = (ms) => {
         return tl('{0}時間 {1}分', Math.floor(m / 60), m % 60);
     return tl('{0}分', m);
 };
+const withNote = (f, note) => { f.append(note); return f; };
+// シーズン名が、いまのシーズン・過去のシーズン・予約済みのシーズンと同じときの注意（空なら、課題のシーズン名になる）。
+// 同じ課題でいまのシーズンの名前のままにするのは、終了日時だけを変える操作なので、注意しない
+function dupNote(si, label, task, curTaskId) {
+    const note = h('span', { class: 'field-note warn-note', role: 'status' });
+    const upd = () => {
+        const name = label.value.trim() || (si.available.find((t) => t.id === task.value)?.season ?? '');
+        const taken = [...si.history.map((x) => x.label), ...si.scheduled.map((x) => x.label), ...(curTaskId === task.value && (!label.value.trim() || label.value.trim() === si.current.label) ? [] : [si.current.label])];
+        note.textContent = name && taken.includes(name) ? tl('同じ名前のシーズンがあります。見分けがつくように、名前を変えるのがおすすめです。') : '';
+    };
+    for (const el of [label, task])
+        for (const ev of ['input', 'change'])
+            el.addEventListener(ev, upd);
+    upd();
+    return note;
+}
 export function setAdminNav(on) {
     const a = document.querySelector('nav a[href="#/admin"]');
     if (on && !a)
@@ -86,7 +102,26 @@ function adminPage(d, tab, reload) {
         show(n.dataset.tab);
     });
     const logout = h('button', { class: 'btn btn-small', onclick: async () => { await post('api/admin/logout', {}); setAdminNav(false); location.hash = '#/admin'; } }, tl('ログアウト'));
-    const page = h('div', { class: 'admin' }, h('div', { class: 'head-row' }, h('h2', {}, tl('管理者画面')), logout), bossWarn(), band(d, waiting, () => { show('names'); tabs.scrollIntoView({ block: 'start' }); }), tabs, panel);
+    const goNames = () => { show('names'); tabs.scrollIntoView({ block: 'start' }); };
+    let bandEl = band(d, waiting, goNames);
+    const page = h('div', { class: 'admin' }, h('div', { class: 'head-row' }, h('h2', {}, tl('管理者画面')), logout), bossWarn(), bandEl, tabs, panel);
+    // 上の帯（開催中のようす）は、30秒ごとに読み直す。登録・エントリー・出発や、シーズンの切り替わりが、開き直さなくても見える。
+    // 入力中のフォームや開いている確認には触らない（帯だけを差し替える）
+    const timer = setInterval(async () => {
+        if (!bandEl.isConnected) {
+            clearInterval(timer);
+            return;
+        }
+        try {
+            const [u, seasons, people] = await Promise.all([getJson('api/admin/usage'), getJson('api/admin/seasons'), getJson('api/admin/participants')]);
+            const nb = band({ ...d, u, seasons, people }, waiting, goNames);
+            if (bandEl.isConnected) {
+                bandEl.replaceWith(nb);
+                bandEl = nb;
+            }
+        }
+        catch { /* 読めなかったときは、次の機会に */ }
+    }, 30_000);
     show(tab);
     return page;
 }
@@ -112,10 +147,11 @@ function band(d, waiting, goNames) {
     const over = !!cur.end && Date.parse(cur.end) <= now;
     const entrants = people.users.filter((x) => x.entered).length;
     const departed = people.users.filter((x) => (x.seasonSubmissions ?? 0) > 0).length; // 今のシーズンで出発させた人
-    const real = realSubmissions(d);
+    const real = realSubmissions(d); // 全シーズン合計（1回あたりの費用の計算に使う）
+    const seasonDeparts = people.users.reduce((a, x) => a + (x.seasonSubmissions ?? 0), 0); // 今のシーズンの出発（見本は含まない）
     const pct = Math.min(100, (u.spentUsd / Math.max(0.0001, u.budgetUsd)) * 100);
     const stat = (k, v, s, cls = '') => h('div', { class: 'stat' }, h('span', { class: 'stat-k' }, k), h('span', { class: `stat-v ${cls}` }, v), h('span', { class: 'stat-s' }, s));
-    return h('section', { class: 'card admin-settings band', 'aria-label': tl('開催中のようす') }, h('div', { class: 'band-head' }, h('span', { class: over ? 'chip chip-gap' : 'chip chip-live' }, over ? tl('受付終了') : tl('開催中')), h('b', { class: 'band-season' }, tl(`{0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, cur.boss)), h('div', { class: 'band-stats' }, cur.end ? stat(tl('締切まで'), over ? tl('受付終了') : leftText(Date.parse(cur.end) - now), fmt(cur.end), 'info') : stat(tl('締切まで'), '—', tl('（終了日時なし）')), stat(tl('エントリーした人'), tl('{0}人', entrants), tl('登録した人 {0}人', people.users.length)), stat(tl('出発させた人'), tl('{0}人', departed), tl('今のシーズンで1回でも出発させた人')), stat(tl('出発'), tl('{0}回', real), tl('採点待ち {0}', u.queued)), h('div', { class: 'stat stat-wide' }, h('span', { class: 'stat-k' }, tl('今月の AI 利用料（予算 ${0}）', u.budgetUsd)), h('div', { class: 'meter' }, h('div', { class: 'meter-fill' + (pct >= 100 ? ' over' : ''), style: { width: `${pct}%` } }), h('div', { class: 'meter-text' }, tl(`\${0} / \${1}（{2}）`, u.spentUsd.toFixed(2), u.budgetUsd, yen(u.spentUsd)))), h('span', { class: 'stat-s' }, tl('1回あたり {0}・採点: {1}（{2}）', real ? `$${(u.spentUsd / real).toFixed(3)}` : '—', u.provider, u.model)))), h('div', { class: 'band-foot' }, next ? h('span', {}, h('span', { class: 'chip chip-plan' }, tl('予約')), ' ', tl('次は {0} から {1}', fmt(next.start), next.label)) : h('span', {}, tl('予約はありません')), cur.end && next && Date.parse(cur.end) < Date.parse(next.start) ? h('span', {}, tl('受付終了: {0} 〜 {1}', fmt(cur.end), fmt(next.start))) : null, waiting ? h('a', { href: '#/admin/names', onclick: (e) => { e.preventDefault(); goNames(); } }, tl('確認待ちの言葉 {0} 件', waiting)) : null));
+    return h('section', { class: 'card admin-settings band', 'aria-label': tl('開催中のようす') }, h('div', { class: 'band-head' }, h('span', { class: over ? 'chip chip-gap' : 'chip chip-live' }, over ? tl('受付終了') : tl('開催中')), h('b', { class: 'band-season' }, tl(`{0}「{1}」`, cur.label, cur.title)), h('span', { class: 'small muted' }, cur.boss)), h('div', { class: 'band-stats' }, cur.end ? stat(tl('締切まで'), over ? tl('受付終了') : leftText(Date.parse(cur.end) - now), fmt(cur.end), 'info') : stat(tl('締切まで'), '—', tl('（終了日時なし）')), stat(tl('エントリーした人'), tl('{0}人', entrants), tl('登録した人 {0}人', people.users.length)), stat(tl('出発させた人'), tl('{0}人', departed), tl('今のシーズンで1回でも出発させた人')), stat(tl('今のシーズンの出発'), tl('{0}回', seasonDeparts), tl('採点待ち {0}', u.queued)), h('div', { class: 'stat stat-wide' }, h('span', { class: 'stat-k' }, tl('今月の AI 利用料（予算 ${0}）', u.budgetUsd)), h('div', { class: 'meter' }, h('div', { class: 'meter-fill' + (pct >= 100 ? ' over' : ''), style: { width: `${pct}%` } }), h('div', { class: 'meter-text' }, tl(`\${0} / \${1}（{2}）`, u.spentUsd.toFixed(2), u.budgetUsd, yen(u.spentUsd)))), h('span', { class: 'stat-s' }, tl('1回あたり {0}・採点: {1}（{2}）', real ? `$${(u.spentUsd / real).toFixed(3)}` : '—', u.provider, u.model)))), h('div', { class: 'band-foot' }, next ? h('span', {}, h('span', { class: 'chip chip-plan' }, tl('予約')), ' ', tl('次は {0} から {1}', fmt(next.start), next.label)) : h('span', {}, tl('予約はありません')), cur.end && next && Date.parse(cur.end) < Date.parse(next.start) ? h('span', {}, tl('受付終了: {0} 〜 {1}', fmt(cur.end), fmt(next.start))) : null, waiting ? h('a', { href: '#/admin/names', onclick: (e) => { e.preventDefault(); goNames(); } }, tl('確認待ちの言葉 {0} 件', waiting)) : null));
 }
 let openOp = null;
 // place: 確かめの欄を画面に入れて、入れた要素（閉じるときに外すもの）を返す
@@ -185,8 +221,9 @@ function kaisaiTab(d, reload) {
     };
     // ボスを替えて、いますぐ開催する（ふだんは予約を使う）
     const nTask = h('select', {}, ...si.available.map((t) => h('option', { value: t.id }, tl(`{0}「{1}」`, t.season, t.title))));
-    const nLabel = h('input', { placeholder: tl('空なら課題のシーズン名'), maxlength: 30 });
+    const nLabel = h('input', { placeholder: tl('空なら課題のシーズン名'), maxlength: 30, ...NO_PASSWORD_MANAGER });
     const nEnd = h('input', { type: 'datetime-local' });
+    const nDup = dupNote(si, nLabel, nTask, cur.taskId);
     const nowSlot = h('div', { class: 'confirm-slot' });
     const titleOf = () => si.available.find((t) => t.id === nTask.value)?.title ?? nTask.value;
     const activateNow = async () => {
@@ -211,7 +248,7 @@ function kaisaiTab(d, reload) {
         for (const ev of ['input', 'change'])
             el.addEventListener(ev, () => { if (openOp?.btn === nowBtn)
                 openOp.close(); });
-    const now = h('details', { class: 'fold' }, h('summary', {}, tl('ボスを替えて、いますぐ開催する')), h('p', { class: 'small muted' }, tl('いまのシーズンはここで終わり、順位は記録に残ります。ふつうは「シーズンの予約」を使ってください。')), h('div', { class: 'grid2' }, field(tl('ボスと課題'), nTask), field(tl('シーズン名'), nLabel), field(tl('終了日時（任意）'), nEnd)), h('div', { class: 'row-gap' }, nowBtn), nowSlot, h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')));
+    const now = h('details', { class: 'fold' }, h('summary', {}, tl('ボスを替えて、いますぐ開催する')), h('p', { class: 'small muted' }, tl('いまのシーズンはここで終わり、順位は記録に残ります。ふつうは「シーズンの予約」を使ってください。')), h('div', { class: 'grid2' }, field(tl('ボスと課題'), nTask), withNote(field(tl('シーズン名'), nLabel), nDup), field(tl('終了日時（任意）'), nEnd)), h('div', { class: 'row-gap' }, nowBtn), nowSlot, h('p', { class: 'small muted' }, tl('ボスを切り替えると、討伐と戦果は新しいシーズンのものになります。前のシーズンの出発と順位はそのまま残り、戦果のページの「過去のシーズン」に出ます。課題（場面・資料室・道具）は tasks/ フォルダの中身から作られます。新しいボスを足すときは、tasks/ に課題を置いてください。')));
     const over = !!cur.end && Date.parse(cur.end) <= Date.now();
     const seasonCard = card(tl('いまのシーズン'), h('p', {}, h('span', { class: over ? 'chip chip-gap' : 'chip chip-live' }, over ? tl('受付終了') : tl('開催中')), ' ', tl(`{0}「{1}」`, cur.label, cur.title), h('span', { class: 'small muted' }, tl('　{0}・{1}〜', cur.boss, fmt(cur.startedAt)))), h('div', { class: 'grid2' }, field(tl('シーズン名'), label), field(tl('終了日時（任意）'), end)), h('div', { class: 'row-gap' }, upd), now);
     // 予約
@@ -225,7 +262,8 @@ function kaisaiTab(d, reload) {
         return [tr];
     });
     const pTask = h('select', {}, ...si.available.map((t) => h('option', { value: t.id }, tl(`{0}「{1}」`, t.season, t.title))));
-    const pLabel = h('input', { placeholder: tl('空なら課題のシーズン名'), maxlength: 30 });
+    const pLabel = h('input', { placeholder: tl('空なら課題のシーズン名'), maxlength: 30, ...NO_PASSWORD_MANAGER });
+    const pDup = dupNote(si, pLabel, pTask);
     const pStart = h('input', { type: 'datetime-local' });
     const pEnd = h('input', { type: 'datetime-local' });
     const plan = h('button', { class: 'btn btn-primary' }, tl('予約する'));
@@ -245,7 +283,7 @@ function kaisaiTab(d, reload) {
             plan.disabled = false;
         }
     };
-    const planCard = card(tl('シーズンの予約'), timeline(si), rows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table stack sched-table' }, h('thead', {}, h('tr', {}, ...[tl('開始日時'), tl('終了日時'), tl('シーズン'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))) : h('p', { class: 'small muted' }, tl('予約はありません')), h('h4', {}, tl('新しく予約する')), h('div', { class: 'grid2' }, field(tl('ボスと課題'), pTask), field(tl('シーズン名'), pLabel), field(tl('開始日時'), pStart), field(tl('終了日時（任意）'), pEnd)), h('div', { class: 'row-gap' }, plan, h('span', { class: 'small muted' }, tl('日時は、このブラウザのタイムゾーン（{0}）で入力・表示します。', tz))), h('details', { class: 'fold' }, h('summary', { class: 'small' }, tl('予約のきまり')), h('p', { class: 'small muted' }, tl('開始日時になると、サーバーがそのボスで開催します（サーバーが止まっていたときは、次に起動したときに開催し、記録は予約の日時で残ります）。終了日時を過ぎてから次のシーズンが始まるまでは「受付終了」になり、出発はできません。参加者のホームには、次のシーズンの開始日時だけを出します（ボスは始まるまで伏せます）。'))));
+    const planCard = card(tl('シーズンの予約'), timeline(si), rows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table stack sched-table' }, h('thead', {}, h('tr', {}, ...[tl('開始日時'), tl('終了日時'), tl('シーズン'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))) : h('p', { class: 'small muted' }, tl('予約はありません')), h('h4', {}, tl('新しく予約する')), h('div', { class: 'grid2' }, field(tl('ボスと課題'), pTask), withNote(field(tl('シーズン名'), pLabel), pDup), field(tl('開始日時'), pStart), field(tl('終了日時（任意）'), pEnd)), h('div', { class: 'row-gap' }, plan, h('span', { class: 'small muted' }, tl('日時は、このブラウザのタイムゾーン（{0}）で入力・表示します。', tz))), h('details', { class: 'fold' }, h('summary', { class: 'small' }, tl('予約のきまり')), h('p', { class: 'small muted' }, tl('開始日時になると、サーバーがそのボスで開催します（サーバーが止まっていたときは、次に起動したときに開催し、記録は予約の日時で残ります）。終了日時を過ぎてから次のシーズンが始まるまでは「受付終了」になり、出発はできません。参加者のホームには、次のシーズンの開始日時だけを出します（ボスは始まるまで伏せます）。'))));
     const out = [h('div', { class: 'cols' }, h('div', {}, seasonCard), h('div', {}, planCard))];
     if (si.history.length)
         out.push(card(tl('過去のシーズン'), ...si.history.map((hh) => h('details', { class: 'fold' }, h('summary', {}, tl(`{0}「{1}」`, hh.label, hh.title), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmtLong(hh.startedAt), fmtLong(hh.endedAt), hh.participants ?? hh.top.length))), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}`, x.name, x.owner, x.score ?? x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし'))))));
@@ -288,7 +326,8 @@ function timeline(si) {
 function aiTab(d, reload) {
     const { s, u } = d;
     const real = realSubmissions(d);
-    const inp = (value, attrs = {}) => h('input', { value: String(value), ...attrs });
+    // 運営の設定の欄（モデル名・エンドポイント・料金など）も、パスワード管理に反応させない（#23）
+    const inp = (value, attrs = {}) => h('input', { value: String(value), ...NO_PASSWORD_MANAGER, ...attrs });
     const P = [
         ['anthropic', tl('Claude（Anthropic）'), tl('Claude の API キーで採点する')],
         ['azure', tl('Azure OpenAI（AOAI）'), tl('社内の Azure を使うとき')],
@@ -300,11 +339,12 @@ function aiTab(d, reload) {
         return { p, r, el: h('label', { class: 'choice' }, r, h('b', {}, name), h('span', {}, sub)) };
     });
     const aModel = inp(s.anthropic.model, { list: 'claude-models' });
-    const aKey = inp('', { type: 'password', placeholder: s.anthropic.apiKeySet ? tl('設定済み（変えるときだけ入力。消すときは -）') : tl('未設定'), autocomplete: 'off' });
+    // API キーはログインの欄ではないので、パスワード管理に反応させない（#23。type=password は、画面で隠すためだけ）
+    const aKey = inp('', { type: 'password', placeholder: s.anthropic.apiKeySet ? tl('設定済み（変えるときだけ入力。消すときは -）') : tl('未設定'), ...NO_PASSWORD_MANAGER });
     const zEnd = inp(s.azure.endpoint, { placeholder: tl('https://<リソース名>.openai.azure.com') });
     const zDep = inp(s.azure.deployment, { placeholder: tl('デプロイ名（例: gpt-4.1-mini）'), list: 'azure-models' });
     const zVer = inp(s.azure.apiVersion, { placeholder: tl('2024-10-21 または v1') });
-    const zKey = inp('', { type: 'password', placeholder: s.azure.apiKeySet ? tl('設定済み（変えるときだけ入力。消すときは -）') : tl('未設定'), autocomplete: 'off' });
+    const zKey = inp('', { type: 'password', placeholder: s.azure.apiKeySet ? tl('設定済み（変えるときだけ入力。消すときは -）') : tl('未設定'), ...NO_PASSWORD_MANAGER });
     const pIn = inp(s.pricing.inputPerMTok, { type: 'number', step: '0.01', min: 0 });
     const pOut = inp(s.pricing.outputPerMTok, { type: 'number', step: '0.01', min: 0 });
     const pCr = inp(s.pricing.cacheReadPerMTok, { type: 'number', step: '0.01', min: 0 });
@@ -515,7 +555,8 @@ function namesTab(d, reload) {
     return [queue, how];
 }
 function loginView(done) {
-    const pw = h('input', { type: 'password', placeholder: tl('管理者パスワード'), 'aria-label': tl('管理者パスワード'), autocomplete: 'current-password' });
+    // 管理者パスワードは本当のログインの欄なので current-password のまま（#23）
+    const pw = h('input', { type: 'password', name: 'password', placeholder: tl('管理者パスワード'), 'aria-label': tl('管理者パスワード'), autocomplete: 'current-password' });
     return h('section', { class: 'card admin-login' }, h('h2', {}, tl('管理者画面')), h('p', { class: 'small muted' }, tl('サーバーの .env に設定した ADMIN_PASSWORD で入ります。パスワードはサーバーの中だけで照合され、画面やブラウザには保存されません（ログインは12時間有効）。')), h('form', { onsubmit: async (e) => {
             e.preventDefault();
             try {

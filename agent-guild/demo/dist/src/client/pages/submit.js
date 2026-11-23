@@ -9,14 +9,17 @@ import { checkNames, coachReview, demoMode, getMe, getSeason, getTeams, mySubmis
 import { heldMessage } from '../../shared/names.js';
 import { charmSprite, drawHero, familiarSprite, gearOf, lookOf, portrait, PORTRAIT_H, PORTRAIT_W, weaponSprite } from '../hero.js';
 import { senpaiName, senpaiPortrait } from '../guildmaster.js';
-import { h, nodes, toast } from '../ui.js';
+import { h, nodes, NO_PASSWORD_MANAGER, toast } from '../ui.js';
 import { parseYaml, toYaml } from '../../shared/yaml.js';
 import { briefingOf, library } from '../briefing.js';
 import { getLang, localeOf, tl } from '../../shared/i18n.js';
 import { anonGet, clearAnon, currentUser, setUser, userGet, userRemove, userSet } from '../userStore.js';
 // 下書きは、ユーザーごと・言語ごとに分けて保存する（userStore.ts。共用の端末で、前の人の準備が次の人に見えないように）。
-// 言語ごとに分けるのは、日本語で開いたときの下書きが、ほかの言語の初期値に残らないようにするため
-const draftKey = () => `draft:${getLang()}`;
+// 言語ごとに分けるのは、日本語で開いたときの下書きが、ほかの言語の初期値に残らないようにするため。
+// シーズン（課題）ごとにも分ける。対応することはシーズンごとに違うので、シーズンが替わったら下書きは空（テンプレート）から始める
+// （前のシーズンの下書きが、道具の名前がたまたま合うかどうかで残ったり消えたりしないようにする）
+let draftSeason = '';
+const draftKey = () => `draft:${getLang()}:${draftSeason}`;
 let stop = null;
 function loadDraft() {
     return userGet(draftKey()) || BUILD_TEMPLATE;
@@ -85,6 +88,11 @@ function withPromptTemplate(y) {
         return y;
     }
 }
+// 受付終了のあいだの案内（ホームと同じ文言）。次のシーズンが予約してあれば、始まる日時だけ見せる
+function overNote(season) {
+    const at = season.nextStart ? new Date(season.nextStart).toLocaleString(localeOf(), { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return at ? tl('このシーズンの受付は終わりました。次のシーズンは {0} に始まります。それまでは、戦果と冒険の記録を見返せます。', at) : tl('このシーズンの受付は終わりました。次のシーズンまで、戦果と冒険の記録を見返せます。');
+}
 const spriteImg = (c, scale = 3) => {
     const x = h('canvas', { class: 'pixel look-sprite', width: c.width * scale, height: c.height * scale });
     const g = x.getContext('2d');
@@ -96,6 +104,7 @@ export async function renderSubmit(root) {
     stop?.();
     root.replaceChildren(h('p', { class: 'loading' }, tl('読み込み中…')));
     const season = await getSeason();
+    draftSeason = season.task.id;
     const catalog = season.catalog;
     const toolById = Object.fromEntries(catalog.map((t) => [t.id, t]));
     let me = await getMe().catch(() => null);
@@ -234,7 +243,7 @@ export async function renderSubmit(root) {
         dockMe.textContent = demoMode ? tl('デモ版（冒険への出発はできません）') : !me ? tl('未ログイン') : !me.entered ? tl('エントリー前') : tl(`{0} さん・今日の残り: 出発{1}回`, me.name, me.remainingToday);
         // 直すところがあっても押せる（押すと、直すところを一覧で出す）
         const ready = !demoMode && !!me && me.entered;
-        submitBtn.disabled = demoMode || (ready && me.remainingToday <= 0);
+        submitBtn.disabled = demoMode || season.seasonOver || (ready && me.remainingToday <= 0);
         // 直すところがあるあいだは、ボタンを「直してから」の見た目にする（押しても送られず、直すところの一覧が出る）
         for (const btn of [submitBtn]) {
             btn.classList.toggle('needs-fix', !valid);
@@ -251,7 +260,8 @@ export async function renderSubmit(root) {
     };
     const field = (label, input, note) => h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), input, note ? (typeof note === 'string' ? h('span', { class: 'field-note' }, note) : note) : null);
     const text = (value, on, opts = {}) => {
-        const el = h('input', { value, placeholder: opts.placeholder ?? '', maxlength: opts.maxlength ?? 200, ...(opts.list ? { list: opts.list, autocomplete: 'off' } : {}) });
+        // 冒険者の名前・チーム名などは、ログインの欄ではない。パスワード管理が「ユーザー名」と取り違えて反応しないようにする（#23）
+        const el = h('input', { value, placeholder: opts.placeholder ?? '', maxlength: opts.maxlength ?? 200, ...NO_PASSWORD_MANAGER, ...(opts.list ? { list: opts.list } : {}) });
         el.oninput = () => { on(el.value); refresh(); };
         return el;
     };
@@ -760,7 +770,8 @@ export async function renderSubmit(root) {
     const meterBtn = h('button', { class: 'dock-meter', 'aria-describedby': 'meter-tip', onclick: () => showDock(tl('荷物の内訳'), kindSum, breakdown) }, h('span', { class: 'dock-label small' }, tl('荷物の重さ')), h('div', { class: 'meter' }, meterFill, meterText), meterTip);
     const dock = h('div', { class: 'dock' }, h('div', { class: 'dock-bar' }, miniPreview, h('div', { class: 'dock-who' }, dockName, dockMe), meterBtn, dockErr, h('div', { class: 'dock-actions' }, trialBtn, submitBtn)), dockPanel);
     root.replaceChildren(...nodes(dock, panelTabs, page));
-    page.replaceChildren(...nodes(refCol, h('section', { class: 'editor-col' }, h('div', { class: 'row-between' }, h('h2', {}, tl('冒険者の準備')), armButton('reset', tl('はじめからやり直す'), tl('もう一度押すとテンプレートに戻します'), () => { b = parseBuild(BUILD_TEMPLATE, catalog).build; renderForm(); refresh(); syncLook(); toast(tl('テンプレートに戻しました')); })), h('p', { class: 'small muted' }, tl('心得・道具・巻物・結界・お供を準備して、冒険に出発します。左の討伐依頼書と資料室を見比べながら、何を持たせるかを決めてください。入力は自動で保存されます。')), form, h('section', { class: 'card sent-card' }, accountEl, subsEl))));
+    page.replaceChildren(...nodes(refCol, h('section', { class: 'editor-col' }, h('div', { class: 'row-between' }, h('h2', {}, tl('冒険者の準備')), armButton('reset', tl('はじめからやり直す'), tl('もう一度押すとテンプレートに戻します'), () => { b = parseBuild(BUILD_TEMPLATE, catalog).build; renderForm(); refresh(); syncLook(); toast(tl('テンプレートに戻しました')); })), h('p', { class: 'small muted' }, tl('心得・道具・巻物・結界・お供を準備して、冒険に出発します。左の討伐依頼書と資料室を見比べながら、何を持たせるかを決めてください。入力は自動で保存されます。')), season.seasonOver ? h('p', { class: 'notice small', role: 'status' }, overNote(season)) : null, // 受付終了のあいだ（出発ボタンも押せない）。準備の見出しの下に出す
+    form, h('section', { class: 'card sent-card' }, accountEl, subsEl))));
     setRef('report');
     setPanel('build');
     renderForm();

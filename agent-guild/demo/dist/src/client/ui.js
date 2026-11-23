@@ -3,6 +3,10 @@ import { TOOL_BY_ID } from '../shared/catalog.js';
 import { BODY_LABELS, CHARM_LABELS, FAMILIAR_LABELS, skillLook } from '../shared/build.js';
 import { bust, gearOf, lookOf, portrait } from './hero.js';
 import { tl } from '../shared/i18n.js';
+/** パスワード管理の拡張機能に反応させない欄の指定（#23）。ログインの欄ではない入力（招待の合言葉・API キー・準備の画面の名前など）に付ける。
+ *  autocomplete="off" はブラウザの保存・補完を止め、data-1p-ignore（1Password）・data-lpignore（LastPass）・data-bwignore（Bitwarden）・
+ *  data-form-type="other"（Dashlane）は、各拡張機能に「この欄は相手にしない」と伝える。本当のログインの欄（表示名と合言葉・管理者パスワード）には付けない */
+export const NO_PASSWORD_MANAGER = { autocomplete: 'off', 'data-1p-ignore': '', 'data-lpignore': 'true', 'data-bwignore': '', 'data-form-type': 'other' };
 export function h(tag, attrs = {}, ...children) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {

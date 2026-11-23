@@ -83,9 +83,10 @@ export function tIn(l, ja, ...args) {
 }
 // モジュールの先頭で作る定数（ラベルの表など）を、読むたびにその時点の言語で作る。
 // サーバーは要求ごとに言語が変わるので、tl() を含む定数はこれで包む。作った結果は言語ごとに1回だけ作って使い回す。
-export function perLang(make) {
+// ver: 中身が変わったときに上がる番号（あとから足されるもの、たとえばシーズンの道具がある表）。番号が変わると作り直す
+export function perLang(make, ver) {
     const cache = new Map();
-    const cur = () => { const l = getLang(); let v = cache.get(l); if (!v) {
+    const cur = () => { const l = `${getLang()}:${ver?.() ?? 0}`; let v = cache.get(l); if (!v) {
         v = make();
         cache.set(l, v);
     } return v; };

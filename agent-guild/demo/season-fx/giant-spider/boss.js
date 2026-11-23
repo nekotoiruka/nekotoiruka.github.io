@@ -1,4 +1,4 @@
-// 生成物: fx/src/spider.ts から node tools/build_fx.mjs で作ったもの（直接直さない）。本体のコミット 48b0479dc496
+// 生成物: fx/src/spider.ts から node tools/build_fx.mjs で作ったもの（直接直さない）。本体のコミット 1eb8f9235df9
 /** このボスの言葉の訳（本体が、名前を作る前に合流する） */
 export const locales = {
     "en": {

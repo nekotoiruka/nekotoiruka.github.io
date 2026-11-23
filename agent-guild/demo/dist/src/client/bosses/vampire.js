@@ -455,9 +455,9 @@ registerBoss({
     lab: { name: '吸血鬼伯爵', spellName: '呪いの紋', pairs: { breath: ['蝙蝠の群れ', '床に伏せてやり過ごす', 'crawl'], claw: ['伸びる爪', '銀の盾で受ける', 'block'], dive: ['蝙蝠の急降下', '柱の陰へ駆けこむ', 'dodge'], tail: ['背後の霧の蝙蝠', '振り向いて斬る', 'turnCut'] },
         // 見本帳の小さな絵
         color: ['#ffd0d8', '#ff6a8a', '#c81a4a', '#5a0a24'], shot: 'bat', diveDrop: 'shot', },
-    // 紹介ページのボスの欄
     stage, // 月明かりの礼拝堂（vampire-stage.ts）
     chainFinale, // 大魔法「朝日の奔流」（vampire-chain.ts）
+    // 紹介ページのボスの欄
     showcase: { order: 5, season: tl('シーズン0'), name: tl('ヴェスペリオ伯爵'), line: tl('霧ノ谷の古城の主。蝙蝠の群れ、見えない呪いの紋、魅了の声。'), sky: ['#1a0a1e', '#3a0f2a', '#5a1530', '#10060f'], ground: ['#3a2a3a', '#2e2030'] },
     // 体の動き（#118: もとは bossmotion.ts の種類ごとの分岐）
     motion: {
