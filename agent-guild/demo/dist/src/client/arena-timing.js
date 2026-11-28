@@ -202,8 +202,6 @@ export function cues(w) {
             c.push({ t: e.t, s: 'ko' });
         if (e.type === 'bossDown')
             c.push({ t: e.t, s: 'bossDown' });
-        if (e.type === 'winner')
-            c.push({ t: e.t, s: 'win' });
     }
     for (const f of this.mine)
         if (this.gagOf(f)?.w === w) {
@@ -223,6 +221,8 @@ export function cues(w) {
 export function playCues(prev, now) {
     if (!(now > prev) || now - prev > 0.08)
         return; // 再生中だけ（シークでは鳴らさない）
+    if (this.winner !== null && this.revealAt > prev && this.revealAt <= now)
+        play('win'); // 戦果1位の発表
     const w0 = Math.floor(prev), w1 = Math.floor(now);
     for (let w = Math.max(0, w0); w <= w1 && w < this.script.waves.length; w++) {
         for (const c of this.cues(w)) {

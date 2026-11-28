@@ -5,16 +5,16 @@
 // 見る人がいなければ、順位の上から。順位（戦果）はシーズンの参加者全員で決まり、討伐隊の組み方には左右されない。
 import { contribution, fuelOfCase } from './stats.js';
 import { RAID_PARTY } from './simulate.js';
-// シーズンの順位の並び（貢献度 → 燃費 → 速さ）。simulate の討伐の順位と同じ
-export function seasonOrder(entrants, cases) {
+// シーズンの順位の並び（貢献度 → 燃費 → 速さ）。simulate の討伐の順位と同じ。score は貢献度（表彰台に出す戦果の点）
+export function seasonRanking(entrants, cases) {
     const ids = new Set(cases.map((c) => c.id));
     const rs = (e) => e.result.cases.filter((c) => ids.has(c.caseId));
-    const acc = (e) => contribution(rs(e)).score; // 貢献度（戦果に、長旅の消耗と余力の上乗せ）
     const tok = (e) => rs(e).reduce((a, c) => a + fuelOfCase(c), 0);
     const lat = (e) => rs(e).reduce((a, c) => a + c.latencyMs, 0);
-    return entrants.map((e, i) => ({ e, i, a: acc(e), t: tok(e), l: lat(e) }))
-        .sort((x, y) => y.a - x.a || x.t - y.t || x.l - y.l || x.i - y.i).map((x) => x.e);
+    return entrants.map((e, i) => ({ e, i, a: contribution(rs(e)).score, t: tok(e), l: lat(e) }))
+        .sort((x, y) => y.a - x.a || x.t - y.t || x.l - y.l || x.i - y.i).map((x) => ({ e: x.e, score: x.a }));
 }
+export const seasonOrder = (entrants, cases) => seasonRanking(entrants, cases).map((x) => x.e);
 export function pickParty(entrants, cases, mine, max = RAID_PARTY) {
     if (entrants.length <= max)
         return entrants;

@@ -104,7 +104,7 @@ export function updateCamera(c) {
             ty = lerp(ty, this.bossBody.y, g);
         }
     }
-    if (outro > 0 && this.winner !== null) {
+    if (outro > 0 && this.winner !== null && w + phase + outro >= this.revealAt - 0.1) {
         const v = views[this.winner];
         tz = 2.2;
         tx = v.x;

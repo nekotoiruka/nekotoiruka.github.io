@@ -50,7 +50,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         set(upose.action, upose.t);
         ghosts.push(...upose.ghosts);
     }
-    // 連携詠唱: 並ぶあいだは歩き、自分の節では両手を上げて唱える。外した人はあわてて汗をかき、みんなも苦笑い。
+    // 連携詠唱: 並ぶあいだは歩き、自分の節では両手を上げて唱える。外した人も、並んだみんなも「痛い」顔になる。
     // 大魔法が決まったら、並んだ全員で手を掲げる
     const chain = this.chainOf(w);
     if (chain && v.alive && outro === 0 && chain.line.has(v.f)) {
@@ -72,7 +72,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
                 oy += Math.sin(this.frame) * 0.5;
             }
             else if (me || phase > c.breakT + 0.08)
-                set('pass', 0);
+                set('hurt', 0); // 笑って見える「pass」ではなく、全員「痛い」顔（#157）
         }
         if (c.full && phase >= c.doneT && phase < c.impact + 0.12) {
             set('cast', 0.5);
@@ -299,7 +299,7 @@ export function fighterPose(ctx, v, w, phase, outro, st, at, evaded, hit, isTarg
         // 倒れたまま、うっすら残る（正しく動ければ起き上がる）
         alpha = 1 - Math.min(0.45, Math.max(0, k - 0.75) * 2);
     }
-    const winNow = (this.allWin || this.winner === v.f) && v.alive && (outro > 0 || (w === s.waves.length - 1 && phase > (s.waves[w].events.find((e) => e.type === 'winner')?.t ?? 2)));
+    const winNow = (this.allWin || this.winner === v.f) && v.alive && (this.allWin ? outro > 0 || (w === s.waves.length - 1 && phase > (s.waves[w].events.find((e) => e.type === 'winner')?.t ?? 2)) : w + phase + outro >= this.revealAt);
     if (winNow)
         set('victory', (this.frame % 36) / 36);
     const x = v.x + ox, y = v.y + oy;

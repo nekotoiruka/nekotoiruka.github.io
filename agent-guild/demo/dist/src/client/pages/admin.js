@@ -284,7 +284,23 @@ function kaisaiTab(d, reload) {
         }
     };
     const planCard = card(tl('シーズンの予約'), timeline(si), rows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table stack sched-table' }, h('thead', {}, h('tr', {}, ...[tl('開始日時'), tl('終了日時'), tl('シーズン'), ''].map((x) => h('th', {}, x)))), h('tbody', {}, ...rows))) : h('p', { class: 'small muted' }, tl('予約はありません')), h('h4', {}, tl('新しく予約する')), h('div', { class: 'grid2' }, field(tl('ボスと課題'), pTask), withNote(field(tl('シーズン名'), pLabel), pDup), field(tl('開始日時'), pStart), field(tl('終了日時（任意）'), pEnd)), h('div', { class: 'row-gap' }, plan, h('span', { class: 'small muted' }, tl('日時は、このブラウザのタイムゾーン（{0}）で入力・表示します。', tz))), h('details', { class: 'fold' }, h('summary', { class: 'small' }, tl('予約のきまり')), h('p', { class: 'small muted' }, tl('開始日時になると、サーバーがそのボスで開催します（サーバーが止まっていたときは、次に起動したときに開催し、記録は予約の日時で残ります）。終了日時を過ぎてから次のシーズンが始まるまでは「受付終了」になり、出発はできません。参加者のホームには、次のシーズンの開始日時だけを出します（ボスは始まるまで伏せます）。'))));
-    const out = [h('div', { class: 'cols' }, h('div', {}, seasonCard), h('div', {}, planCard))];
+    // 表彰台: 日々の「現時点の全体ランキング」を出しはじめる参加者数
+    const podMin = h('input', { type: 'number', min: 0, max: 1000, value: String(d.s.podiumMinDaily ?? 10) });
+    const podSave = h('button', { class: 'btn btn-small' }, tl('保存'));
+    podSave.onclick = async () => {
+        podSave.disabled = true;
+        try {
+            await post('api/admin/settings', { podiumMinDaily: podMin.value });
+            toast(tl('保存しました'));
+            reload();
+        }
+        catch (e) {
+            toast(e.message, 'err');
+            podSave.disabled = false;
+        }
+    };
+    const podCard = card(tl('表彰台の発表'), h('p', { class: 'small muted' }, tl('討伐の最後に、上位5人が表彰台に上がる演出です。参加者が少ないうちは出しません。')), h('div', { class: 'grid2' }, h('div', {}, field(tl('「現時点の全体ランキング」を出す参加者数'), podMin, tl('この人数に届くまでは出しません。0 で、3人以上いればいつでも出します。終わったシーズンの最終結果発表には関係しません')), podSave)));
+    const out = [h('div', { class: 'cols' }, h('div', {}, seasonCard), h('div', {}, planCard)), podCard];
     if (si.history.length)
         out.push(card(tl('過去のシーズン'), ...si.history.map((hh) => h('details', { class: 'fold' }, h('summary', {}, tl(`{0}「{1}」`, hh.label, hh.title), h('span', { class: 'small muted' }, tl(`　{0}〜{1}・参加 {2}人`, fmtLong(hh.startedAt), fmtLong(hh.endedAt), hh.participants ?? hh.top.length))), hh.top.length ? h('ol', { class: 'small' }, ...hh.top.map((x) => h('li', {}, tl(`{0}（{1}）戦果 {2}`, x.name, x.owner, x.score ?? x.accuracy)))) : h('p', { class: 'small muted' }, tl('参加者なし'))))));
     return out;

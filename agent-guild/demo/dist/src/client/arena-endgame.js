@@ -23,8 +23,9 @@ export function endgame(ctx, w, phase, outro, views, down) {
     const lag = this.downAt && this.chainOf(this.downAt.wave)?.view.full ? CHAIN_BANNER_LAG : 0;
     if (down >= 0)
         this.bigBanner(ctx, down - lag, tl('討伐成功！'), cap?.down ?? tl(`{0}を倒した！ 戦果1位は…`, s.boss.name), '#ffd166');
-    const winT = this.winner !== null ? t - (s.waves.length - 1 + ((s.waves[s.waves.length - 1].events.find((e) => e.type === 'winner')?.t) ?? 1)) : -1;
-    if (this.winner !== null && winT > 0 && (down < 0 || down > 0.75 + lag) && (esc < 0 || esc > 0.9)) {
+    // 戦果1位の発表は、ボスが消えて（逃げ去って）ひと呼吸おいてから（arena.ts の revealAt）
+    const winT = this.winner !== null ? t - this.revealAt : -1;
+    if (this.winner !== null && winT > 0) {
         const v = views[this.winner];
         const p = this.proj(v.x, v.y);
         const k = clamp01(winT / 0.3);
@@ -46,7 +47,7 @@ export function endgame(ctx, w, phase, outro, views, down) {
         ctx.fill();
         ctx.restore();
         this.confetti(ctx, winT);
-        this.winBanner(ctx, winT, s.fighters[this.winner].name, tl('戦果1位'), '#ffd166');
+        this.winBanner(ctx, winT, s.fighters[this.winner].name, tl('今回の討伐の戦果1位'), '#ffd166');
     }
 }
 export function bigBanner(ctx, age, title, sub, color) {

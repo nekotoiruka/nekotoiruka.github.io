@@ -5,6 +5,7 @@ import { ArenaRenderer, SCALE } from '../arena.js';
 import { waveTitleFor } from '../../shared/simulate.js';
 import { caseTitleOf } from '../../shared/types.js';
 import { POSITION_LABELS } from '../../shared/build.js';
+import { createPodium, podiumPlan } from '../podium.js';
 import { pickParty } from '../../shared/party.js';
 import { pickStage, restage, STAGE_ALL_MAX, STAGE_LABELS, STAGE_MAX } from '../../shared/stage.js';
 import { demoMode, getBattle, getMe, getSeason, scriptFor } from '../api.js';
@@ -57,6 +58,11 @@ export async function renderArena(root, initialView, past) {
     // 討伐隊: あなた＋同じチームの人＋順位の近い人で最大12人（順位はシーズンの参加者全員で決まる）
     const party = { ...data, entrants: pickParty(data.entrants, data.cases, mineIds) };
     const partyOnly = party.entrants.length < data.entrants.length;
+    // 表彰台（戦果1位の発表のあと）。デモ・LP では見せない。終わったシーズンは「最終結果発表」、開催中は参加者が十分いるときだけ「現時点の全体ランキング」
+    const season = demoMode ? null : await getSeason().catch(() => null);
+    const podMode = past || season?.seasonOver ? 'final' : 'daily';
+    const podCands = demoMode ? null : podiumPlan(data.entrants, data.cases, podMode, season?.podiumMinDaily);
+    const podium = podCands ? { cands: podCands, mode: podMode } : undefined;
     const royale = scriptFor(party);
     const crowded = royale.fighters.length > STAGE_MAX;
     const hasMine = royale.fighters.some((f) => mineIds.has(f.id));
@@ -83,14 +89,14 @@ export async function renderArena(root, initialView, past) {
         stageNote.textContent = off ? tl(`舞台に立つのは {0} 人（残り {1} 人は画面下の「控え」。順位は全員で決まります）`, staged.fighters.length - off, off)
             : partyOnly ? (hasMine ? tl('討伐隊は、あなた・同じチームの人・順位の近い人の{0}人です（順位はシーズンの参加者全員で決まります）。', sc.fighters.length)
                 : tl('いまの戦果の上位{0}人の討伐です。冒険者が出発すると、あなたの討伐隊の討伐になります。', sc.fighters.length)) : '';
-        stopCurrent = mountPlayer(host, staged);
+        stopCurrent = mountPlayer(host, staged, podium);
     };
     // まだ送り出していない人に: 見ているのは上位の討伐。自分も加わる入口
     const join = !hasMine && !past && !demoMode ? h('p', { class: 'join-cta' }, h('a', { class: 'btn btn-primary btn-small', href: '#/make' }, tl('冒険者を準備して、討伐に加わる'))) : null;
     root.replaceChildren(...nodes(pastBar, h('div', { class: 'mode-bar' }, viewBar), desc, stageNote, join, host));
     refresh();
 }
-function mountPlayer(root, script) {
+function mountPlayer(root, script, podium) {
     const canvas = h('canvas', { class: 'arena-canvas pixel', 'aria-label': tl('討伐の再生画面') });
     const r = new ArenaRenderer(canvas, script);
     r.mineLabel = mineLabel;
@@ -123,16 +129,17 @@ function mountPlayer(root, script) {
     const sndBtn = h('button', { class: 'btn btn-speed' + (sfxEnabled() ? ' on' : ''), title: tl('効果音'), 'aria-pressed': String(sfxEnabled()) }, sfxEnabled() ? tl('♪ 音あり') : tl('♪ 音なし'));
     sndBtn.onclick = () => { const on = !sfxEnabled(); setSfx(on); sndBtn.classList.toggle('on', on); sndBtn.setAttribute('aria-pressed', String(on)); sndBtn.textContent = on ? tl('♪ 音あり') : tl('♪ 音なし'); };
     slowBtn.onclick = () => { slowOn = !slowOn; slowBtn.classList.toggle('on', slowOn); slowBtn.setAttribute('aria-pressed', String(slowOn)); };
-    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { jump(-r.introLen); playing = true; } }, '⏮'), playBtn, seek, h('button', { class: 'btn btn-icon', 'data-act': 'to-results', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { time = total; } }, '⏭'), h('div', { class: 'controls-opts' }, ...speeds, slowBtn, sndBtn, hlBtn, missBtn, nextBtn))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
+    root.replaceChildren(h('div', { class: 'arena-page' }, h('section', { class: 'stage' }, h('div', { class: 'hud-top' }, waveLabel, kindBadge, caseTitle, aliveLabel), h('div', { class: 'canvas-wrap' }, canvas, feed, results), h('div', { class: 'controls' }, h('button', { class: 'btn btn-icon', title: tl('最初から'), 'aria-label': tl('最初から'), onclick: () => { jump(-r.introLen); playing = true; } }, '⏮'), playBtn, seek, h('button', { class: 'btn btn-icon', 'data-act': 'to-results', title: tl('結果へ'), 'aria-label': tl('結果へ'), onclick: () => { stopPod(); time = total; } }, '⏭'), h('div', { class: 'controls-opts' }, ...speeds, slowBtn, sndBtn, hlBtn, missBtn, nextBtn))), h('aside', { class: 'side' }, h('h3', {}, tl('参加者')), roster, card)));
     playBtn.onclick = () => { playing = !playing; if (ended) {
+        stopPod();
         time = -r.introLen;
         ended = false;
         results.classList.add('hidden');
         playing = true;
     } };
-    seek.oninput = () => { time = Number(seek.value); ended = false; results.classList.add('hidden'); curWave = Math.floor(time); }; // 自分で選んだ場面は飛ばさない
+    seek.oninput = () => { stopPod(); time = Number(seek.value); ended = false; results.classList.add('hidden'); curWave = Math.floor(time); }; // 自分で選んだ場面は飛ばさない
     speeds.forEach((b) => (b.onclick = () => { speed = Number(b.dataset.speed); speeds.forEach((x) => x.classList.toggle('on', x === b)); }));
-    const jump = (t) => { time = t; ended = false; results.classList.add('hidden'); curWave = -1; };
+    const jump = (t) => { stopPod(); time = t; ended = false; results.classList.add('hidden'); curWave = -1; };
     const applyRange = () => {
         const mine = script.fighters.map((f, i) => (mineIds.has(f.id) ? i : -1)).filter((i) => i >= 0);
         const missed = waveFilter(script, 'misses', mine);
@@ -205,14 +212,50 @@ function mountPlayer(root, script) {
         return { li, hp, stat, strip };
     });
     roster.append(...rosterItems.map((x) => x.li));
+    // 表彰台: 戦果1位の発表をじっくり見せたあと、同じ画面に重ねて見せる（終わると、そのまま結果へ）
+    const podiumAt = Math.min(r.revealAt + 2.0, total - 0.05);
+    let pod = null;
+    const stopPod = () => { pod?.cv.remove(); pod = null; };
+    const startPod = (p) => {
+        try {
+            r.draw(podiumAt);
+        }
+        catch (e) {
+            console.error(e);
+        }
+        const snap = document.createElement('canvas');
+        snap.width = canvas.width;
+        snap.height = canvas.height;
+        snap.getContext('2d').drawImage(canvas, 0, 0);
+        const cv = h('canvas', { class: 'arena-canvas pixel podium-overlay', width: 768, height: 432, 'aria-label': p.mode === 'final' ? tl('最終結果発表') : tl('現時点の全体ランキング') });
+        canvas.parentElement.append(cv);
+        pod = { cv, scene: createPodium(cv, script, r.revealAt, p.cands, p.mode, snap), t: 0 };
+    };
     let lastDom = 0;
     const loop = (now) => {
         if (!canvas.isConnected)
             return; // 別の画面へ移動したら止める
         const dt = Math.min(0.1, (now - last) / 1000);
         last = now;
-        if (playing && !ended) {
+        if (pod) {
+            if (playing)
+                pod.t += dt * speed;
+            try {
+                if (pod.scene.draw(pod.t))
+                    stopPod();
+            }
+            catch (e) {
+                console.error(e);
+                stopPod();
+            }
+        }
+        else if (playing && !ended) {
+            const before = time;
             time += (dt / WAVE_SECONDS) * speed * (slowOn ? r.slowFactor(time) : 1);
+            if (podium && before < podiumAt && time >= podiumAt && time < total) {
+                time = podiumAt;
+                startPod(podium);
+            }
             const wi = Math.floor(time);
             if (wi !== curWave) {
                 curWave = wi;
@@ -228,11 +271,13 @@ function mountPlayer(root, script) {
             }
         }
         // 1コマの描画で失敗しても、再生は止めない（次のコマで描き直す）
-        try {
-            r.draw(Math.min(time, total));
-        }
-        catch (e) {
-            console.error(e);
+        if (!pod) {
+            try {
+                r.draw(Math.min(time, total));
+            }
+            catch (e) {
+                console.error(e);
+            }
         }
         if (now - lastDom > 90) {
             lastDom = now;

@@ -7,11 +7,12 @@ import { BODY_STYLE, fxColors, skillAura, toolMove } from './fx.js';
 import { setUltQuiet } from './ultkit.js';
 import { ELEMENT_COLOR, isUltScene, ULT_SCENES, ULT_T, sceneBack, sceneDark, sceneBanner, sceneFront, sceneHud, sceneTop, ultHitT } from './scenes.js';
 import { tl } from '../shared/i18n.js';
-import { AGILE, chainTiming, GAG, KO_TIME, NO_GEAR, OUTRO, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
+import { AGILE, chainTiming, GAG, KO_TIME, NO_GEAR, OUTRO, DOWN_REVEAL, FLEE_REVEAL, DISSOLVE, SCALE, TOOL_SHORT, WAVE_SECONDS, bump, clamp01, ease, lerp } from './arena-common.js';
 import { bossBar, bubble, chainDmg, comboHud, damageNum, floatText, hpBar, keyItem, labelAt, mineBand, progressBar, reserveStrip, tag, youMarker } from './arena-hud.js';
 import { chainOf, comboAt } from './arena-chain.js';
 import { figuresOf, skillWave, ultHero, ultOf, ultWeapon, ultWindow, ultimate } from './arena-ult.js';
 import { bossSilhouette } from './boss.js';
+import { Rng } from '../shared/rng.js';
 import { attackFxBack, attackFxFront, boom, drawBoss } from './arena-boss.js';
 import { aura, barrierFx, decoyGag, drawFighter, dust, fighterPose, gagOf, guardFx, hitSpark, magicCircle, motes, petFx, projectile, scrollFx, slashFx, smearFx } from './arena-fighter.js';
 import { bigBanner, confetti, endgame, winBanner } from './arena-endgame.js';
@@ -167,6 +168,15 @@ export class ArenaRenderer {
             this.ultCycle = this.script.waves.map((_, i) => { const k = ults.indexOf(i); return k < 0 ? -1 : (first + k) % ULT_SCENES.length; });
         }
         return ULT_SCENES[this.ultCycle[w]] ?? sc;
+    }
+    /** 戦果1位の発表を始める時刻（ウェーブ数）。ボスが消えゆくところ（逃げ去るところ）を見せてから、ひと呼吸おいて発表する */
+    get revealAt() {
+        const ws = this.script.waves, last = ws.length - 1;
+        const base = last + (ws[last]?.events.find((e) => e.type === 'winner')?.t ?? 1);
+        const d = this.downAt, e = this.escapeAt;
+        const lag = d && this.chainOf(d.wave)?.view.full ? 0.05 : 0;
+        const fin = d ? d.wave + d.t + DOWN_REVEAL + lag : e ? e.wave + e.t + FLEE_REVEAL : 0;
+        return Math.max(base, fin);
     }
     get totalWaves() { return this.script.waves.length; }
     get totalTime() { return this.script.waves.length + OUTRO; }
@@ -571,7 +581,7 @@ export class ArenaRenderer {
         // 削りきれなかったとき: ボスはたまらず逃げ出す（よろめいて震え、跳び退いて画面の外へ）。討伐隊の勝ち
         const fleeT = this.escapeAt ? (w - this.escapeAt.wave) + phase - this.escapeAt.t + outro : -1;
         const flinch = fleeT >= 0 && fleeT < 0.12 ? Math.sin(this.frame * 1.7) * 2 : 0; // ひるんで震える
-        const run = fleeT >= 0.12 ? ease(clamp01((fleeT - 0.12) / 0.35)) : 0; // 跳び退いて逃げる
+        const run = fleeT >= 0.12 ? ease(clamp01((fleeT - 0.12) / 0.6)) : 0; // 跳び退いて逃げる
         if (run < 1) {
             ctx.save();
             ctx.translate(flinch - run * 230, -run * 50 - Math.sin(run * Math.PI) * 30);
@@ -582,9 +592,25 @@ export class ArenaRenderer {
                 this.drawBoss(ctx, phase, atk, down, attackOf, chain, fleeT >= 0, scene);
             ctx.restore();
         }
+        // 倒れたボスが消えていくとき、光の粒がゆっくり立ちのぼる
+        if (down > 0.3 && down < DISSOLVE + 0.1) {
+            const k = clamp01((down - 0.3) / (DISSOLVE - 0.3));
+            const rng = new Rng('dissolve:' + s.seed);
+            ctx.save();
+            for (let i = 0; i < 22; i++) {
+                const x0 = rng.range(-34, 40), y0 = rng.range(-40, 4), sp = rng.range(18, 46), d0 = rng.range(0, 0.5);
+                const a = clamp01((k - d0 * 0.6) / 0.25) * (1 - clamp01((k - 0.7 - d0 * 0.3) / 0.3));
+                if (a <= 0)
+                    continue;
+                ctx.globalAlpha = a * 0.8;
+                ctx.fillStyle = i % 3 ? '#ffe9a8' : '#ffffff';
+                ctx.fillRect(Math.round(this.bossFoot.x + x0), Math.round(this.bossFoot.y + y0 - k * sp), 2, 2);
+            }
+            ctx.restore();
+        }
         // 逃げ出した跡に、土煙
-        if (fleeT >= 0.12 && fleeT < 0.6) {
-            const k = (fleeT - 0.12) / 0.48;
+        if (fleeT >= 0.12 && fleeT < 0.9) {
+            const k = (fleeT - 0.12) / 0.78;
             ctx.save();
             for (let i = 0; i < 10; i++) {
                 const a = i * 0.63, r = 10 + k * (26 + (i % 3) * 8);

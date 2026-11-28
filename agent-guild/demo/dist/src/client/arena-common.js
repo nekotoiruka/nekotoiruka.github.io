@@ -1,6 +1,9 @@
 import { tl } from '../shared/i18n.js';
 export const SCALE = 2;
-export const OUTRO = 1.4; // 試合後の余韻（ウェーブ何個分）
+export const OUTRO = 2.3; // 試合後の余韻（ウェーブ何個分）。ボスが消えて（逃げ去って）から、戦果1位の発表まで見せる長さを含む
+export const DISSOLVE = 0.95; // 倒したボスが消えきるまで（ボスが倒れた時刻からのウェーブ数）
+export const DOWN_REVEAL = 1.2; // 倒してから、戦果1位を発表するまで（消えきったあとに、ひと呼吸おく）
+export const FLEE_REVEAL = 1.35; // 逃げ出してから、戦果1位を発表するまで（逃げ去って、土煙が晴れてから）
 export const ease = (t) => (t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const clamp01 = (t) => Math.max(0, Math.min(1, t));

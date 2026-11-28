@@ -2,7 +2,7 @@ import { attackHitFx, tailBandColors } from './bossfx.js';
 import { spriteToWorld } from './bossstyle.js';
 import { bossOf } from './bossapi.js';
 import './bosses/index.js';
-import { IMPACT, SCALE, clamp01, lerp, win01 } from './arena-common.js';
+import { IMPACT, SCALE, DISSOLVE, clamp01, lerp, win01 } from './arena-common.js';
 import { Rng } from '../shared/rng.js';
 import { bossCanvas, BOSS_IDLE, BW, BH } from './boss.js';
 import { reducedMotion } from './motion.js';
@@ -82,7 +82,12 @@ export function drawBoss(ctx, phase, atk, down, attackOf, chain = null, fleeing 
         p.wing = -2;
         p.tint = undefined;
         dy += Math.min(10, down * 30);
-        alpha = down > 0.6 ? Math.max(0.25, 1 - (down - 0.6)) : 1;
+        // 倒れ込んだあと、ゆっくり薄れて消えていく（消えきるまで DISSOLVE。ちらつきながら）
+        const fade = clamp01((down - 0.35) / (DISSOLVE - 0.35));
+        alpha = 1 - fade * fade * (3 - 2 * fade);
+        if (fade > 0 && fade < 1 && this.frame % 10 < 2)
+            alpha *= 0.6;
+        dy += fade * 6;
         flash = down < 0.25 && this.frame % 6 < 3;
     }
     const foot = { x: s.boss.x, y: s.boss.y };

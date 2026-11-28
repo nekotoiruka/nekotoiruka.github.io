@@ -293,6 +293,13 @@ function swingOf(act, t) {
         return 1.4;
     return 0;
 }
+/** drawHero と同じポーズのときの、手（武器を握る所）の位置 */
+export function handOf(cx, fy, d) {
+    const flip = !!d.flip;
+    const pose = { ...poseFor(d.action ?? 'idle', d.t ?? 0, d.frame), side: flip };
+    const ox = cx - CW / 2, oy = fy - CH + 1, hp = handPos(pose);
+    return { x: flip ? ox + CW - 1 - hp.x : ox + hp.x, y: oy + hp.y };
+}
 /** drawHero と同じポーズのときの、武器の先（飛び道具・魔法が出る所）の位置。描く処理と同じ計算をたどる */
 export function muzzleOf(look, cx, fy, d) {
     const flip = !!d.flip, dir = flip ? -1 : 1, kind = look.weapon;
@@ -359,26 +366,28 @@ export function drawHero(ctx, look, gear, cx, fy, d) {
     // 本体
     ctx.drawImage(charCanvas(look, pose, flip, d.flash), ox, oy);
     // 手の武器
-    const hp = handPos(pose);
-    const hx = flip ? ox + CW - 1 - hp.x : ox + hp.x, hy = oy + hp.y;
-    const act = d.action ?? 'idle';
-    const swing = swingOf(act, d.t ?? 0);
-    ctx.save();
-    ctx.translate(hx, hy);
-    const held = HELD.includes(look.weapon);
-    if (held)
-        ctx.translate(dir, 0); // 構えるものは少し前に出す
-    ctx.rotate(dir * swing * (held ? 0.3 : 1) + dir * (d.wRot ?? 0));
-    drawWeaponAt(ctx, look.weapon, gear.weaponColor, flip, d.frame, act === 'cast' ? 1 : (d.skillGlow ?? 0));
-    if (!held && look.weapon !== 'bow') {
-        // 柄を握る手（武器の上に重ねて、握っているように見せる）
-        const hc = handColor(look);
-        ctx.fillStyle = d.flash ? '#ffffff' : hc;
-        ctx.fillRect(-0.5, -0.5, 2, 2);
-        ctx.fillStyle = shade(hc, -0.5);
-        ctx.fillRect(-0.5, 1.5, 2, 0.6);
+    if (!d.hideWeapon) {
+        const hp = handPos(pose);
+        const hx = flip ? ox + CW - 1 - hp.x : ox + hp.x, hy = oy + hp.y;
+        const act = d.action ?? 'idle';
+        const swing = swingOf(act, d.t ?? 0);
+        ctx.save();
+        ctx.translate(hx, hy);
+        const held = HELD.includes(look.weapon);
+        if (held)
+            ctx.translate(dir, 0); // 構えるものは少し前に出す
+        ctx.rotate(dir * swing * (held ? 0.3 : 1) + dir * (d.wRot ?? 0));
+        drawWeaponAt(ctx, look.weapon, gear.weaponColor, flip, d.frame, act === 'cast' ? 1 : (d.skillGlow ?? 0));
+        if (!held && look.weapon !== 'bow') {
+            // 柄を握る手（武器の上に重ねて、握っているように見せる）
+            const hc = handColor(look);
+            ctx.fillStyle = d.flash ? '#ffffff' : hc;
+            ctx.fillRect(-0.5, -0.5, 2, 2);
+            ctx.fillStyle = shade(hc, -0.5);
+            ctx.fillRect(-0.5, 1.5, 2, 0.6);
+        }
+        ctx.restore();
     }
-    ctx.restore();
     ctx.restore();
     // 頭上の飾り（スキル）。発動中は大きく光って広がる
     ctx.save();
